@@ -184,7 +184,8 @@ export default class MonitorScreen extends EventEmitter {
 
         // Set iframe attributes
         // PROD
-        iframe.src = 'http://192.168.1.72:8081/';
+        iframe.src = "https://os.yassin.app";
+
         /**
          * Use dev server is query params are present
          *
