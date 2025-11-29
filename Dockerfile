@@ -1,28 +1,32 @@
-# ---------- build stage ----------
-FROM node:20-alpine AS build
+# ---------- build + runtime ----------
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install project deps
+# Install dependencies
 COPY package*.json ./
 RUN npm install
 
-# Copy the rest of the source and build
+# Copy source
 COPY . .
+
+# Build the static assets
 RUN npm run build
 
-# ---------- runtime stage ----------
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-# Install static file server
+# Install a simple static file server
 RUN npm install -g serve
-
-# Copy built assets from build stage
-COPY --from=build /app/dist ./dist
 
 EXPOSE 3000
 
-# Serve the built site
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Try dist, then public, then build
+CMD ["sh", "-c", "\
+  ROOT_DIR=dist; \
+  if [ ! -d dist ]; then \
+    if [ -d public ]; then ROOT_DIR=public; \
+    elif [ -d build ]; then ROOT_DIR=build; \
+    else echo 'No dist/public/build directory after build; contents:'; ls -R .; exit 1; \
+    fi; \
+  fi; \
+  echo \"Serving $ROOT_DIR on :3000\"; \
+  exec serve -s \"$ROOT_DIR\" -l 3000 \
+"]
