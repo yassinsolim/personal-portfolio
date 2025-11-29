@@ -13,7 +13,8 @@ jobs:
       - name: Deploy outer site on webvm
         run: |
           cd /opt/sites/personal-portfolio
-          git pull
+          git fetch origin
+          git reset --hard origin/main
 
           cd /opt/sites
           docker compose build outer
