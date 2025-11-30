@@ -13,7 +13,14 @@ module.exports = {
     devtool: 'source-map',
     plugins: [
         new CopyWebpackPlugin({
-            patterns: [{ from: path.resolve(__dirname, '../static') }],
+            patterns: [
+                {
+                    from: path.resolve(__dirname, '../static'),
+                    globOptions: {
+                        ignore: ['**/audio/**'],
+                    },
+                },
+            ],
         }),
         new HtmlWebpackPlugin({
             template: path.resolve(__dirname, '../src/index.html'),
@@ -58,14 +65,6 @@ module.exports = {
                 type: 'asset/resource',
                 generator: {
                     filename: 'assets/images/[hash][ext]',
-                },
-            },
-            // Audio
-            {
-                test: /\.(mp3|wav)$/,
-                loader: 'file-loader',
-                options: {
-                    name: '[path][name].[ext]',
                 },
             },
             // Fonts
