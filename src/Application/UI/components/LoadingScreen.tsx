@@ -128,24 +128,24 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
                         <div style={styles.logoContainer}>
                             <div>
                                 <p style={styles.green}>
-                                    <b>KUMAVERSE</b>{' '}
+                                    <b>YASSINVERSE</b>{' '}
                                 </p>
                                 <p style={styles.green}>
-                                    <b>Kuma Co.</b>
+                                    <b>Yassin Co.</b>
                                 </p>
                             </div>
                         </div>
                         <div style={styles.headerInfo}>
                             <p>Released: 08/28/1986</p>
-                            <p>KuBIOS (c)1986 Kuma Co.</p>
+                            <p>KuBIOS (c)1986 Yassin Co.</p>
                         </div>
                     </div>
                     <div style={styles.body} className="loading-screen-body">
-                        <p>KUMA KAG3MUSH4 K69 Nested Sandboxing</p>
+                        <p>YASSIN KAG3MUSH4 K69 Nested Sandboxing</p>
                         <div style={styles.spacer} />
                         {showBiosInfo && (
                             <>
-                                <p>KUMAVERSE(tm) XX 420</p>
+                                <p>YASSINVERSE(tm) XX 420</p>
                                 <p>Checking RAM : {14000} OK</p>
                                 <div style={styles.spacer} />
                                 <div style={styles.spacer} />
@@ -174,7 +174,7 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
                             <p>
                                 All Content Loaded, launching{' '}
                                 <b style={styles.green}>
-                                    'kumaverse'
+                                    'yassinverse'
                                 </b>{' '}
                                 V1.0
                             </p>
