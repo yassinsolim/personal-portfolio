@@ -39,6 +39,23 @@ const sources: Resource[] = [
         type: 'texture',
         path: 'textures/monitor/layers/compressed/shadow-compressed.png',
     },
+    {
+        name: 'environmentMapTexture',
+        type: 'cubeTexture',
+        path: [
+            'textures/environmentMap/px.jpg',
+            'textures/environmentMap/nx.jpg',
+            'textures/environmentMap/py.jpg',
+            'textures/environmentMap/ny.jpg',
+            'textures/environmentMap/pz.jpg',
+            'textures/environmentMap/nz.jpg',
+        ],
+    },
+    {
+        name: 'carModel',
+        type: 'gltfModel',
+        path: 'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
+    },
 ];
 
 export default sources;

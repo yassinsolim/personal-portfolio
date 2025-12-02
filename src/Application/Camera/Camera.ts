@@ -68,6 +68,7 @@ export default class Camera extends EventEmitter {
 
         document.addEventListener('mousedown', (event) => {
             event.preventDefault();
+            if (event.button === 2 || this.freeCam) return;
             // @ts-ignore
             if (event.target.id === 'prevent-click') return;
             // print target and current keyframe
@@ -88,6 +89,7 @@ export default class Camera extends EventEmitter {
         this.setInstance();
         this.setMonitorListeners();
         this.setFreeCamListeners();
+        this.setMouseLookListeners();
     }
 
     transition(
@@ -151,33 +153,8 @@ export default class Camera extends EventEmitter {
 
     setFreeCamListeners() {
         UIEventBus.on('freeCamToggle', (toggle: boolean) => {
-            // if (toggle === this.freeCam) return;
-            if (toggle) {
-                this.transition(
-                    CameraKey.ORBIT_CONTROLS_START,
-                    750,
-                    BezierEasing(0.13, 0.99, 0, 1),
-                    () => {
-                        this.instance.position.copy(
-                            this.keyframes.orbitControlsStart.position
-                        );
-
-                        this.orbitControls.update();
-                        this.freeCam = true;
-                    }
-                );
-                // @ts-ignore
-                document.getElementById('webgl').style.pointerEvents = 'auto';
-            } else {
-                this.freeCam = false;
-                this.transition(
-                    CameraKey.IDLE,
-                    4000,
-                    TWEEN.Easing.Exponential.Out
-                );
-                // @ts-ignore
-                document.getElementById('webgl').style.pointerEvents = 'none';
-            }
+            if (toggle) this.enableFreeCam();
+            else this.disableFreeCam();
         });
     }
 
@@ -185,6 +162,51 @@ export default class Camera extends EventEmitter {
         UIEventBus.on('loadingScreenDone', () => {
             this.transition(CameraKey.IDLE, 2500, TWEEN.Easing.Exponential.Out);
         });
+    }
+
+    setMouseLookListeners() {
+        window.addEventListener('contextmenu', (e) => e.preventDefault());
+        window.addEventListener('mousedown', (event) => {
+            if (event.button === 2) {
+                event.preventDefault();
+                this.enableFreeCam(300);
+            }
+        });
+        window.addEventListener('mouseup', (event) => {
+            if (event.button === 2) {
+                event.preventDefault();
+                this.disableFreeCam();
+            }
+        });
+    }
+
+    enableFreeCam(duration: number = 750) {
+        if (this.freeCam) return;
+        this.transition(
+            CameraKey.ORBIT_CONTROLS_START,
+            duration,
+            BezierEasing(0.13, 0.99, 0, 1),
+            () => {
+                this.instance.position.copy(
+                    this.keyframes.orbitControlsStart.position
+                );
+                this.orbitControls.target.copy(
+                    this.keyframes.orbitControlsStart.focalPoint
+                );
+                this.orbitControls.update();
+                this.freeCam = true;
+            }
+        );
+        // @ts-ignore
+        document.getElementById('webgl').style.pointerEvents = 'auto';
+    }
+
+    disableFreeCam() {
+        if (!this.freeCam) return;
+        this.freeCam = false;
+        this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
+        // @ts-ignore
+        document.getElementById('webgl').style.pointerEvents = 'none';
     }
 
     resize() {

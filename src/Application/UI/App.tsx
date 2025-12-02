@@ -7,16 +7,23 @@ import './style.css';
 
 const App = () => {
     const [loading, setLoading] = useState(true);
+    const [showHint, setShowHint] = useState(false);
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
             setLoading(false);
+            setShowHint(true);
         });
     }, []);
 
     return (
         <div id="ui-app">
             <LoadingScreen />
+            {showHint && (
+                <div className="look-hint">
+                    Click anywhere to begin. Right click to switch view.
+                </div>
+            )}
         </div>
     );
 };
