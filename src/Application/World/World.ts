@@ -8,6 +8,7 @@ import CoffeeSteam from './CoffeeSteam';
 import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
 import Car from './Car';
+import DS from './DS';
 export default class World {
     application: Application;
     scene: THREE.Scene;
@@ -21,6 +22,7 @@ export default class World {
     coffeeSteam: CoffeeSteam;
     cursor: Cursor;
     car: Car;
+    ds: DS;
 
     constructor() {
         this.application = new Application();
@@ -35,6 +37,7 @@ export default class World {
             this.monitorScreen = new MonitorScreen();
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
+            this.ds = new DS();
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
         });

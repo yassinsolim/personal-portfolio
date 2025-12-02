@@ -56,6 +56,16 @@ const sources: Resource[] = [
         type: 'gltfModel',
         path: 'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
     },
+    {
+        name: 'pspModel',
+        type: 'gltfModel',
+        path: 'models/Props/sony_psp.glb',
+    },
+    {
+        name: 'dsModel',
+        type: 'gltfModel',
+        path: 'models/Props/nintendo_ds_lite.glb',
+    },
 ];
 
 export default sources;
