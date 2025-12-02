@@ -140,6 +140,8 @@ export default class MonitorScreen extends EventEmitter {
         container.style.height = this.screenSize.height + 'px';
         container.style.opacity = '1';
         container.style.background = '#000000';
+        container.style.backfaceVisibility = 'hidden';
+        container.style.transformStyle = 'preserve-3d';
 
         // Create iframe
         const iframe = document.createElement('iframe');
@@ -205,6 +207,7 @@ export default class MonitorScreen extends EventEmitter {
         iframe.className = 'jitter';
         iframe.id = 'computer-screen';
         iframe.frameBorder = '0';
+        iframe.style.backfaceVisibility = 'hidden';
         // iframe.title = 'yassinOS';
 
         // Add iframe to container

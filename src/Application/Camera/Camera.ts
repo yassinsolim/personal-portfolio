@@ -199,6 +199,9 @@ export default class Camera extends EventEmitter {
         );
         // @ts-ignore
         document.getElementById('webgl').style.pointerEvents = 'auto';
+        if (this.renderer.cssInstance?.domElement) {
+            this.renderer.cssInstance.domElement.style.pointerEvents = 'none';
+        }
     }
 
     disableFreeCam() {
@@ -207,6 +210,9 @@ export default class Camera extends EventEmitter {
         this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
         // @ts-ignore
         document.getElementById('webgl').style.pointerEvents = 'none';
+        if (this.renderer.cssInstance?.domElement) {
+            this.renderer.cssInstance.domElement.style.pointerEvents = 'auto';
+        }
     }
 
     resize() {
