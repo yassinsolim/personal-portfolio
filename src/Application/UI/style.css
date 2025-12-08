@@ -168,6 +168,12 @@ br {
     z-index: 10;
 }
 
+.look-hint a {
+    color: inherit;
+    text-decoration: underline;
+    pointer-events: auto;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {

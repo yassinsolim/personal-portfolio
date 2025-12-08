@@ -21,7 +21,17 @@ const App = () => {
             <LoadingScreen />
             {showHint && (
                 <div className="look-hint">
-                    Click anywhere to begin. Right click to switch view.
+                    <div>Click anywhere to begin. Right click to switch view.</div>
+                    <div>
+                        Visit the inner OS{' '}
+                        <a
+                            href="https://os.yassin.app"
+                            rel="noreferrer noopener"
+                            target="_blank"
+                        >
+                            yassinOS!
+                        </a>
+                    </div>
                 </div>
             )}
         </div>
