@@ -17,6 +17,7 @@ import Stats from 'stats.js';
 import Loading from './Utils/Loading';
 
 import UI from './UI';
+import SceneExportController from './Utils/SceneExportController';
 
 let instance: Application | null = null;
 
@@ -34,6 +35,7 @@ export default class Application {
     mouse: Mouse;
     loading: Loading;
     ui: UI;
+    sceneExportController: SceneExportController;
     stats: Stats | undefined;
 
     constructor() {
@@ -64,6 +66,7 @@ export default class Application {
         this.world = new World();
 
         this.ui = new UI();
+        this.sceneExportController = new SceneExportController(this);
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('debug')) {

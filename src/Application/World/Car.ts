@@ -45,6 +45,21 @@ export default class Car {
         const groundOffset = groundY - bbox.min.y;
 
         car.position.set(CAR_POSITION.x, groundOffset, CAR_POSITION.z);
+        car.updateMatrixWorld(true);
+
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+
+        const forward = new THREE.Vector3();
+        car.getWorldDirection(forward);
+        const backward = forward.multiplyScalar(-1);
+        const shiftDistance =
+            (1 / 3) *
+            (Math.abs(backward.x) * size.x +
+                Math.abs(backward.y) * size.y +
+                Math.abs(backward.z) * size.z);
+
+        car.position.addScaledVector(backward, shiftDistance);
 
         car.traverse((child) => {
             if (child instanceof THREE.Mesh) {

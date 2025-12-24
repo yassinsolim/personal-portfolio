@@ -57,9 +57,9 @@ const sources: Resource[] = [
         path: 'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
     },
     {
-        name: 'dsModel',
+        name: 'flipperModel',
         type: 'gltfModel',
-        path: 'models/Props/nintendo_ds_lite.glb',
+        path: 'models/Props/flipper_zero.glb',
     },
 ];
 

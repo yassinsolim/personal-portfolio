@@ -1,8 +1,11 @@
 const path = require('path')
+const fs = require('fs')
 const { merge } = require('webpack-merge')
 const commonConfiguration = require('./webpack.common.js')
 const ip = require('ip')
 const portFinderSync = require('portfinder-sync')
+
+const shouldExportScene = process.env.EXPORT_SCENE === '1'
 
 const infoColor = (_message) =>
 {
@@ -22,7 +25,7 @@ module.exports = merge(
         {
             host: 'local-ip',
             port: portFinderSync.getPort(8080),
-            open: true,
+            open: shouldExportScene ? '/?export=1&save=1' : true,
             https: false,
             allowedHosts: 'all',
             hot: false,
@@ -37,6 +40,50 @@ module.exports = merge(
                 logging: 'none',
                 overlay: true,
                 progress: false
+            },
+            setupMiddlewares: (middlewares, devServer) =>
+            {
+                if (!devServer)
+                {
+                    throw new Error('webpack-dev-server is not defined')
+                }
+
+                devServer.app.post('/api/save-glb', (req, res) =>
+                {
+                    const chunks = []
+
+                    req.on('data', (chunk) => chunks.push(chunk))
+                    req.on('end', () =>
+                    {
+                        try
+                        {
+                            const buffer = Buffer.concat(chunks)
+                            const exportDir = path.resolve(__dirname, '../exports')
+                            const outputPath = path.join(exportDir, 'exported-scene.glb')
+
+                            fs.mkdirSync(exportDir, { recursive: true })
+                            fs.writeFileSync(outputPath, buffer)
+
+                            res.setHeader('Content-Type', 'application/json')
+                            res.end(JSON.stringify({ ok: true, bytes: buffer.length, path: outputPath }))
+                        }
+                        catch (error)
+                        {
+                            res.statusCode = 500
+                            res.setHeader('Content-Type', 'application/json')
+                            res.end(JSON.stringify({ ok: false, error: error.message }))
+                        }
+                    })
+
+                    req.on('error', (error) =>
+                    {
+                        res.statusCode = 500
+                        res.setHeader('Content-Type', 'application/json')
+                        res.end(JSON.stringify({ ok: false, error: error.message }))
+                    })
+                })
+
+                return middlewares
             },
             onAfterSetupMiddleware: function(devServer)
             {

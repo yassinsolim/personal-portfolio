@@ -35,6 +35,30 @@ body {
     width: 26.5px;
 }
 
+.export-glb-button {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 20;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.export-glb-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.export-glb-button:hover {
+    background: rgba(255, 255, 255, 0.12);
+}
+
 @media only screen and (max-width: 768px) {
     .interface-wrapper {
         width: 100%;
