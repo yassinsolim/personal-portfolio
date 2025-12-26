@@ -4,6 +4,10 @@ Interactive 3D personal portfolio (outer layer) for https://yassin.app.
 
 This project is built as a Three.js experience with a scene authored in Blender, deployed via containers on my homelab.
 
+## Preview
+
+![yassin.app preview](yassin-app.png)
+
 ## Credits / Inspiration
 
 - Outer site baseline: Henry Heffernan’s portfolio foundation  
