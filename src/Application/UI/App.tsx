@@ -3,11 +3,13 @@ import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
 import InterfaceUI from './components/InterfaceUI';
 import eventBus from './EventBus';
+import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import './style.css';
 
 const App = () => {
     const [loading, setLoading] = useState(true);
     const [showHint, setShowHint] = useState(false);
+    const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -16,12 +18,23 @@ const App = () => {
         });
     }, []);
 
+    const handleCarChange = (
+        event: React.ChangeEvent<HTMLSelectElement>
+    ) => {
+        const nextCar = event.target.value;
+        setSelectedCar(nextCar);
+        storeCarId(nextCar);
+        eventBus.dispatch('carChange', nextCar);
+    };
+
     return (
         <div id="ui-app">
             <LoadingScreen />
             {showHint && (
                 <div className="look-hint">
-                    <div>Click anywhere to begin. Right click to switch view.</div>
+                    <div>
+                        Click anywhere to begin. Right click to switch view.
+                    </div>
                     <div>
                         Visit the inner OS{' '}
                         <a
@@ -31,6 +44,20 @@ const App = () => {
                         >
                             yassinOS!
                         </a>
+                    </div>
+                    <div className="car-switcher" data-prevent-click>
+                        <label htmlFor="car-switcher">Car</label>
+                        <select
+                            id="car-switcher"
+                            value={selectedCar}
+                            onChange={handleCarChange}
+                        >
+                            {carOptions.map((car) => (
+                                <option key={car.id} value={car.id}>
+                                    {car.label}
+                                </option>
+                            ))}
+                        </select>
                     </div>
                 </div>
             )}
@@ -43,7 +70,10 @@ const createUI = () => {
 };
 
 const createVolumeUI = () => {
-    ReactDOM.render(<InterfaceUI />, document.getElementById('ui-interactive'));
+    ReactDOM.render(
+        <InterfaceUI />,
+        document.getElementById('ui-interactive')
+    );
 };
 
 export { createUI, createVolumeUI };

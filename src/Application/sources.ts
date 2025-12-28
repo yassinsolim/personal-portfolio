@@ -1,3 +1,11 @@
+import { carOptions } from './carOptions';
+
+const carModelSources: Resource[] = carOptions.map((car) => ({
+    name: car.resourceName,
+    type: 'gltfModel' as const,
+    path: car.modelPath,
+}));
+
 const sources: Resource[] = [
     {
         name: 'computerSetupModel',
@@ -51,11 +59,7 @@ const sources: Resource[] = [
             'textures/environmentMap/nz.jpg',
         ],
     },
-    {
-        name: 'carModel',
-        type: 'gltfModel',
-        path: 'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
-    },
+    ...carModelSources,
     {
         name: 'flipperModel',
         type: 'gltfModel',

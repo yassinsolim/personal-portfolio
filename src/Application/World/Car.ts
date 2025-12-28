@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import Application from '../Application';
 import Resources from '../Utils/Resources';
+import UIEventBus from '../UI/EventBus';
+import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
+import type { CarOption } from '../carOptions';
 
-const CAR_SCALE = 27;
+const BASE_CAR_SCALE = 27;
 const CAR_POSITION = new THREE.Vector3(-2400, 0, -7600);
 const CAR_ROTATION = new THREE.Euler(0, -Math.PI / 2, 0);
 const CAR_ENV_INTENSITY = 0.95;
@@ -16,6 +19,9 @@ export default class Car {
     camera: THREE.PerspectiveCamera;
     raycaster: THREE.Raycaster;
     model: THREE.Group | null;
+    currentCarId: string;
+    cachedModels: Map<string, THREE.Group>;
+    sceneUnitsPerMeter: number;
 
     constructor() {
         this.application = new Application();
@@ -24,20 +30,64 @@ export default class Car {
         this.camera = this.application.camera.instance;
         this.raycaster = new THREE.Raycaster();
         this.model = null;
+        this.currentCarId = getStoredCarId();
+        this.cachedModels = new Map();
+        this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
 
-        this.setModel();
+        this.setModel(this.currentCarId);
         this.addLights();
         this.setupInteraction();
+        this.setupCarSwitcher();
     }
 
-    setModel() {
-        const gltf = this.resources.items.gltfModel.carModel;
-        const car = gltf.scene;
+    setupCarSwitcher() {
+        UIEventBus.on('carChange', (carId: string) => {
+            if (!carId || carId === this.currentCarId) return;
+            if (!carOptionsById[carId]) return;
+            this.setModel(carId);
+            this.currentCarId = carId;
+        });
+    }
 
-        car.scale.setScalar(CAR_SCALE);
+    setModel(carId: string) {
+        const car = this.getPreparedCar(carId);
+        if (!car) return;
+
+        if (this.model && this.model !== car) {
+            this.scene.remove(this.model);
+        }
+
+        this.model = car;
+        this.scene.add(car);
+    }
+
+    getPreparedCar(carId: string) {
+        const cached = this.cachedModels.get(carId);
+        if (cached) return cached;
+
+        const carOption = carOptionsById[carId];
+        if (!carOption) return null;
+
+        const gltf = this.resources.items.gltfModel[carOption.resourceName];
+        if (!gltf) return null;
+
+        const car = gltf.scene.clone(true);
+        this.cloneMaterials(car);
+        this.prepareCarModel(car, carOption);
+
+        this.cachedModels.set(carId, car);
+
+        return car;
+    }
+
+    prepareCarModel(car: THREE.Group, carOption: CarOption) {
+        const scale = this.getCarScale(car, carOption);
+        car.scale.setScalar(scale);
         car.rotation.copy(CAR_ROTATION);
         this.applyEnvironment(car);
         this.applyMaterialStyling(car);
+
+        car.updateMatrixWorld(true);
 
         // Drop the car to the ground plane based on its bounding box
         const bbox = new THREE.Box3().setFromObject(car);
@@ -67,9 +117,49 @@ export default class Car {
                 child.receiveShadow = true;
             }
         });
+    }
 
-        this.model = car;
-        this.scene.add(car);
+    cloneMaterials(car: THREE.Object3D) {
+        car.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map((material) =>
+                        material.clone()
+                    );
+                } else if (child.material) {
+                    child.material = child.material.clone();
+                }
+            }
+        });
+    }
+
+    getCarScale(car: THREE.Object3D, carOption: CarOption) {
+        const rawLength = this.getModelLength(car);
+        if (!rawLength || !this.sceneUnitsPerMeter) {
+            return BASE_CAR_SCALE;
+        }
+
+        return (this.sceneUnitsPerMeter * carOption.lengthMeters) / rawLength;
+    }
+
+    getSceneUnitsPerMeter() {
+        const baseOption = carOptionsById[defaultCarId];
+        if (!baseOption) return 0;
+
+        const gltf = this.resources.items.gltfModel[baseOption.resourceName];
+        if (!gltf) return 0;
+
+        const baseLength = this.getModelLength(gltf.scene);
+        if (!baseLength || !baseOption.lengthMeters) return 0;
+
+        return (baseLength * BASE_CAR_SCALE) / baseOption.lengthMeters;
+    }
+
+    getModelLength(model: THREE.Object3D) {
+        const bbox = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        bbox.getSize(size);
+        return Math.max(size.x, size.y, size.z);
     }
 
     applyEnvironment(car: THREE.Object3D) {
@@ -107,10 +197,26 @@ export default class Car {
         ]);
 
         const carbonNames = ['carbon', 'carbon_0', 'parts', 'side_wing_carbon_0'];
-        const windowNames = ['window', 'window_0', 'window_1', 'window_b', 'light_glass_window_0'];
-        const wheelNames = ['wheel', 'wheel_0', 'wheel_d', 'wheel_d_0', 'brake_disc'];
+        const windowNames = [
+            'window',
+            'window_0',
+            'window_1',
+            'window_b',
+            'light_glass_window_0',
+        ];
+        const wheelNames = [
+            'wheel',
+            'wheel_0',
+            'wheel_d',
+            'wheel_d_0',
+            'brake_disc',
+        ];
         const tireNames = ['tread', 'tread_0', 'rubber_side', 'rubber_side_0'];
-        const silverTrimNames = ['light_line_metalic_silver_0', 'light_block_metalic_silver_0', 'metalic_silver'];
+        const silverTrimNames = [
+            'light_line_metalic_silver_0',
+            'light_block_metalic_silver_0',
+            'metalic_silver',
+        ];
 
         car.traverse((child) => {
             if (
