@@ -24,9 +24,6 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
         }
         if (!detectWebGLContext()) {
             setWebGLError(true);
-            setTimeout(() => {
-                window.location.href = 'https://os.yassin.app';
-            }, 800);
         } else {
             setShowBiosInfo(true);
         }
@@ -216,6 +213,19 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
                             Please enable it or switch to a browser which
                             supports WebGL
                         </p>
+                        <div style={styles.spacer} />
+                        <p>
+                            Enable WebGL to view this site, or visit{' '}
+                            <a
+                                href="https://os.yassin.app"
+                                rel="noreferrer noopener"
+                                target="_blank"
+                            >
+                                yassinOS
+                            </a>
+                            .
+                        </p>
+                        <p>Refresh after enabling WebGL, or open yassinOS.</p>
                     </div>
                 </div>
             )}
