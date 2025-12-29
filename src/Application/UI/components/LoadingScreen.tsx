@@ -24,6 +24,9 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
         }
         if (!detectWebGLContext()) {
             setWebGLError(true);
+            setTimeout(() => {
+                window.location.href = 'https://os.yassin.app';
+            }, 800);
         } else {
             setShowBiosInfo(true);
         }
