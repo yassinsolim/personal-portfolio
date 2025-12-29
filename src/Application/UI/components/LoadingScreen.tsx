@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import eventBus from '../EventBus';
+import { isWebGLAvailable } from '../../Utils/webgl';
 
 type LoadingProps = {};
 
@@ -22,7 +23,7 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
         if (urlParams.has('debug')) {
             start();
         }
-        if (!detectWebGLContext()) {
+        if (!isWebGLAvailable()) {
             setWebGLError(true);
         } else {
             setShowBiosInfo(true);
@@ -92,20 +93,6 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
         const monthFormatted = month < 10 ? `0${month}` : month;
         const dayFormatted = day < 10 ? `0${day}` : day;
         return `${monthFormatted}/${dayFormatted}/${year}`;
-    };
-
-    const detectWebGLContext = () => {
-        var canvas = document.createElement('canvas');
-
-        // Get WebGLRenderingContext from canvas element.
-        var gl =
-            canvas.getContext('webgl') ||
-            canvas.getContext('experimental-webgl');
-        // Report the result.
-        if (gl && gl instanceof WebGLRenderingContext) {
-            return true;
-        }
-        return false;
     };
 
     return (

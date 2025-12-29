@@ -1,5 +1,11 @@
 import './style.css';
 
 import Application from './Application/Application';
+import { createUI } from './Application/UI/App';
+import { isWebGLAvailable } from './Application/Utils/webgl';
 
-const app: Application = new Application();
+if (!isWebGLAvailable()) {
+    createUI();
+} else {
+    new Application();
+}
