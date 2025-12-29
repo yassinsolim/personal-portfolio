@@ -4,6 +4,7 @@ export type CarOption = {
     resourceName: string;
     modelPath: string;
     lengthMeters: number;
+    preload?: boolean;
 };
 
 export const carOptions: CarOption[] = [
@@ -14,6 +15,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
         lengthMeters: 4.75,
+        preload: true,
     },
     {
         id: 'bmw-e92-m3',

@@ -1,10 +1,18 @@
-import { carOptions } from './carOptions';
+import { carOptions, getStoredCarId } from './carOptions';
 
-const carModelSources: Resource[] = carOptions.map((car) => ({
-    name: car.resourceName,
-    type: 'gltfModel' as const,
-    path: car.modelPath,
-}));
+const initialCarId = getStoredCarId();
+const preloadIds = new Set(
+    carOptions.filter((car) => car.preload).map((car) => car.id)
+);
+preloadIds.add(initialCarId);
+
+const carModelSources: Resource[] = carOptions
+    .filter((car) => preloadIds.has(car.id))
+    .map((car) => ({
+        name: car.resourceName,
+        type: 'gltfModel' as const,
+        path: car.modelPath,
+    }));
 
 const sources: Resource[] = [
     {

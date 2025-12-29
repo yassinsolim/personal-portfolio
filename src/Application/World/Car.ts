@@ -21,6 +21,7 @@ export default class Car {
     model: THREE.Group | null;
     currentCarId: string;
     cachedModels: Map<string, THREE.Group>;
+    loadingPromises: Map<string, Promise<THREE.Group>>;
     sceneUnitsPerMeter: number;
 
     constructor() {
@@ -32,6 +33,7 @@ export default class Car {
         this.model = null;
         this.currentCarId = getStoredCarId();
         this.cachedModels = new Map();
+        this.loadingPromises = new Map();
         this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
 
         this.setModel(this.currentCarId);
@@ -44,21 +46,75 @@ export default class Car {
         UIEventBus.on('carChange', (carId: string) => {
             if (!carId || carId === this.currentCarId) return;
             if (!carOptionsById[carId]) return;
-            this.setModel(carId);
             this.currentCarId = carId;
+            this.setModel(carId);
         });
     }
 
     setModel(carId: string) {
         const car = this.getPreparedCar(carId);
-        if (!car) return;
+        if (car) {
+            this.swapCar(car);
+            return;
+        }
 
+        this.loadCarModel(carId);
+    }
+
+    swapCar(car: THREE.Group) {
         if (this.model && this.model !== car) {
             this.scene.remove(this.model);
         }
 
         this.model = car;
         this.scene.add(car);
+    }
+
+    swapCarIfCurrent(carId: string, car: THREE.Group) {
+        if (this.currentCarId !== carId) return;
+        this.swapCar(car);
+    }
+
+    loadCarModel(carId: string) {
+        const carOption = carOptionsById[carId];
+        if (!carOption) return;
+
+        const existing = this.loadingPromises.get(carId);
+        if (existing) {
+            existing
+                .then((car) => this.swapCarIfCurrent(carId, car))
+                .catch(() => {});
+            return;
+        }
+
+        const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
+            this.resources.loaders.gltfLoader.load(
+                carOption.modelPath,
+                (gltf) => {
+                    this.resources.items.gltfModel[carOption.resourceName] = gltf;
+                    const car = gltf.scene.clone(true);
+                    this.cloneMaterials(car);
+                    this.prepareCarModel(car, carOption);
+                    resolve(car);
+                },
+                undefined,
+                (error) => {
+                    reject(error);
+                }
+            );
+        });
+
+        this.loadingPromises.set(carId, loadPromise);
+
+        loadPromise
+            .then((car) => {
+                this.cachedModels.set(carId, car);
+                this.swapCarIfCurrent(carId, car);
+            })
+            .catch(() => {})
+            .finally(() => {
+                this.loadingPromises.delete(carId);
+            });
     }
 
     getPreparedCar(carId: string) {

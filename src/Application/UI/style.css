@@ -198,6 +198,25 @@ br {
     cursor: pointer;
 }
 
+.look-hint .view-toggle {
+    margin-top: 6px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.look-hint .view-toggle button {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 8px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {

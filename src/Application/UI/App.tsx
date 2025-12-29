@@ -10,6 +10,7 @@ const App = () => {
     const [loading, setLoading] = useState(true);
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
+    const [freeCamActive, setFreeCamActive] = useState(false);
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -25,6 +26,12 @@ const App = () => {
         setSelectedCar(nextCar);
         storeCarId(nextCar);
         eventBus.dispatch('carChange', nextCar);
+    };
+
+    const handleViewToggle = () => {
+        const nextState = !freeCamActive;
+        setFreeCamActive(nextState);
+        eventBus.dispatch('freeCamToggle', nextState);
     };
 
     return (
@@ -58,6 +65,11 @@ const App = () => {
                                 </option>
                             ))}
                         </select>
+                    </div>
+                    <div className="view-toggle" data-prevent-click>
+                        <button type="button" onClick={handleViewToggle}>
+                            {freeCamActive ? 'Exit look around' : 'Look around'}
+                        </button>
                     </div>
                 </div>
             )}

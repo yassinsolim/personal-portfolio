@@ -39,6 +39,7 @@ export default class Camera extends EventEmitter {
 
     freeCam: boolean;
     orbitControls: OrbitControls;
+    freeCamLocked: boolean;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -57,6 +58,7 @@ export default class Camera extends EventEmitter {
         this.focalPoint = new THREE.Vector3(0, 0, 0);
 
         this.freeCam = false;
+        this.freeCamLocked = false;
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -76,18 +78,7 @@ export default class Camera extends EventEmitter {
             }
             if (event.button === 2 || this.freeCam) return;
             event.preventDefault();
-            // print target and current keyframe
-            if (
-                this.currentKeyframe === CameraKey.IDLE ||
-                this.targetKeyframe === CameraKey.IDLE
-            ) {
-                this.transition(CameraKey.DESK);
-            } else if (
-                this.currentKeyframe === CameraKey.DESK ||
-                this.targetKeyframe === CameraKey.DESK
-            ) {
-                this.transition(CameraKey.IDLE);
-            }
+            this.toggleIdleDesk();
         });
 
         this.setPostLoadTransition();
@@ -95,6 +86,20 @@ export default class Camera extends EventEmitter {
         this.setMonitorListeners();
         this.setFreeCamListeners();
         this.setMouseLookListeners();
+    }
+
+    toggleIdleDesk() {
+        if (
+            this.currentKeyframe === CameraKey.IDLE ||
+            this.targetKeyframe === CameraKey.IDLE
+        ) {
+            this.transition(CameraKey.DESK);
+        } else if (
+            this.currentKeyframe === CameraKey.DESK ||
+            this.targetKeyframe === CameraKey.DESK
+        ) {
+            this.transition(CameraKey.IDLE);
+        }
     }
 
     transition(
@@ -158,6 +163,7 @@ export default class Camera extends EventEmitter {
 
     setFreeCamListeners() {
         UIEventBus.on('freeCamToggle', (toggle: boolean) => {
+            this.freeCamLocked = toggle;
             if (toggle) this.enableFreeCam();
             else this.disableFreeCam();
         });
@@ -174,12 +180,14 @@ export default class Camera extends EventEmitter {
         window.addEventListener('mousedown', (event) => {
             if (event.button === 2) {
                 event.preventDefault();
+                if (this.freeCamLocked) return;
                 this.enableFreeCam(300);
             }
         });
         window.addEventListener('mouseup', (event) => {
             if (event.button === 2) {
                 event.preventDefault();
+                if (this.freeCamLocked) return;
                 this.disableFreeCam();
             }
         });
