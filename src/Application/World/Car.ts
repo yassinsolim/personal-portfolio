@@ -9,7 +9,15 @@ const BASE_CAR_SCALE = 27;
 const CAR_POSITION = new THREE.Vector3(-2400, 0, -7600);
 const CAR_ROTATION = new THREE.Euler(0, -Math.PI / 2, 0);
 const CAR_ENV_INTENSITY = 0.95;
+const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const BODY_BLUE = new THREE.Color(0x050f2f);
+const TOYOTA_CROWN_GRAY = new THREE.Color(0x8f9296);
+const TOYOTA_CROWN_SCALE = 0.95;
+const TOYOTA_CROWN_ROTATION_OFFSET = Math.PI / 2;
+const TOYOTA_CROWN_POSITION_OFFSET = new THREE.Vector3(400, 0, 0);
+const TOYOTA_CROWN_BACK_SHIFT = 1 / 6;
+const TOYOTA_CROWN_FORWARD_SHIFT = -0.5;
+const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
 const WHEEL_SILVER = new THREE.Color(0xcfd3da);
 
 export default class Car {
@@ -137,20 +145,30 @@ export default class Car {
     }
 
     prepareCarModel(car: THREE.Group, carOption: CarOption) {
-        const scale = this.getCarScale(car, carOption);
+        if (!this.sceneUnitsPerMeter) {
+            this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
+        }
+        const scale = this.getCarScale(car, carOption) * this.getCarScaleFactor(
+            carOption
+        );
         car.scale.setScalar(scale);
-        car.rotation.copy(CAR_ROTATION);
+        car.rotation.copy(this.getCarRotation(carOption));
         this.applyEnvironment(car);
-        this.applyMaterialStyling(car);
+        this.applyMaterialStyling(car, carOption);
 
         car.updateMatrixWorld(true);
 
         // Drop the car to the ground plane based on its bounding box
         const bbox = new THREE.Box3().setFromObject(car);
+        // Some models (e.g., Toyota) have their geometry offset from origin.
+        const pivotOffset = this.getPivotOffset(bbox, carOption);
         const groundY = this.getGroundYFromScene();
         const groundOffset = groundY - bbox.min.y;
 
         car.position.set(CAR_POSITION.x, groundOffset, CAR_POSITION.z);
+        if (pivotOffset) {
+            car.position.sub(pivotOffset);
+        }
         car.updateMatrixWorld(true);
 
         const size = new THREE.Vector3();
@@ -158,14 +176,52 @@ export default class Car {
 
         const forward = new THREE.Vector3();
         car.getWorldDirection(forward);
-        const backward = forward.multiplyScalar(-1);
-        const shiftDistance =
-            (1 / 3) *
-            (Math.abs(backward.x) * size.x +
-                Math.abs(backward.y) * size.y +
-                Math.abs(backward.z) * size.z);
+        forward.y = 0;
+        if (forward.lengthSq() > 0) {
+            forward.normalize();
+        }
+        const backward = forward.clone().multiplyScalar(-1);
+        const carLength =
+            Math.abs(backward.x) * size.x +
+            Math.abs(backward.y) * size.y +
+            Math.abs(backward.z) * size.z;
+        const shiftDistance = (1 / 3) * carLength;
+        const shiftDirection =
+            carOption.id === TOYOTA_CROWN_ID ? forward : backward;
 
-        car.position.addScaledVector(backward, shiftDistance);
+        car.position.addScaledVector(shiftDirection, shiftDistance);
+        if (carOption.id === TOYOTA_CROWN_ID) {
+            car.position.addScaledVector(
+                backward,
+                carLength * TOYOTA_CROWN_BACK_SHIFT
+            );
+            const deskCenter = this.getDeskCenter();
+            const toDesk = deskCenter.sub(car.position);
+            toDesk.y = 0;
+            if (toDesk.lengthSq() > 0) {
+                toDesk.normalize();
+            }
+            const left = new THREE.Vector3().crossVectors(
+                toDesk,
+                new THREE.Vector3(0, 1, 0)
+            );
+            if (left.lengthSq() > 0) {
+                left.normalize();
+            }
+            const deskWidth =
+                Math.abs(toDesk.x) * size.x +
+                Math.abs(toDesk.y) * size.y +
+                Math.abs(toDesk.z) * size.z;
+            car.position.addScaledVector(
+                toDesk,
+                deskWidth * TOYOTA_CROWN_DESK_WIDTH_SHIFT
+            );
+            car.position.addScaledVector(
+                left,
+                carLength * TOYOTA_CROWN_FORWARD_SHIFT
+            );
+        }
+        car.position.add(this.getCarPositionOffset(carOption));
 
         car.traverse((child) => {
             if (child instanceof THREE.Mesh) {
@@ -218,6 +274,43 @@ export default class Car {
         return Math.max(size.x, size.y, size.z);
     }
 
+    getCarRotation(carOption: CarOption) {
+        const rotation = CAR_ROTATION.clone();
+        if (carOption.id === TOYOTA_CROWN_ID) {
+            rotation.y += TOYOTA_CROWN_ROTATION_OFFSET;
+        }
+        return rotation;
+    }
+
+    getCarScaleFactor(carOption: CarOption) {
+        if (carOption.id === TOYOTA_CROWN_ID) return TOYOTA_CROWN_SCALE;
+        return 1;
+    }
+
+    getCarPositionOffset(carOption: CarOption) {
+        if (carOption.id === TOYOTA_CROWN_ID) {
+            return TOYOTA_CROWN_POSITION_OFFSET.clone();
+        }
+        return new THREE.Vector3();
+    }
+
+    getPivotOffset(bbox: THREE.Box3, carOption: CarOption) {
+        if (carOption.id !== TOYOTA_CROWN_ID) return null;
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        center.y = 0;
+        return center;
+    }
+
+    getDeskCenter() {
+        const deskModel = this.resources.items.gltfModel.computerSetupModel;
+        if (!deskModel) return new THREE.Vector3();
+        const bbox = new THREE.Box3().setFromObject(deskModel.scene);
+        const center = new THREE.Vector3();
+        bbox.getCenter(center);
+        return center;
+    }
+
     applyEnvironment(car: THREE.Object3D) {
         const envMap =
             this.resources.items.cubeTexture.environmentMapTexture ||
@@ -238,8 +331,8 @@ export default class Car {
         });
     }
 
-    applyMaterialStyling(car: THREE.Object3D) {
-        const bodyNames = new Set([
+    applyMaterialStyling(car: THREE.Object3D, carOption: CarOption) {
+        const defaultBodyNames = new Set([
             'body_color',
             'piano_black',
             'piano_black_0',
@@ -251,6 +344,10 @@ export default class Car {
             'material',
             'mizo',
         ]);
+        const toyotaBodyNames = new Set(['body']);
+        const isToyotaCrown = carOption.id === TOYOTA_CROWN_ID;
+        const bodyNames = isToyotaCrown ? toyotaBodyNames : defaultBodyNames;
+        const bodyColor = isToyotaCrown ? TOYOTA_CROWN_GRAY : BODY_BLUE;
 
         const carbonNames = ['carbon', 'carbon_0', 'parts', 'side_wing_carbon_0'];
         const windowNames = [
@@ -284,7 +381,7 @@ export default class Car {
                 const name = material.name.toLowerCase();
 
                 if (bodyNames.has(name)) {
-                    material.color.copy(BODY_BLUE);
+                    material.color.copy(bodyColor);
                     material.metalness = 1;
                     material.roughness = 0.18;
                     material.envMapIntensity = 1.1;

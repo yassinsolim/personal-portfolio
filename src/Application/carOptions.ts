@@ -48,6 +48,14 @@ export const carOptions: CarOption[] = [
         modelPath: 'models/Cars/bmw_m4_f82/source/bmw_m4_f82.glb',
         lengthMeters: 4.67,
     },
+    {
+        id: 'toyota-crown-platinum',
+        label: 'Toyota Crown Platinum',
+        resourceName: 'carModelToyotaCrownPlatinum',
+        modelPath:
+            'models/Cars/toyota_crown_2025/source/toyota_crown_2025.glb',
+        lengthMeters: 4.98,
+    },
 ];
 
 export const defaultCarId = 'amg-one';
