@@ -6,6 +6,7 @@ const ip = require('ip')
 const portFinderSync = require('portfinder-sync')
 
 const shouldExportScene = process.env.EXPORT_SCENE === '1'
+const MAX_EXPORT_BYTES = 100 * 1024 * 1024
 
 const infoColor = (_message) =>
 {
@@ -17,17 +18,18 @@ module.exports = merge(
     {
         stats: 'errors-warnings',
         mode: 'development',
+        devtool: 'source-map',
         infrastructureLogging:
         {
             level: 'warn',
         },
         devServer:
         {
-            host: 'local-ip',
+            host: 'localhost',
             port: portFinderSync.getPort(8080),
             open: shouldExportScene ? '/?export=1&save=1' : true,
             https: false,
-            allowedHosts: 'all',
+            allowedHosts: 'auto',
             hot: false,
             watchFiles: ['src/**', 'static/**'],
             static:
@@ -50,11 +52,33 @@ module.exports = merge(
 
                 devServer.app.post('/api/save-glb', (req, res) =>
                 {
-                    const chunks = []
+                    if (!shouldExportScene)
+                    {
+                        res.statusCode = 403
+                        res.setHeader('Content-Type', 'application/json')
+                        res.end(JSON.stringify({ ok: false, error: 'Export disabled' }))
+                        return
+                    }
 
-                    req.on('data', (chunk) => chunks.push(chunk))
+                    if (req.headers['content-type'] !== 'application/octet-stream')
+                    {
+                        res.statusCode = 415
+                        res.setHeader('Content-Type', 'application/json')
+                        res.end(JSON.stringify({ ok: false, error: 'Unsupported content type' }))
+                        return
+                    }
+
+                    const chunks = []
+                    let totalBytes = 0
+                    let aborted = false
+
                     req.on('end', () =>
                     {
+                        if (aborted)
+                        {
+                            return
+                        }
+
                         try
                         {
                             const buffer = Buffer.concat(chunks)
@@ -73,6 +97,28 @@ module.exports = merge(
                             res.setHeader('Content-Type', 'application/json')
                             res.end(JSON.stringify({ ok: false, error: error.message }))
                         }
+                    })
+
+                    req.on('data', (chunk) =>
+                    {
+                        if (aborted)
+                        {
+                            return
+                        }
+
+                        const nextTotal = totalBytes + chunk.length
+                        if (nextTotal > MAX_EXPORT_BYTES)
+                        {
+                            aborted = true
+                            res.statusCode = 413
+                            res.setHeader('Content-Type', 'application/json')
+                            res.end(JSON.stringify({ ok: false, error: 'Payload too large' }))
+                            req.destroy()
+                            return
+                        }
+
+                        totalBytes = nextTotal
+                        chunks.push(chunk)
                     })
 
                     req.on('error', (error) =>

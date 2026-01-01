@@ -44,7 +44,10 @@ const MuteToggle: React.FC<MuteToggleProps> = ({}) => {
 
     useEffect(() => {
         if (!blockEvents) {
-            window.postMessage({ type: 'keydown', key: `_AUTO_` }, '*');
+            window.postMessage(
+                { type: 'keydown', key: `_AUTO_` },
+                window.location.origin
+            );
             UIEventBus.dispatch('freeCamToggle', freeCamActive);
         }
     }, [freeCamActive]);

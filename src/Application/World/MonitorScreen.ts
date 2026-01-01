@@ -146,59 +146,28 @@ export default class MonitorScreen extends EventEmitter {
         // Create iframe
         const iframe = document.createElement('iframe');
 
-        // Bubble mouse move events to the main application, so we can affect the camera
-        iframe.onload = () => {
-            if (iframe.contentWindow) {
-                window.addEventListener('message', (event) => {
-                    var evt = new CustomEvent(event.data.type, {
-                        bubbles: true,
-                        cancelable: false,
-                    });
-
-                    // @ts-ignore
-                    evt.inComputer = true;
-                    if (event.data.type === 'mousemove') {
-                        var clRect = iframe.getBoundingClientRect();
-                        const { top, left, width, height } = clRect;
-                        const widthRatio = width / IFRAME_SIZE.w;
-                        const heightRatio = height / IFRAME_SIZE.h;
-
-                        // @ts-ignore
-                        evt.clientX = Math.round(
-                            event.data.clientX * widthRatio + left
-                        );
-                        //@ts-ignore
-                        evt.clientY = Math.round(
-                            event.data.clientY * heightRatio + top
-                        );
-                    } else if (event.data.type === 'keydown') {
-                        // @ts-ignore
-                        evt.key = event.data.key;
-                    } else if (event.data.type === 'keyup') {
-                        // @ts-ignore
-                        evt.key = event.data.key;
-                    }
-
-                    iframe.dispatchEvent(evt);
-                });
-            }
-        };
-
         // Set iframe attributes
-        // PROD
-        iframe.src = "https://os.yassin.app";
+        const productionSrc = 'https://os.yassin.app';
+        const localDevSrc = 'http://localhost:3000/';
+        const urlParams = new URLSearchParams(window.location.search);
+        const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
+            window.location.hostname
+        );
+        const iframeSrc =
+            isLocalhost && urlParams.has('dev') ? localDevSrc : productionSrc;
+        iframe.src = iframeSrc;
+        iframe.setAttribute(
+            'sandbox',
+            'allow-scripts allow-same-origin allow-forms allow-pointer-lock'
+        );
+        iframe.setAttribute('referrerpolicy', 'no-referrer');
 
         /**
-         * Use dev server is query params are present
+         * Use dev server if query params are present and we're on localhost.
          *
          * Warning: This will not work unless the dev server is running on localhost:3000
-         * Also running the dev server causes browsers to freak out over unsecure connections
-         * in the iframe, so it will flag a ton of issues.
+         * Also running the dev server causes browsers to flag the insecure iframe.
          */
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('dev')) {
-            iframe.src = 'http://localhost:3000/';
-        }
         iframe.style.width = this.screenSize.width + 'px';
         iframe.style.height = this.screenSize.height + 'px';
         iframe.style.padding = IFRAME_PADDING + 'px';
@@ -209,6 +178,101 @@ export default class MonitorScreen extends EventEmitter {
         iframe.frameBorder = '0';
         iframe.style.backfaceVisibility = 'hidden';
         // iframe.title = 'yassinOS';
+
+        // Bubble mouse move events to the main application, so we can affect the camera
+        const iframeOrigin = new URL(iframeSrc, window.location.href).origin;
+        const allowedOrigins = new Set<string>([
+            iframeOrigin,
+            window.location.origin,
+        ]);
+        const allowedMessageTypes = new Set([
+            'mousemove',
+            'mousedown',
+            'mouseup',
+            'keydown',
+            'keyup',
+        ]);
+
+        iframe.onload = () => {
+            if (!iframe.contentWindow) {
+                return;
+            }
+
+            window.addEventListener('message', (event: MessageEvent) => {
+                if (!allowedOrigins.has(event.origin)) {
+                    return;
+                }
+
+                if (
+                    event.origin === iframeOrigin &&
+                    event.source !== iframe.contentWindow
+                ) {
+                    return;
+                }
+
+                if (
+                    event.origin === window.location.origin &&
+                    event.source !== window
+                ) {
+                    return;
+                }
+
+                if (!event.data || typeof event.data !== 'object') {
+                    return;
+                }
+
+                const data = event.data as {
+                    type?: string;
+                    clientX?: number;
+                    clientY?: number;
+                    key?: string;
+                };
+
+                if (!data.type || !allowedMessageTypes.has(data.type)) {
+                    return;
+                }
+
+                var evt = new CustomEvent(data.type, {
+                    bubbles: true,
+                    cancelable: false,
+                });
+
+                // @ts-ignore
+                evt.inComputer = true;
+                if (data.type === 'mousemove') {
+                    if (
+                        typeof data.clientX !== 'number' ||
+                        typeof data.clientY !== 'number' ||
+                        !Number.isFinite(data.clientX) ||
+                        !Number.isFinite(data.clientY)
+                    ) {
+                        return;
+                    }
+
+                    var clRect = iframe.getBoundingClientRect();
+                    const { top, left, width, height } = clRect;
+                    const widthRatio = width / IFRAME_SIZE.w;
+                    const heightRatio = height / IFRAME_SIZE.h;
+
+                    // @ts-ignore
+                    evt.clientX = Math.round(
+                        data.clientX * widthRatio + left
+                    );
+                    //@ts-ignore
+                    evt.clientY = Math.round(
+                        data.clientY * heightRatio + top
+                    );
+                } else if (data.type === 'keydown' || data.type === 'keyup') {
+                    if (typeof data.key !== 'string') {
+                        return;
+                    }
+                    // @ts-ignore
+                    evt.key = data.key;
+                }
+
+                iframe.dispatchEvent(evt);
+            });
+        };
 
         // Add iframe to container
         container.appendChild(iframe);

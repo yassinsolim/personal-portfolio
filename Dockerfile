@@ -1,11 +1,11 @@
 # ---------- build + runtime ----------
-FROM node:20-alpine
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy source
 COPY . .
@@ -13,8 +13,19 @@ COPY . .
 # Build the static assets
 RUN npm run build
 
-# Install a simple static file server
-RUN npm install -g serve
+FROM node:20-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Install a simple static file server and drop privileges
+RUN npm install -g serve \
+  && addgroup -S app \
+  && adduser -S app -G app
+
+COPY --from=builder --chown=app:app /app/build ./build
+
+USER app
 
 EXPOSE 3000
 
