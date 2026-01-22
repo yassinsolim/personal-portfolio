@@ -40,7 +40,7 @@ const App = () => {
             {showHint && (
                 <div className="look-hint">
                     <div>
-                        Click anywhere to begin. Right click to switch view.
+                        Click anywhere to begin.
                     </div>
                     <div>
                         Visit the inner OS{' '}

@@ -18,6 +18,8 @@ const TOYOTA_CROWN_POSITION_OFFSET = new THREE.Vector3(400, 0, 0);
 const TOYOTA_CROWN_BACK_SHIFT = 1 / 6;
 const TOYOTA_CROWN_FORWARD_SHIFT = -0.5;
 const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
+const MOBILE_MAX_WIDTH = 768;
+const MOBILE_CAR_BACK_SHIFT = 0.12;
 const WHEEL_SILVER = new THREE.Color(0xcfd3da);
 
 export default class Car {
@@ -222,6 +224,13 @@ export default class Car {
             );
         }
         car.position.add(this.getCarPositionOffset(carOption));
+        const mobileShiftFactor = this.getMobileCarBackShiftFactor();
+        if (mobileShiftFactor) {
+            car.position.addScaledVector(
+                shiftDirection,
+                carLength * mobileShiftFactor
+            );
+        }
 
         car.traverse((child) => {
             if (child instanceof THREE.Mesh) {
@@ -292,6 +301,12 @@ export default class Car {
             return TOYOTA_CROWN_POSITION_OFFSET.clone();
         }
         return new THREE.Vector3();
+    }
+
+    getMobileCarBackShiftFactor() {
+        return this.application.sizes.width < MOBILE_MAX_WIDTH
+            ? MOBILE_CAR_BACK_SHIFT
+            : 0;
     }
 
     getPivotOffset(bbox: THREE.Box3, carOption: CarOption) {

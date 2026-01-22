@@ -85,7 +85,6 @@ export default class Camera extends EventEmitter {
         this.setInstance();
         this.setMonitorListeners();
         this.setFreeCamListeners();
-        this.setMouseLookListeners();
     }
 
     toggleIdleDesk() {
@@ -172,24 +171,6 @@ export default class Camera extends EventEmitter {
     setPostLoadTransition() {
         UIEventBus.on('loadingScreenDone', () => {
             this.transition(CameraKey.IDLE, 2500, TWEEN.Easing.Exponential.Out);
-        });
-    }
-
-    setMouseLookListeners() {
-        window.addEventListener('contextmenu', (e) => e.preventDefault());
-        window.addEventListener('mousedown', (event) => {
-            if (event.button === 2) {
-                event.preventDefault();
-                if (this.freeCamLocked) return;
-                this.enableFreeCam(300);
-            }
-        });
-        window.addEventListener('mouseup', (event) => {
-            if (event.button === 2) {
-                event.preventDefault();
-                if (this.freeCamLocked) return;
-                this.disableFreeCam();
-            }
         });
     }
 
