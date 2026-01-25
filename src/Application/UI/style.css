@@ -217,6 +217,26 @@ br {
     cursor: pointer;
 }
 
+.look-hint .race-toggle {
+    margin-top: 6px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.look-hint .race-toggle button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {

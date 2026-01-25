@@ -11,12 +11,20 @@ const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
     const [freeCamActive, setFreeCamActive] = useState(false);
+    const [raceModeActive, setRaceModeActive] = useState(false);
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
             setLoading(false);
             setShowHint(true);
         });
+
+        eventBus.on(
+            'raceMode:changed',
+            (state: { active?: boolean } | undefined) => {
+                setRaceModeActive(Boolean(state?.active));
+            }
+        );
     }, []);
 
     const handleCarChange = (
@@ -32,6 +40,12 @@ const App = () => {
         const nextState = !freeCamActive;
         setFreeCamActive(nextState);
         eventBus.dispatch('freeCamToggle', nextState);
+    };
+
+    const handleRaceToggle = () => {
+        eventBus.dispatch(raceModeActive ? 'raceMode:exit' : 'raceMode:start', {
+            fromUI: true,
+        });
     };
 
     return (
@@ -69,6 +83,13 @@ const App = () => {
                     <div className="view-toggle" data-prevent-click>
                         <button type="button" onClick={handleViewToggle}>
                             {freeCamActive ? 'Exit look around' : 'Look around'}
+                        </button>
+                    </div>
+                    <div className="race-toggle" data-prevent-click>
+                        <button type="button" onClick={handleRaceToggle}>
+                            {raceModeActive
+                                ? 'Exit race mode'
+                                : 'Start Nordschleife race'}
                         </button>
                     </div>
                 </div>

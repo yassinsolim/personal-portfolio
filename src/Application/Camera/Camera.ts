@@ -40,6 +40,7 @@ export default class Camera extends EventEmitter {
     freeCam: boolean;
     orbitControls: OrbitControls;
     freeCamLocked: boolean;
+    raceModeActive: boolean;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -59,6 +60,7 @@ export default class Camera extends EventEmitter {
 
         this.freeCam = false;
         this.freeCamLocked = false;
+        this.raceModeActive = false;
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -76,7 +78,8 @@ export default class Camera extends EventEmitter {
             ) {
                 return;
             }
-            if (event.button === 2 || this.freeCam) return;
+            if (event.button === 2 || this.freeCam || this.raceModeActive)
+                return;
             event.preventDefault();
             this.toggleIdleDesk();
         });
@@ -88,6 +91,7 @@ export default class Camera extends EventEmitter {
     }
 
     toggleIdleDesk() {
+        if (this.raceModeActive) return;
         if (
             this.currentKeyframe === CameraKey.IDLE ||
             this.targetKeyframe === CameraKey.IDLE
@@ -162,10 +166,21 @@ export default class Camera extends EventEmitter {
 
     setFreeCamListeners() {
         UIEventBus.on('freeCamToggle', (toggle: boolean) => {
+            if (this.raceModeActive) return;
             this.freeCamLocked = toggle;
             if (toggle) this.enableFreeCam();
             else this.disableFreeCam();
         });
+
+        UIEventBus.on(
+            'raceMode:changed',
+            (state: { active?: boolean } | undefined) => {
+                this.raceModeActive = Boolean(state?.active);
+                if (this.raceModeActive && this.freeCam) {
+                    this.disableFreeCam();
+                }
+            }
+        );
     }
 
     setPostLoadTransition() {
