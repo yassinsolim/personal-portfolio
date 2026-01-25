@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
+import NordschleifeTrack from './Track/NordschleifeTrack';
 
 type RaceModeState = {
     active: boolean;
@@ -12,6 +13,7 @@ export default class RaceManager {
     raceRoot: THREE.Group;
     active: boolean;
     initialized: boolean;
+    track: NordschleifeTrack;
 
     constructor() {
         this.application = new Application();
@@ -25,6 +27,7 @@ export default class RaceManager {
         this.raceRoot.userData.raceRoot = true;
         this.scene.add(this.raceRoot);
 
+        this.track = new NordschleifeTrack(this.raceRoot);
         this.setupEvents();
     }
 
@@ -79,8 +82,12 @@ export default class RaceManager {
         UIEventBus.dispatch('raceMode:changed', state);
     }
 
+    getTrack() {
+        return this.track;
+    }
+
     update() {
         if (!this.active) return;
+        this.track.update();
     }
 }
-

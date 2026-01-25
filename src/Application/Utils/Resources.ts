@@ -13,14 +13,16 @@ export default class Resources extends EventEmitter {
         cubeTexture: { [name: string]: LoadedCubeTexture };
         gltfModel: { [name: string]: LoadedModel };
         audio: { [name: string]: LoadedAudio };
+        json: { [name: string]: LoadedJson };
     };
     toLoad: number;
     loaded: number;
-    loaders: {
+        loaders: {
         gltfLoader: GLTFLoader;
         textureLoader: THREE.TextureLoader;
         cubeTextureLoader: THREE.CubeTextureLoader;
         audioLoader: THREE.AudioLoader;
+        jsonLoader: THREE.FileLoader;
     };
     application: Application;
     loading: Loading;
@@ -30,7 +32,13 @@ export default class Resources extends EventEmitter {
 
         this.sources = sources;
 
-        this.items = { texture: {}, cubeTexture: {}, gltfModel: {}, audio: {} };
+        this.items = {
+            texture: {},
+            cubeTexture: {},
+            gltfModel: {},
+            audio: {},
+            json: {},
+        };
         this.toLoad = this.sources.length;
         this.loaded = 0;
         this.application = new Application();
@@ -46,6 +54,7 @@ export default class Resources extends EventEmitter {
             textureLoader: new THREE.TextureLoader(),
             cubeTextureLoader: new THREE.CubeTextureLoader(),
             audioLoader: new THREE.AudioLoader(),
+            jsonLoader: new THREE.FileLoader(),
         };
     }
 
@@ -68,6 +77,19 @@ export default class Resources extends EventEmitter {
             } else if (source.type === 'audio') {
                 this.loaders.audioLoader.load(source.path, (buffer) => {
                     this.sourceLoaded(source, buffer);
+                });
+            } else if (source.type === 'json') {
+                this.loaders.jsonLoader.load(source.path, (file) => {
+                    try {
+                        const parsed = JSON.parse(file as string);
+                        this.sourceLoaded(source, parsed);
+                    } catch (error) {
+                        console.error(
+                            `[Resources] Failed to parse JSON: ${source.name}`,
+                            error
+                        );
+                        this.sourceLoaded(source, {});
+                    }
                 });
             }
         }

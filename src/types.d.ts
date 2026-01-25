@@ -2,7 +2,8 @@ type Resource =
     | TextureResource
     | CubeTextureResource
     | ModelResource
-    | AudioResource;
+    | AudioResource
+    | JsonResource;
 
 declare interface StyleSheetCSS {
     [key: string]: React.CSSProperties;
@@ -32,6 +33,12 @@ type AudioResource = {
     path: string;
 };
 
+type JsonResource = {
+    name: string;
+    type: 'json';
+    path: string;
+};
+
 type EnclosingPlane = {
     size: THREE.Vector2;
     position: THREE.Vector3;
@@ -47,7 +54,8 @@ type LoadedResource =
     | LoadedTexture
     | LoadedCubeTexture
     | LoadedModel
-    | LoadedAudio;
+    | LoadedAudio
+    | LoadedJson;
 
 type LoadedTexture = THREE.Texture;
 
@@ -57,4 +65,6 @@ type LoadedCubeTexture = THREE.CubeTexture;
 
 type LoadedAudio = AudioBuffer;
 
-type ResourceType = 'texture' | 'cubeTexture' | 'gltfModel';
+type LoadedJson = Record<string, any>;
+
+type ResourceType = 'texture' | 'cubeTexture' | 'gltfModel' | 'audio' | 'json';
