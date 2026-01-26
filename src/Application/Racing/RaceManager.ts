@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
+import RaceVehicle from './Vehicle/RaceVehicle';
 
 type RaceModeState = {
     active: boolean;
@@ -14,6 +15,7 @@ export default class RaceManager {
     active: boolean;
     initialized: boolean;
     track: NordschleifeTrack;
+    vehicle: RaceVehicle;
 
     constructor() {
         this.application = new Application();
@@ -28,6 +30,7 @@ export default class RaceManager {
         this.scene.add(this.raceRoot);
 
         this.track = new NordschleifeTrack(this.raceRoot);
+        this.vehicle = new RaceVehicle(this.raceRoot, this.track);
         this.setupEvents();
     }
 
@@ -47,6 +50,8 @@ export default class RaceManager {
         this.initialized = true;
         this.active = true;
         this.raceRoot.visible = true;
+        this.vehicle.resetToStart();
+        this.vehicle.setActive(true);
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);
@@ -58,6 +63,7 @@ export default class RaceManager {
 
         this.active = false;
         this.raceRoot.visible = false;
+        this.vehicle.setActive(false);
 
         this.setLayerInteraction(false);
         this.dispatchState();
@@ -86,8 +92,14 @@ export default class RaceManager {
         return this.track;
     }
 
+    getVehicle() {
+        return this.vehicle;
+    }
+
     update() {
         if (!this.active) return;
+        const delta = this.application.time.delta / 1000;
+        this.vehicle.update(delta);
         this.track.update();
     }
 }
