@@ -3,9 +3,11 @@ import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
 import RaceVehicle from './Vehicle/RaceVehicle';
+import RaceChaseCamera from './Camera/RaceChaseCamera';
 
 type RaceModeState = {
     active: boolean;
+    paused: boolean;
 };
 
 export default class RaceManager {
@@ -16,12 +18,15 @@ export default class RaceManager {
     initialized: boolean;
     track: NordschleifeTrack;
     vehicle: RaceVehicle;
+    chaseCamera: RaceChaseCamera;
+    paused: boolean;
 
     constructor() {
         this.application = new Application();
         this.scene = this.application.scene;
         this.active = false;
         this.initialized = false;
+        this.paused = false;
 
         this.raceRoot = new THREE.Group();
         this.raceRoot.name = 'race-mode-root';
@@ -31,6 +36,7 @@ export default class RaceManager {
 
         this.track = new NordschleifeTrack(this.raceRoot);
         this.vehicle = new RaceVehicle(this.raceRoot, this.track);
+        this.chaseCamera = new RaceChaseCamera(this.vehicle);
         this.setupEvents();
     }
 
@@ -42,6 +48,19 @@ export default class RaceManager {
         UIEventBus.on('raceMode:exit', () => {
             this.exitRaceMode();
         });
+
+        UIEventBus.on('race:pauseRequest', () => {
+            if (!this.active) return;
+            this.setPaused(true);
+        });
+
+        UIEventBus.on(
+            'race:setPaused',
+            (state: { paused?: boolean } | undefined) => {
+                if (!this.active) return;
+                this.setPaused(Boolean(state?.paused));
+            }
+        );
     }
 
     enterRaceMode() {
@@ -49,24 +68,32 @@ export default class RaceManager {
 
         this.initialized = true;
         this.active = true;
+        this.paused = false;
         this.raceRoot.visible = true;
         this.vehicle.resetToStart();
         this.vehicle.setActive(true);
+        this.chaseCamera.setActive(true);
+        this.chaseCamera.setPaused(false);
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);
         this.dispatchState();
+        UIEventBus.dispatch('race:pauseState', { paused: false });
     }
 
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
 
         this.active = false;
+        this.paused = false;
         this.raceRoot.visible = false;
         this.vehicle.setActive(false);
+        this.chaseCamera.setPaused(false);
+        this.chaseCamera.setActive(false);
 
         this.setLayerInteraction(false);
         this.dispatchState();
+        UIEventBus.dispatch('race:pauseState', { paused: false });
     }
 
     setLayerInteraction(raceActive: boolean) {
@@ -84,6 +111,7 @@ export default class RaceManager {
     dispatchState() {
         const state: RaceModeState = {
             active: this.active,
+            paused: this.paused,
         };
         UIEventBus.dispatch('raceMode:changed', state);
     }
@@ -96,10 +124,21 @@ export default class RaceManager {
         return this.vehicle;
     }
 
+    setPaused(paused: boolean) {
+        this.paused = paused;
+        this.vehicle.setActive(!paused);
+        this.chaseCamera.setPaused(paused);
+        UIEventBus.dispatch('race:pauseState', { paused });
+        this.dispatchState();
+    }
+
     update() {
         if (!this.active) return;
         const delta = this.application.time.delta / 1000;
-        this.vehicle.update(delta);
+        if (!this.paused) {
+            this.vehicle.update(delta);
+        }
         this.track.update();
+        this.chaseCamera.update(delta);
     }
 }

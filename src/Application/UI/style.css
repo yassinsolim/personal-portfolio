@@ -237,6 +237,108 @@ br {
     cursor: pointer;
 }
 
+.look-hint .race-pause-toggle {
+    margin-top: 6px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.look-hint .race-pause-toggle button {
+    background: rgba(0, 0, 0, 0.66);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.94);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .race-lock-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.race-menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
+.race-menu-panel {
+    width: min(460px, calc(100vw - 32px));
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(13, 14, 18, 0.92);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: monospace;
+    box-sizing: border-box;
+}
+
+.race-menu-panel h3 {
+    margin: 0;
+    font-size: 15px;
+    letter-spacing: 0.3px;
+}
+
+.race-menu-panel p {
+    margin-top: 8px;
+    margin-bottom: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+}
+
+.race-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.race-menu-row input[type='range'] {
+    flex: 1;
+}
+
+.race-menu-row select,
+.race-menu-row button,
+.race-menu-actions button {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.race-quality-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.race-quality-buttons button.active {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.race-menu-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {

@@ -255,6 +255,10 @@ export default class Camera extends EventEmitter {
     update() {
         TWEEN.update();
 
+        if (this.raceModeActive) {
+            return;
+        }
+
         if (this.freeCam && this.orbitControls) {
             this.position.copy(this.orbitControls.object.position);
             this.focalPoint.copy(this.orbitControls.target);
