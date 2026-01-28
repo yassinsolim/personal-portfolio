@@ -12,6 +12,24 @@ const MUTE_KEY = 'yassinverse:muted';
 
 type QualityMode = 'quality' | 'performance';
 
+type HudState = {
+    speedKph: number;
+    gear: number;
+    rpm: number;
+    lapTimeMs: number;
+    lapRunning: boolean;
+    lapProgress: number;
+};
+
+type LeaderboardEntry = {
+    id: string;
+    name: string;
+    lapTimeMs: number;
+    carId: string;
+    createdAt: string;
+    source: 'local' | 'remote';
+};
+
 const getStoredQualityMode = (): QualityMode => {
     try {
         const value = window.localStorage.getItem(QUALITY_MODE_KEY);
@@ -42,6 +60,17 @@ const getStoredMuted = () => {
     }
 };
 
+const formatLapTime = (valueMs: number) => {
+    const totalMs = Math.max(0, Math.floor(valueMs));
+    const minutes = Math.floor(totalMs / 60000);
+    const seconds = Math.floor((totalMs % 60000) / 1000);
+    const milliseconds = totalMs % 1000;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(
+        2,
+        '0'
+    )}.${String(milliseconds).padStart(3, '0')}`;
+};
+
 const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
@@ -54,6 +83,18 @@ const App = () => {
     );
     const [volume, setVolume] = useState(() => getStoredVolume());
     const [muted, setMuted] = useState(() => getStoredMuted());
+    const [hud, setHud] = useState<HudState>({
+        speedKph: 0,
+        gear: 1,
+        rpm: 900,
+        lapTimeMs: 0,
+        lapRunning: false,
+        lapProgress: 0,
+    });
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+    const [lapPromptOpen, setLapPromptOpen] = useState(false);
+    const [pendingLapTimeMs, setPendingLapTimeMs] = useState(0);
+    const [lapName, setLapName] = useState('Driver');
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -71,6 +112,8 @@ const App = () => {
                 }
                 if (!active) {
                     setPointerLocked(false);
+                    setLapPromptOpen(false);
+                    setPendingLapTimeMs(0);
                 }
             }
         );
@@ -85,6 +128,28 @@ const App = () => {
                 setPointerLocked(Boolean(state?.locked));
             }
         );
+
+        eventBus.on('race:hudUpdate', (nextHud: HudState) => {
+            setHud((current) => ({
+                ...current,
+                ...nextHud,
+            }));
+        });
+
+        eventBus.on(
+            'race:leaderboardUpdate',
+            (payload: { entries?: LeaderboardEntry[] }) => {
+                setLeaderboard(payload?.entries || []);
+            }
+        );
+
+        eventBus.on('race:lapCompleted', (payload: { lapTimeMs?: number }) => {
+            setPendingLapTimeMs(payload?.lapTimeMs || 0);
+            setLapPromptOpen(true);
+            setLapName('Driver');
+        });
+
+        eventBus.dispatch('race:requestLeaderboard', {});
     }, []);
 
     useEffect(() => {
@@ -157,6 +222,23 @@ const App = () => {
         setQualityMode(mode);
     };
 
+    const handleLapSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        const name = lapName.trim() || 'Driver';
+        eventBus.dispatch('race:submitLapName', { name });
+        setLapPromptOpen(false);
+        setPendingLapTimeMs(0);
+    };
+
+    const handleLapSkip = () => {
+        setLapPromptOpen(false);
+        setPendingLapTimeMs(0);
+        eventBus.dispatch('race:setPaused', { paused: false });
+        eventBus.dispatch('race:requestPointerLock', { fromUI: true });
+    };
+
+    const displayedGear = hud.gear < 0 ? 'R' : String(hud.gear);
+
     return (
         <div id="ui-app">
             <LoadingScreen />
@@ -217,6 +299,45 @@ const App = () => {
                             Click the scene to lock mouse. Press Esc to pause.
                         </div>
                     )}
+                </div>
+            )}
+            {raceModeActive && (
+                <div className="race-hud" data-prevent-click>
+                    <div className="race-hud-main">
+                        <div className="race-hud-speed">
+                            {Math.max(0, Math.round(hud.speedKph))}
+                            <span> km/h</span>
+                        </div>
+                        <div className="race-hud-meta">
+                            <span>Gear {displayedGear}</span>
+                            <span>RPM {Math.round(hud.rpm)}</span>
+                            <span>
+                                Lap{' '}
+                                {hud.lapRunning
+                                    ? formatLapTime(hud.lapTimeMs)
+                                    : '--:--.---'}
+                            </span>
+                            <span>
+                                Progress {Math.round(hud.lapProgress * 100)}%
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="race-hud-board">
+                        <h4>Leaderboard</h4>
+                        {leaderboard.length === 0 ? (
+                            <p>No laps yet.</p>
+                        ) : (
+                            <ol>
+                                {leaderboard.slice(0, 5).map((entry) => (
+                                    <li key={entry.id}>
+                                        <span>{entry.name}</span>
+                                        <span>{formatLapTime(entry.lapTimeMs)}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </div>
                 </div>
             )}
             {raceModeActive && racePaused && (
@@ -303,6 +424,31 @@ const App = () => {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+            {raceModeActive && lapPromptOpen && (
+                <div className="lap-name-overlay" data-prevent-click>
+                    <form
+                        className="lap-name-panel"
+                        onSubmit={handleLapSubmit}
+                        data-prevent-click
+                    >
+                        <h3>Valid Lap Completed</h3>
+                        <p>{formatLapTime(pendingLapTimeMs)}</p>
+                        <input
+                            value={lapName}
+                            onChange={(event) => setLapName(event.target.value)}
+                            maxLength={16}
+                            placeholder="Driver name"
+                            autoFocus
+                        />
+                        <div className="lap-name-actions">
+                            <button type="submit">Save Lap</button>
+                            <button type="button" onClick={handleLapSkip}>
+                                Skip
+                            </button>
+                        </div>
+                    </form>
                 </div>
             )}
         </div>

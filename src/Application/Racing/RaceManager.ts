@@ -4,6 +4,8 @@ import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
 import RaceVehicle from './Vehicle/RaceVehicle';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
+import LapTimer from './Lap/LapTimer';
+import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 
 type RaceModeState = {
     active: boolean;
@@ -20,6 +22,13 @@ export default class RaceManager {
     vehicle: RaceVehicle;
     chaseCamera: RaceChaseCamera;
     paused: boolean;
+    lapTimer: LapTimer;
+    localLeaderboard: LocalLeaderboard;
+    currentLapTimeMs: number;
+    lapRunning: boolean;
+    lapProgress: number;
+    pendingLapTimeMs: number;
+    lastHudDispatchMs: number;
 
     constructor() {
         this.application = new Application();
@@ -37,6 +46,13 @@ export default class RaceManager {
         this.track = new NordschleifeTrack(this.raceRoot);
         this.vehicle = new RaceVehicle(this.raceRoot, this.track);
         this.chaseCamera = new RaceChaseCamera(this.vehicle);
+        this.lapTimer = new LapTimer(this.track.getCurve());
+        this.localLeaderboard = new LocalLeaderboard();
+        this.currentLapTimeMs = 0;
+        this.lapRunning = false;
+        this.lapProgress = 0;
+        this.pendingLapTimeMs = 0;
+        this.lastHudDispatchMs = 0;
         this.setupEvents();
     }
 
@@ -61,6 +77,26 @@ export default class RaceManager {
                 this.setPaused(Boolean(state?.paused));
             }
         );
+
+        UIEventBus.on('race:requestLeaderboard', () => {
+            this.dispatchLeaderboard();
+        });
+
+        UIEventBus.on('race:submitLapName', (payload: { name?: string }) => {
+            if (!this.pendingLapTimeMs) return;
+            const name = (payload?.name || '').trim().slice(0, 16);
+            if (!name) return;
+
+            this.localLeaderboard.add({
+                name,
+                lapTimeMs: this.pendingLapTimeMs,
+                carId: this.vehicle.getTelemetry().carId,
+            });
+            this.pendingLapTimeMs = 0;
+            this.dispatchLeaderboard();
+            this.setPaused(false);
+            UIEventBus.dispatch('race:requestPointerLock', { fromLap: true });
+        });
     }
 
     enterRaceMode() {
@@ -74,11 +110,17 @@ export default class RaceManager {
         this.vehicle.setActive(true);
         this.chaseCamera.setActive(true);
         this.chaseCamera.setPaused(false);
+        this.lapTimer.reset();
+        this.currentLapTimeMs = 0;
+        this.lapRunning = false;
+        this.lapProgress = 0;
+        this.pendingLapTimeMs = 0;
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
+        this.dispatchLeaderboard();
     }
 
     exitRaceMode() {
@@ -90,6 +132,7 @@ export default class RaceManager {
         this.vehicle.setActive(false);
         this.chaseCamera.setPaused(false);
         this.chaseCamera.setActive(false);
+        this.pendingLapTimeMs = 0;
 
         this.setLayerInteraction(false);
         this.dispatchState();
@@ -132,13 +175,61 @@ export default class RaceManager {
         this.dispatchState();
     }
 
+    dispatchLeaderboard() {
+        UIEventBus.dispatch('race:leaderboardUpdate', {
+            entries: this.localLeaderboard.getTop(10),
+        });
+    }
+
+    dispatchHud() {
+        const telemetry = this.vehicle.getTelemetry();
+        UIEventBus.dispatch('race:hudUpdate', {
+            speedKph: telemetry.speedKph,
+            gear: telemetry.gear,
+            rpm: telemetry.rpm,
+            lapTimeMs: this.currentLapTimeMs,
+            lapRunning: this.lapRunning,
+            lapProgress: this.lapProgress,
+            paused: this.paused,
+            pendingLapSubmission: this.pendingLapTimeMs > 0,
+        });
+    }
+
     update() {
         if (!this.active) return;
+
+        const nowMs = this.application.time.elapsed;
         const delta = this.application.time.delta / 1000;
         if (!this.paused) {
             this.vehicle.update(delta);
+
+            const telemetry = this.vehicle.getTelemetry();
+            const lapUpdate = this.lapTimer.update(
+                nowMs,
+                telemetry.position,
+                telemetry.speedMps,
+                telemetry.forward
+            );
+
+            this.currentLapTimeMs = lapUpdate.lapTimeMs;
+            this.lapRunning = lapUpdate.lapRunning;
+            this.lapProgress = lapUpdate.progress;
+
+            if (lapUpdate.completedLapTimeMs && lapUpdate.validLap) {
+                this.pendingLapTimeMs = lapUpdate.completedLapTimeMs;
+                this.setPaused(true);
+                UIEventBus.dispatch('race:lapCompleted', {
+                    lapTimeMs: lapUpdate.completedLapTimeMs,
+                    carId: telemetry.carId,
+                });
+            }
         }
         this.track.update();
         this.chaseCamera.update(delta);
+
+        if (nowMs - this.lastHudDispatchMs > 75) {
+            this.lastHudDispatchMs = nowMs;
+            this.dispatchHud();
+        }
     }
 }

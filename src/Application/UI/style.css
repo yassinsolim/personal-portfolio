@@ -339,6 +339,134 @@ br {
     justify-content: flex-end;
 }
 
+.race-hud {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 22;
+    pointer-events: none;
+}
+
+.race-hud-main,
+.race-hud-board {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 230px;
+    backdrop-filter: blur(3px);
+    font-family: monospace;
+}
+
+.race-hud-speed {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 24px;
+    line-height: 1;
+}
+
+.race-hud-speed span {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.race-hud-meta {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px 10px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+}
+
+.race-hud-board h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.race-hud-board p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+}
+
+.race-hud-board ol {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.race-hud-board li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.lap-name-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    pointer-events: auto;
+}
+
+.lap-name-panel {
+    width: min(400px, calc(100vw - 24px));
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 8px;
+    background: rgba(12, 13, 18, 0.94);
+    color: rgba(255, 255, 255, 0.92);
+    padding: 16px;
+    font-family: monospace;
+}
+
+.lap-name-panel h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.lap-name-panel p {
+    margin-top: 6px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.lap-name-panel input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.44);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.92);
+    padding: 8px;
+    font-family: monospace;
+    margin-bottom: 10px;
+}
+
+.lap-name-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.lap-name-actions button {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {
