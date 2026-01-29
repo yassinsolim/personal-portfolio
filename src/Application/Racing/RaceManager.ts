@@ -6,6 +6,7 @@ import RaceVehicle from './Vehicle/RaceVehicle';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
+import LeaderboardService from './Leaderboard/LeaderboardService';
 
 type RaceModeState = {
     active: boolean;
@@ -24,6 +25,7 @@ export default class RaceManager {
     paused: boolean;
     lapTimer: LapTimer;
     localLeaderboard: LocalLeaderboard;
+    leaderboardService: LeaderboardService;
     currentLapTimeMs: number;
     lapRunning: boolean;
     lapProgress: number;
@@ -48,6 +50,7 @@ export default class RaceManager {
         this.chaseCamera = new RaceChaseCamera(this.vehicle);
         this.lapTimer = new LapTimer(this.track.getCurve());
         this.localLeaderboard = new LocalLeaderboard();
+        this.leaderboardService = new LeaderboardService(this.localLeaderboard);
         this.currentLapTimeMs = 0;
         this.lapRunning = false;
         this.lapProgress = 0;
@@ -79,21 +82,22 @@ export default class RaceManager {
         );
 
         UIEventBus.on('race:requestLeaderboard', () => {
-            this.dispatchLeaderboard();
+            this.refreshLeaderboard();
         });
 
-        UIEventBus.on('race:submitLapName', (payload: { name?: string }) => {
+        UIEventBus.on('race:submitLapName', async (payload: { name?: string }) => {
             if (!this.pendingLapTimeMs) return;
             const name = (payload?.name || '').trim().slice(0, 16);
             if (!name) return;
 
-            this.localLeaderboard.add({
+            const telemetry = this.vehicle.getTelemetry();
+            await this.leaderboardService.submitLap(
                 name,
-                lapTimeMs: this.pendingLapTimeMs,
-                carId: this.vehicle.getTelemetry().carId,
-            });
+                this.pendingLapTimeMs,
+                telemetry.carId
+            );
             this.pendingLapTimeMs = 0;
-            this.dispatchLeaderboard();
+            this.refreshLeaderboard();
             this.setPaused(false);
             UIEventBus.dispatch('race:requestPointerLock', { fromLap: true });
         });
@@ -120,7 +124,7 @@ export default class RaceManager {
         this.setLayerInteraction(true);
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
-        this.dispatchLeaderboard();
+        this.refreshLeaderboard();
     }
 
     exitRaceMode() {
@@ -175,9 +179,10 @@ export default class RaceManager {
         this.dispatchState();
     }
 
-    dispatchLeaderboard() {
+    async refreshLeaderboard() {
+        const entries = await this.leaderboardService.getLeaderboard(10);
         UIEventBus.dispatch('race:leaderboardUpdate', {
-            entries: this.localLeaderboard.getTop(10),
+            entries,
         });
     }
 
