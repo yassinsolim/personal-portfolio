@@ -7,6 +7,7 @@ import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
+import RaceEngineAudio from './Audio/RaceEngineAudio';
 
 type RaceModeState = {
     active: boolean;
@@ -31,6 +32,7 @@ export default class RaceManager {
     lapProgress: number;
     pendingLapTimeMs: number;
     lastHudDispatchMs: number;
+    engineAudio: RaceEngineAudio;
 
     constructor() {
         this.application = new Application();
@@ -56,6 +58,7 @@ export default class RaceManager {
         this.lapProgress = 0;
         this.pendingLapTimeMs = 0;
         this.lastHudDispatchMs = 0;
+        this.engineAudio = new RaceEngineAudio();
         this.setupEvents();
     }
 
@@ -125,6 +128,8 @@ export default class RaceManager {
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
         this.refreshLeaderboard();
+        this.engineAudio.setRaceActive(true);
+        this.engineAudio.setPaused(false);
     }
 
     exitRaceMode() {
@@ -141,6 +146,8 @@ export default class RaceManager {
         this.setLayerInteraction(false);
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
+        this.engineAudio.setPaused(false);
+        this.engineAudio.setRaceActive(false);
     }
 
     setLayerInteraction(raceActive: boolean) {
@@ -175,6 +182,7 @@ export default class RaceManager {
         this.paused = paused;
         this.vehicle.setActive(!paused);
         this.chaseCamera.setPaused(paused);
+        this.engineAudio.setPaused(paused);
         UIEventBus.dispatch('race:pauseState', { paused });
         this.dispatchState();
     }
@@ -209,6 +217,16 @@ export default class RaceManager {
             this.vehicle.update(delta);
 
             const telemetry = this.vehicle.getTelemetry();
+            this.engineAudio.update(
+                {
+                    rpm: telemetry.rpm,
+                    throttle: telemetry.throttle,
+                    speedMps: telemetry.speedMps,
+                    carId: telemetry.carId,
+                    gear: telemetry.gear,
+                },
+                delta
+            );
             const lapUpdate = this.lapTimer.update(
                 nowMs,
                 telemetry.position,
@@ -228,6 +246,18 @@ export default class RaceManager {
                     carId: telemetry.carId,
                 });
             }
+        } else {
+            const telemetry = this.vehicle.getTelemetry();
+            this.engineAudio.update(
+                {
+                    rpm: telemetry.rpm,
+                    throttle: 0,
+                    speedMps: telemetry.speedMps,
+                    carId: telemetry.carId,
+                    gear: telemetry.gear,
+                },
+                delta
+            );
         }
         this.track.update();
         this.chaseCamera.update(delta);
