@@ -1,7 +1,7 @@
-# AGENT.md
+ï»¿# AGENT.md
 
 ## Mission
-Implement Nürburgring Nordschleife racing mini-game inside existing portfolio while preserving default experience.
+Implement NÃ¼rburgring Nordschleife racing mini-game inside existing portfolio while preserving default experience.
 
 ## Hard Constraints
 - Keep current portfolio behavior intact by default.
@@ -32,9 +32,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio wh
 - Local portable Node installed at `.tools/node-v18.20.4-win-x64`.
 - Use PATH prefix when running npm scripts:
   - `$env:PATH = "$(Resolve-Path .\\.tools\\node-v18.20.4-win-x64);$env:PATH"`
+- Supabase runtime config (optional):
+  - `static/config/racing.config.json` (template: `static/config/racing.config.example.json`)
 
 ## Baseline (Phase 0)
-- Branch: `feature/nordschleife-racing` (matches latest `main` at start).
+- Branch: `feature/nordschleife-racing` (created from latest `main` at start).
 - `npm run build` passes (with existing large asset warnings).
 - Existing experience to preserve:
   - BIOS-style loading overlay.
@@ -44,11 +46,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio wh
 
 ## Phase Tracking
 - [x] Phase 0: baseline + branch
-- [ ] Phase 1: race mode scaffolding
-- [ ] Phase 2: track pipeline + collider separation + debug
-- [ ] Phase 3: vehicle controller + grounding
-- [ ] Phase 4: race camera + pointer lock + pause/settings
-- [ ] Phase 5: HUD + lap timing + name entry + local leaderboard
-- [ ] Phase 6: Supabase leaderboard integration + fallback
-- [ ] Phase 7: RPM engine audio profiles + shift transient
-- [ ] Phase 8: polish + performance + ghost replay + credits
+- [x] Phase 1: race mode scaffolding
+- [x] Phase 2: track pipeline + collider separation + debug
+- [x] Phase 3: vehicle controller + grounding
+- [x] Phase 4: race camera + pointer lock + pause/settings
+- [x] Phase 5: HUD + lap timing + name entry + local leaderboard
+- [x] Phase 6: Supabase leaderboard integration + fallback
+- [x] Phase 7: RPM engine audio profiles + shift transient
+- [x] Phase 8: polish + performance + ghost replay + credits

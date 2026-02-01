@@ -8,6 +8,7 @@ import LapTimer from './Lap/LapTimer';
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
+import GhostReplay from './Ghost/GhostReplay';
 
 type RaceModeState = {
     active: boolean;
@@ -33,6 +34,7 @@ export default class RaceManager {
     pendingLapTimeMs: number;
     lastHudDispatchMs: number;
     engineAudio: RaceEngineAudio;
+    ghostReplay: GhostReplay;
 
     constructor() {
         this.application = new Application();
@@ -59,6 +61,7 @@ export default class RaceManager {
         this.pendingLapTimeMs = 0;
         this.lastHudDispatchMs = 0;
         this.engineAudio = new RaceEngineAudio();
+        this.ghostReplay = new GhostReplay(this.raceRoot);
         this.setupEvents();
     }
 
@@ -122,6 +125,7 @@ export default class RaceManager {
         this.lapRunning = false;
         this.lapProgress = 0;
         this.pendingLapTimeMs = 0;
+        this.ghostReplay.setActive(true);
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);
@@ -142,6 +146,8 @@ export default class RaceManager {
         this.chaseCamera.setPaused(false);
         this.chaseCamera.setActive(false);
         this.pendingLapTimeMs = 0;
+        this.ghostReplay.cancelLap();
+        this.ghostReplay.setActive(false);
 
         this.setLayerInteraction(false);
         this.dispatchState();
@@ -205,6 +211,7 @@ export default class RaceManager {
             lapProgress: this.lapProgress,
             paused: this.paused,
             pendingLapSubmission: this.pendingLapTimeMs > 0,
+            ghostBestLapMs: this.ghostReplay.getBestLapTimeMs(),
         });
     }
 
@@ -217,6 +224,7 @@ export default class RaceManager {
             this.vehicle.update(delta);
 
             const telemetry = this.vehicle.getTelemetry();
+            const lapWasRunning = this.lapRunning;
             this.engineAudio.update(
                 {
                     rpm: telemetry.rpm,
@@ -237,6 +245,25 @@ export default class RaceManager {
             this.currentLapTimeMs = lapUpdate.lapTimeMs;
             this.lapRunning = lapUpdate.lapRunning;
             this.lapProgress = lapUpdate.progress;
+
+            if (!lapWasRunning && lapUpdate.lapRunning) {
+                this.ghostReplay.startLap(nowMs);
+            }
+
+            if (lapUpdate.lapRunning) {
+                this.ghostReplay.capture(nowMs, {
+                    position: telemetry.position,
+                    quaternion: telemetry.quaternion,
+                    carId: telemetry.carId,
+                });
+            }
+
+            if (lapUpdate.completedLapTimeMs) {
+                this.ghostReplay.completeLap(
+                    Boolean(lapUpdate.validLap),
+                    lapUpdate.completedLapTimeMs
+                );
+            }
 
             if (lapUpdate.completedLapTimeMs && lapUpdate.validLap) {
                 this.pendingLapTimeMs = lapUpdate.completedLapTimeMs;
@@ -260,6 +287,7 @@ export default class RaceManager {
             );
         }
         this.track.update();
+        this.ghostReplay.update(delta);
         this.chaseCamera.update(delta);
 
         if (nowMs - this.lastHudDispatchMs > 75) {

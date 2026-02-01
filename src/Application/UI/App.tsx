@@ -19,6 +19,7 @@ type HudState = {
     lapTimeMs: number;
     lapRunning: boolean;
     lapProgress: number;
+    ghostBestLapMs?: number;
 };
 
 type LeaderboardEntry = {
@@ -90,6 +91,7 @@ const App = () => {
         lapTimeMs: 0,
         lapRunning: false,
         lapProgress: 0,
+        ghostBestLapMs: 0,
     });
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [lapPromptOpen, setLapPromptOpen] = useState(false);
@@ -319,6 +321,12 @@ const App = () => {
                             </span>
                             <span>
                                 Progress {Math.round(hud.lapProgress * 100)}%
+                            </span>
+                            <span>
+                                Ghost{' '}
+                                {hud.ghostBestLapMs
+                                    ? formatLapTime(hud.ghostBestLapMs)
+                                    : '--:--.---'}
                             </span>
                         </div>
                     </div>
