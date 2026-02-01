@@ -28,6 +28,7 @@ const REDLINE_RPM = 7600;
 const SHIFT_UP_RPM = 6900;
 const SHIFT_DOWN_RPM = 2200;
 const GEAR_RATIOS = [0, 3.4, 2.45, 1.95, 1.55, 1.24, 1.04];
+const LONG_AXIS_THRESHOLD = 1.12;
 
 type VehicleTelemetry = {
     speedMps: number;
@@ -192,7 +193,7 @@ export default class RaceVehicle {
         const rawLength = this.getModelLength(model);
         const scale = option && rawLength > 0 ? option.lengthMeters / rawLength : 1;
         model.scale.setScalar(scale);
-        model.rotation.set(0, -Math.PI / 2, 0);
+        model.rotation.set(0, this.getVisualForwardOffsetY(model), 0);
         model.updateMatrixWorld(true);
 
         const bbox = new THREE.Box3().setFromObject(model);
@@ -200,6 +201,20 @@ export default class RaceVehicle {
         model.updateMatrixWorld(true);
 
         return model;
+    }
+
+    getVisualForwardOffsetY(model: THREE.Object3D) {
+        const box = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+
+        // Most race transforms assume mesh forward is +Z.
+        // If the imported model long axis is X, rotate to align with +Z.
+        if (size.x > size.z * LONG_AXIS_THRESHOLD) {
+            return -Math.PI / 2;
+        }
+
+        return 0;
     }
 
     cloneMaterials(model: THREE.Object3D) {
@@ -476,4 +491,3 @@ export default class RaceVehicle {
         };
     }
 }
-
