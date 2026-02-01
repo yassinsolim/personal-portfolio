@@ -170,6 +170,7 @@ export default class Camera extends EventEmitter {
             this.freeCamLocked = toggle;
             if (toggle) this.enableFreeCam();
             else this.disableFreeCam();
+            this.syncOrbitControlsState();
         });
 
         UIEventBus.on(
@@ -179,6 +180,7 @@ export default class Camera extends EventEmitter {
                 if (this.raceModeActive && this.freeCam) {
                     this.disableFreeCam();
                 }
+                this.syncOrbitControlsState();
             }
         );
     }
@@ -204,6 +206,7 @@ export default class Camera extends EventEmitter {
                 );
                 this.orbitControls.update();
                 this.freeCam = true;
+                this.syncOrbitControlsState();
             }
         );
         // @ts-ignore
@@ -216,12 +219,18 @@ export default class Camera extends EventEmitter {
     disableFreeCam() {
         if (!this.freeCam) return;
         this.freeCam = false;
+        this.syncOrbitControlsState();
         this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
         // @ts-ignore
         document.getElementById('webgl').style.pointerEvents = 'none';
         if (this.renderer.cssInstance?.domElement) {
             this.renderer.cssInstance.domElement.style.pointerEvents = 'auto';
         }
+    }
+
+    syncOrbitControlsState() {
+        if (!this.orbitControls) return;
+        this.orbitControls.enabled = this.freeCam && !this.raceModeActive;
     }
 
     resize() {
@@ -250,6 +259,7 @@ export default class Camera extends EventEmitter {
         this.orbitControls.maxDistance = 29000;
 
         this.orbitControls.update();
+        this.syncOrbitControlsState();
     }
 
     update() {

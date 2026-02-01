@@ -1,3 +1,5 @@
+import UIEventBus from '../../UI/EventBus';
+
 type DrivingInputState = {
     throttle: number;
     brake: number;
@@ -11,6 +13,9 @@ export default class DrivingInput {
     smoothState: DrivingInputState;
     keyDownHandler: (event: KeyboardEvent) => void;
     keyUpHandler: (event: KeyboardEvent) => void;
+    blurHandler: () => void;
+    visibilityChangeHandler: () => void;
+    pointerLockChangeHandler: () => void;
 
     constructor() {
         this.enabled = false;
@@ -38,8 +43,38 @@ export default class DrivingInput {
             this.keyState[event.code] = false;
         };
 
+        this.blurHandler = () => {
+            this.reset();
+        };
+
+        this.visibilityChangeHandler = () => {
+            if (document.visibilityState !== 'visible') {
+                this.reset();
+            }
+        };
+
+        this.pointerLockChangeHandler = () => {
+            if (!this.enabled) return;
+            if (document.pointerLockElement === null) {
+                this.reset();
+            }
+        };
+
         document.addEventListener('keydown', this.keyDownHandler);
         document.addEventListener('keyup', this.keyUpHandler);
+        window.addEventListener('blur', this.blurHandler);
+        document.addEventListener(
+            'visibilitychange',
+            this.visibilityChangeHandler
+        );
+        document.addEventListener(
+            'pointerlockchange',
+            this.pointerLockChangeHandler
+        );
+
+        UIEventBus.on('race:inputReset', () => {
+            this.reset();
+        });
     }
 
     shouldIgnoreInputTarget(target: HTMLElement | null) {
@@ -85,4 +120,3 @@ export default class DrivingInput {
         return this.smoothState;
     }
 }
-

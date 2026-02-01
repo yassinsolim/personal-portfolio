@@ -131,6 +131,7 @@ export default class RaceManager {
         this.setLayerInteraction(true);
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
+        UIEventBus.dispatch('race:inputReset', { source: 'enterRaceMode' });
         this.refreshLeaderboard();
         this.engineAudio.setRaceActive(true);
         this.engineAudio.setPaused(false);
@@ -152,6 +153,7 @@ export default class RaceManager {
         this.setLayerInteraction(false);
         this.dispatchState();
         UIEventBus.dispatch('race:pauseState', { paused: false });
+        UIEventBus.dispatch('race:inputReset', { source: 'exitRaceMode' });
         this.engineAudio.setPaused(false);
         this.engineAudio.setRaceActive(false);
     }
@@ -189,6 +191,11 @@ export default class RaceManager {
         this.vehicle.setActive(!paused);
         this.chaseCamera.setPaused(paused);
         this.engineAudio.setPaused(paused);
+        if (paused) {
+            UIEventBus.dispatch('race:inputReset', {
+                source: 'setPaused',
+            });
+        }
         UIEventBus.dispatch('race:pauseState', { paused });
         this.dispatchState();
     }

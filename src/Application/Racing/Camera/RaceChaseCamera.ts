@@ -26,6 +26,8 @@ export default class RaceChaseCamera {
     mouseDownHandler: (event: MouseEvent) => void;
     mouseMoveHandler: (event: MouseEvent) => void;
     pointerLockChangeHandler: () => void;
+    pointerLockErrorHandler: () => void;
+    blurHandler: () => void;
 
     constructor(vehicle: RaceVehicle) {
         this.application = new Application();
@@ -87,6 +89,26 @@ export default class RaceChaseCamera {
             UIEventBus.dispatch('race:pointerLockChanged', {
                 locked: this.pointerLocked,
             });
+            if (!this.pointerLocked) {
+                UIEventBus.dispatch('race:inputReset', {
+                    source: 'pointerLockChange',
+                });
+            }
+        };
+
+        this.pointerLockErrorHandler = () => {
+            UIEventBus.dispatch('race:pointerLockChanged', {
+                locked: false,
+            });
+            UIEventBus.dispatch('race:inputReset', {
+                source: 'pointerLockError',
+            });
+        };
+
+        this.blurHandler = () => {
+            UIEventBus.dispatch('race:inputReset', {
+                source: 'windowBlur',
+            });
         };
 
         document.addEventListener('keydown', this.keyDownHandler);
@@ -96,6 +118,11 @@ export default class RaceChaseCamera {
             'pointerlockchange',
             this.pointerLockChangeHandler
         );
+        document.addEventListener(
+            'pointerlockerror',
+            this.pointerLockErrorHandler
+        );
+        window.addEventListener('blur', this.blurHandler);
 
         UIEventBus.on('race:requestPointerLock', () => {
             if (!this.active || this.paused) return;
@@ -104,9 +131,25 @@ export default class RaceChaseCamera {
     }
 
     requestPointerLock() {
+        if (!this.active || this.paused) return;
         const canvas = this.application.renderer.instance.domElement;
+        if (
+            !canvas ||
+            !canvas.isConnected ||
+            !document.hasFocus() ||
+            document.pointerLockElement === canvas
+        ) {
+            return;
+        }
+
         if (canvas.requestPointerLock) {
-            canvas.requestPointerLock();
+            try {
+                canvas.requestPointerLock();
+            } catch (error) {
+                UIEventBus.dispatch('race:pointerLockChanged', {
+                    locked: false,
+                });
+            }
         }
     }
 
@@ -123,6 +166,9 @@ export default class RaceChaseCamera {
             this.pointerLocked = false;
             this.yawOffset = 0;
             this.pitchOffset = 0.1;
+            UIEventBus.dispatch('race:inputReset', {
+                source: 'setInactive',
+            });
             UIEventBus.dispatch('race:pointerLockChanged', { locked: false });
         }
     }
@@ -131,6 +177,9 @@ export default class RaceChaseCamera {
         this.paused = paused;
         if (paused) {
             this.exitPointerLock();
+            UIEventBus.dispatch('race:inputReset', {
+                source: 'setPaused',
+            });
         }
     }
 
@@ -172,4 +221,3 @@ export default class RaceChaseCamera {
         this.application.camera.instance.lookAt(this.smoothLookAt);
     }
 }
-
