@@ -4,6 +4,10 @@ export type CarOption = {
     resourceName: string;
     modelPath: string;
     lengthMeters: number;
+    engineSound: {
+        low: string;
+        high: string;
+    };
     preload?: boolean;
 };
 
@@ -15,6 +19,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
         lengthMeters: 4.75,
+        engineSound: { low: 'engineLoop4', high: 'engineLoop5' },
         preload: true,
     },
     {
@@ -24,6 +29,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/bmw_m3_e92_stance/source/bmw_m3_e92_stance.glb',
         lengthMeters: 4.615,
+        engineSound: { low: 'engineLoop1', high: 'engineLoop2' },
     },
     {
         id: 'amg-c63-507',
@@ -32,6 +38,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/2014_mercedes-benz_c63_amg_edition_507/source/2014_mercedes-benz_c63_amg_edition_507.glb',
         lengthMeters: 4.72,
+        engineSound: { low: 'engineLoop0', high: 'engineLoop1' },
     },
     {
         id: 'amg-c63s-coupe',
@@ -40,6 +47,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/2019_mercedes-benz_c63_s_amg_coupe/source/2019_mercedes-benz_c63_s_amg_coupe.glb',
         lengthMeters: 4.75,
+        engineSound: { low: 'engineLoop1', high: 'engineLoop2' },
     },
     {
         id: 'bmw-f82-m4',
@@ -47,6 +55,7 @@ export const carOptions: CarOption[] = [
         resourceName: 'carModelBmwF82M4',
         modelPath: 'models/Cars/bmw_m4_f82/source/bmw_m4_f82.glb',
         lengthMeters: 4.67,
+        engineSound: { low: 'engineLoop2', high: 'engineLoop3' },
     },
     {
         id: 'toyota-crown-platinum',
@@ -55,6 +64,7 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/toyota_crown_2025/source/toyota_crown_2025.glb',
         lengthMeters: 4.98,
+        engineSound: { low: 'engineLoop3', high: 'engineLoop4' },
     },
 ];
 

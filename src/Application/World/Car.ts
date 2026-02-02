@@ -33,6 +33,14 @@ export default class Car {
     cachedModels: Map<string, THREE.Group>;
     loadingPromises: Map<string, Promise<THREE.Group>>;
     sceneUnitsPerMeter: number;
+    driveMode: boolean;
+    deskTransform: {
+        position: THREE.Vector3;
+        rotation: THREE.Euler;
+        scale: THREE.Vector3;
+    } | null;
+    baseRotation: THREE.Euler;
+    driveRotation: THREE.Euler;
 
     constructor() {
         this.application = new Application();
@@ -45,6 +53,10 @@ export default class Car {
         this.cachedModels = new Map();
         this.loadingPromises = new Map();
         this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
+        this.driveMode = false;
+        this.deskTransform = null;
+        this.baseRotation = new THREE.Euler();
+        this.driveRotation = new THREE.Euler();
 
         this.setModel(this.currentCarId);
         this.addLights();
@@ -54,6 +66,7 @@ export default class Car {
 
     setupCarSwitcher() {
         UIEventBus.on('carChange', (carId: string) => {
+            if (this.driveMode) return;
             if (!carId || carId === this.currentCarId) return;
             if (!carOptionsById[carId]) return;
             this.currentCarId = carId;
@@ -78,6 +91,7 @@ export default class Car {
 
         this.model = car;
         this.scene.add(car);
+        this.captureDeskTransform();
     }
 
     swapCarIfCurrent(carId: string, car: THREE.Group) {
@@ -154,7 +168,9 @@ export default class Car {
             carOption
         );
         car.scale.setScalar(scale);
-        car.rotation.copy(this.getCarRotation(carOption));
+        this.baseRotation = this.getCarRotation(carOption).clone();
+        this.driveRotation = this.getDriveRotation(carOption).clone();
+        car.rotation.copy(this.baseRotation);
         this.applyEnvironment(car);
         this.applyMaterialStyling(car, carOption);
 
@@ -231,6 +247,7 @@ export default class Car {
                 carLength * mobileShiftFactor
             );
         }
+        this.captureDeskTransform(car);
 
         car.traverse((child) => {
             if (child instanceof THREE.Mesh) {
@@ -289,6 +306,13 @@ export default class Car {
             rotation.y += TOYOTA_CROWN_ROTATION_OFFSET;
         }
         return rotation;
+    }
+
+    getDriveRotation(carOption: CarOption) {
+        if (carOption.id === TOYOTA_CROWN_ID) {
+            return CAR_ROTATION.clone();
+        }
+        return this.getCarRotation(carOption);
     }
 
     getCarScaleFactor(carOption: CarOption) {
@@ -463,6 +487,13 @@ export default class Car {
     setupInteraction() {
         const canvas = this.application.renderer.instance.domElement;
         window.addEventListener('mousedown', (event) => {
+            const target = event.target as HTMLElement | null;
+            if (
+                target?.closest('#prevent-click') ||
+                target?.closest('[data-prevent-click]')
+            ) {
+                return;
+            }
             if (event.button !== 0 || !this.model) return;
             const rect = canvas.getBoundingClientRect();
             const pointer = new THREE.Vector2(
@@ -472,8 +503,39 @@ export default class Car {
             this.raycaster.setFromCamera(pointer, this.camera);
             const hit = this.raycaster.intersectObject(this.model, true);
             if (hit.length > 0) {
-                this.application.camera.enableFreeCam();
+                UIEventBus.dispatch('driveEnter', {});
             }
         });
+    }
+
+    captureDeskTransform(car?: THREE.Group) {
+        if (this.driveMode) return;
+        const target = car || this.model;
+        if (!target) return;
+        this.deskTransform = {
+            position: target.position.clone(),
+            rotation: target.rotation.clone(),
+            scale: target.scale.clone(),
+        };
+    }
+
+    restoreDeskTransform() {
+        if (!this.model || !this.deskTransform) return;
+        this.model.position.copy(this.deskTransform.position);
+        this.model.rotation.copy(this.deskTransform.rotation);
+        this.model.scale.copy(this.deskTransform.scale);
+        this.model.updateMatrixWorld(true);
+    }
+
+    setDriveMode(active: boolean) {
+        this.driveMode = active;
+    }
+
+    getDriveBaseRotation() {
+        return this.driveRotation.clone();
+    }
+
+    getCurrentCarOption() {
+        return carOptionsById[this.currentCarId];
     }
 }

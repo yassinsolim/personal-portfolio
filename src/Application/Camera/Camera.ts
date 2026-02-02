@@ -40,6 +40,9 @@ export default class Camera extends EventEmitter {
     freeCam: boolean;
     orbitControls: OrbitControls;
     freeCamLocked: boolean;
+    driveMode: boolean;
+    drivePosition: THREE.Vector3;
+    driveTarget: THREE.Vector3;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -59,6 +62,9 @@ export default class Camera extends EventEmitter {
 
         this.freeCam = false;
         this.freeCamLocked = false;
+        this.driveMode = false;
+        this.drivePosition = new THREE.Vector3();
+        this.driveTarget = new THREE.Vector3();
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -76,6 +82,7 @@ export default class Camera extends EventEmitter {
             ) {
                 return;
             }
+            if (this.driveMode) return;
             if (event.button === 2 || this.freeCam) return;
             event.preventDefault();
             this.toggleIdleDesk();
@@ -175,6 +182,7 @@ export default class Camera extends EventEmitter {
     }
 
     enableFreeCam(duration: number = 750) {
+        if (this.driveMode) return;
         if (this.freeCam) return;
         this.transition(
             CameraKey.ORBIT_CONTROLS_START,
@@ -240,6 +248,12 @@ export default class Camera extends EventEmitter {
     update() {
         TWEEN.update();
 
+        if (this.driveMode) {
+            this.instance.position.copy(this.drivePosition);
+            this.instance.lookAt(this.driveTarget);
+            return;
+        }
+
         if (this.freeCam && this.orbitControls) {
             this.position.copy(this.orbitControls.object.position);
             this.focalPoint.copy(this.orbitControls.target);
@@ -260,5 +274,28 @@ export default class Camera extends EventEmitter {
 
         this.instance.position.copy(this.position);
         this.instance.lookAt(this.focalPoint);
+    }
+
+    setDriveMode(active: boolean) {
+        this.driveMode = active;
+        if (active) {
+            this.freeCam = false;
+            this.freeCamLocked = true;
+            const webgl = document.getElementById('webgl');
+            if (webgl) {
+                webgl.style.pointerEvents = 'none';
+            }
+            if (this.renderer.cssInstance?.domElement) {
+                this.renderer.cssInstance.domElement.style.pointerEvents =
+                    'auto';
+            }
+        } else {
+            this.freeCamLocked = false;
+        }
+    }
+
+    setDriveView(position: THREE.Vector3, target: THREE.Vector3) {
+        this.drivePosition.copy(position);
+        this.driveTarget.copy(target);
     }
 }

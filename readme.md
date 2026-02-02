@@ -64,3 +64,8 @@ exports/exported-scene.glb
 ## Notes
 
 If you find bugs or have feature ideas, feel free to open an issue or message me.
+
+## Additional assets
+
+- Nurburgring Nordschleife track map SVG (public domain) from Wikimedia Commons.
+- Engine loop sounds (CC0) from OpenGameArt ("Racing car engine sound loops").

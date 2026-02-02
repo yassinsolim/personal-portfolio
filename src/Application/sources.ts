@@ -14,6 +14,84 @@ const carModelSources: Resource[] = carOptions
         path: car.modelPath,
     }));
 
+const audioSources: Resource[] = [
+    {
+        name: 'mouseDown',
+        type: 'audio',
+        path: 'audio/mouse/mouse_down.mp3',
+    },
+    {
+        name: 'mouseUp',
+        type: 'audio',
+        path: 'audio/mouse/mouse_up.mp3',
+    },
+    {
+        name: 'ccType',
+        type: 'audio',
+        path: 'audio/cc/type.mp3',
+    },
+    {
+        name: 'keyboardKeydown_1',
+        type: 'audio',
+        path: 'audio/keyboard/key_1.mp3',
+    },
+    {
+        name: 'keyboardKeydown_2',
+        type: 'audio',
+        path: 'audio/keyboard/key_2.mp3',
+    },
+    {
+        name: 'keyboardKeydown_3',
+        type: 'audio',
+        path: 'audio/keyboard/key_3.mp3',
+    },
+    {
+        name: 'keyboardKeydown_4',
+        type: 'audio',
+        path: 'audio/keyboard/key_4.mp3',
+    },
+    {
+        name: 'keyboardKeydown_5',
+        type: 'audio',
+        path: 'audio/keyboard/key_5.mp3',
+    },
+    {
+        name: 'keyboardKeydown_6',
+        type: 'audio',
+        path: 'audio/keyboard/key_6.mp3',
+    },
+    {
+        name: 'engineLoop0',
+        type: 'audio',
+        path: 'audio/engine/loop_0.wav',
+    },
+    {
+        name: 'engineLoop1',
+        type: 'audio',
+        path: 'audio/engine/loop_1.wav',
+    },
+    {
+        name: 'engineLoop2',
+        type: 'audio',
+        path: 'audio/engine/loop_2.wav',
+    },
+    {
+        name: 'engineLoop3',
+        type: 'audio',
+        path: 'audio/engine/loop_3.wav',
+    },
+    {
+        name: 'engineLoop4',
+        type: 'audio',
+        path: 'audio/engine/loop_4.wav',
+    },
+    {
+        name: 'engineLoop5',
+        type: 'audio',
+        path: 'audio/engine/loop_5.wav',
+    },
+];
+
 const sources: Resource[] = [
     {
         name: 'computerSetupModel',
@@ -73,6 +151,7 @@ const sources: Resource[] = [
         type: 'gltfModel',
         path: 'models/Props/flipper_zero.glb',
     },
+    ...audioSources,
 ];
 
 export default sources;

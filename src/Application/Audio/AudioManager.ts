@@ -1,21 +1,20 @@
 import * as THREE from 'three';
 import Application from '../Application';
-import { AmbienceAudio, ComputerAudio } from './AudioSources';
 import UIEventBus from '../UI/EventBus';
 
 const POS_DEBUG = false;
 const DEFAULT_REF_DISTANCE = 10000;
+const BASE_VOLUME = 0.5;
 export default class Audio {
     application: Application;
     listener: THREE.AudioListener;
-    context: AudioContext;
+    context: AudioContext | null;
     loadedAudio: { [key in string]: LoadedAudio };
     audioPool: { [key in string]: THREE.PositionalAudio | THREE.Audio };
-    audioSources: {
-        computer: ComputerAudio;
-        ambience: AmbienceAudio;
-    };
     scene: THREE.Scene;
+    enabled: boolean;
+    muted: boolean;
+    baseVolume: number;
 
     constructor() {
         this.application = new Application();
@@ -24,25 +23,54 @@ export default class Audio {
         this.loadedAudio = this.application.resources.items.audio;
         this.scene = this.application.scene;
         this.audioPool = {};
+        this.context = null;
+        this.enabled = false;
+        this.muted = false;
+        this.baseVolume = BASE_VOLUME;
 
-        this.audioSources = {
-            computer: new ComputerAudio(this),
-            ambience: new AmbienceAudio(this),
-        };
 
-        UIEventBus.on('loadingScreenDone', () => {
-            setTimeout(() => {
-                const AudioContext =
-                    // @ts-ignore
-                    window.AudioContext || window.webkitAudioContext;
-                this.context = new AudioContext();
-                this.context.resume();
-            }, 100);
+        UIEventBus.on('driveMode', (data) => {
+            if (data?.active) {
+                this.enableAudio();
+            } else {
+                this.disableAudio();
+            }
         });
 
         UIEventBus.on('muteToggle', (mute: boolean) => {
-            this.listener.setMasterVolume(mute ? 0 : 1);
+            this.muted = mute;
+            this.applyMasterVolume();
         });
+
+        this.applyMasterVolume();
+    }
+
+    enableAudio() {
+        this.enabled = true;
+        if (!this.context) {
+            const AudioContext =
+                // @ts-ignore
+                window.AudioContext || window.webkitAudioContext;
+            this.context = new AudioContext();
+        }
+        if (this.context) {
+            this.context.resume();
+        }
+        this.applyMasterVolume();
+    }
+
+    disableAudio() {
+        this.enabled = false;
+        this.applyMasterVolume();
+    }
+
+    applyMasterVolume() {
+        if (!this.listener) return;
+        if (!this.enabled || this.muted) {
+            this.listener.setMasterVolume(0);
+            return;
+        }
+        this.listener.setMasterVolume(this.baseVolume);
     }
 
     playAudio(
@@ -60,6 +88,7 @@ export default class Audio {
             pitch?: number;
         } = {}
     ) {
+        if (!this.enabled) return '';
         // Resume context if it's suspended
         if (this.context) this.context.resume();
 
@@ -183,9 +212,6 @@ export default class Audio {
     }
 
     update() {
-        for (const key in this.audioSources) {
-            const _key = key as keyof typeof this.audioSources;
-            this.audioSources[_key].update();
-        }
+        if (!this.enabled) return;
     }
 }
