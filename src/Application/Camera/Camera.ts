@@ -41,6 +41,7 @@ export default class Camera extends EventEmitter {
     orbitControls: OrbitControls;
     freeCamLocked: boolean;
     raceModeActive: boolean;
+    freeCamTransitionToken: number;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -61,6 +62,7 @@ export default class Camera extends EventEmitter {
         this.freeCam = false;
         this.freeCamLocked = false;
         this.raceModeActive = false;
+        this.freeCamTransitionToken = 0;
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -180,6 +182,11 @@ export default class Camera extends EventEmitter {
                 if (this.raceModeActive && this.freeCam) {
                     this.disableFreeCam();
                 }
+                if (this.raceModeActive) {
+                    this.freeCamLocked = false;
+                    this.freeCam = false;
+                    this.freeCamTransitionToken++;
+                }
                 this.syncOrbitControlsState();
             }
         );
@@ -193,11 +200,14 @@ export default class Camera extends EventEmitter {
 
     enableFreeCam(duration: number = 750) {
         if (this.freeCam) return;
+        const transitionToken = ++this.freeCamTransitionToken;
         this.transition(
             CameraKey.ORBIT_CONTROLS_START,
             duration,
             BezierEasing(0.13, 0.99, 0, 1),
             () => {
+                if (transitionToken !== this.freeCamTransitionToken) return;
+                if (!this.freeCamLocked || this.raceModeActive) return;
                 this.instance.position.copy(
                     this.keyframes.orbitControlsStart.position
                 );
@@ -217,6 +227,7 @@ export default class Camera extends EventEmitter {
     }
 
     disableFreeCam() {
+        this.freeCamTransitionToken++;
         if (!this.freeCam) return;
         this.freeCam = false;
         this.syncOrbitControlsState();

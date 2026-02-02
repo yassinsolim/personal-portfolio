@@ -102,8 +102,9 @@ export default class DrivingInput {
         const smoothing = Math.min(1, Math.max(0.08, deltaSeconds * 8));
         const targetThrottle = this.keyState.KeyW ? 1 : 0;
         const targetBrake = this.keyState.KeyS ? 1 : 0;
-        const steerTarget =
-            (this.keyState.KeyD ? 1 : 0) - (this.keyState.KeyA ? 1 : 0);
+        const steerLeft = this.keyState.KeyA ? 1 : 0;
+        const steerRight = this.keyState.KeyD ? 1 : 0;
+        const steerTarget = steerRight - steerLeft;
         const handbrakeTarget = this.keyState.Space ? 1 : 0;
 
         this.smoothState.throttle +=
