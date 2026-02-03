@@ -254,8 +254,8 @@ br {
 }
 
 .start-lights.go .light {
-    background: #19d36d;
-    box-shadow: 0 0 10px rgba(25, 211, 109, 0.8);
+    background: #1b1b1b;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6);
 }
 
 .start-lights .lights-label {

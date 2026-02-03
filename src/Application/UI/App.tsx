@@ -95,6 +95,29 @@ const App = () => {
         eventBus.dispatch('driveViewToggle', { mode: nextMode });
     };
 
+    const handleDrivePanelKeyDown = (
+        event: React.KeyboardEvent<HTMLDivElement>
+    ) => {
+        const nativeEvent = event.nativeEvent as any;
+        if (nativeEvent?.inComputer) return;
+        if (event.key !== 'Enter' && event.code !== 'Enter') return;
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        const tag = target.tagName;
+        if (
+            tag === 'BUTTON' ||
+            tag === 'INPUT' ||
+            tag === 'SELECT' ||
+            tag === 'TEXTAREA'
+        ) {
+            return;
+        }
+        if (target.isContentEditable) return;
+        if (driveActive) return;
+        event.preventDefault();
+        handleDriveToggle();
+    };
+
     return (
         <div id="ui-app">
             <LoadingScreen />
@@ -135,7 +158,13 @@ const App = () => {
                             yassinOS!
                         </a>
                     </div>
-                    <div className="drive-panel" data-prevent-click>
+                    <div
+                        className="drive-panel"
+                        data-prevent-click
+                        tabIndex={0}
+                        onKeyDown={handleDrivePanelKeyDown}
+                        aria-label="Drive controls"
+                    >
                         <div>
                             {trackName
                                 ? `Track: ${trackName}`

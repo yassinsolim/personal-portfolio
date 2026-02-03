@@ -29,13 +29,20 @@ const MAX_STEER = THREE.MathUtils.degToRad(32);
 const STEER_RESPONSE = 6;
 const CAMERA_LAG = 7;
 
-const FIRST_PERSON_OFFSET = new THREE.Vector3(0.32, 1.05, 0.35);
-const THIRD_PERSON_OFFSET = new THREE.Vector3(0, 3.1, -8.8);
-const FIRST_PERSON_LOOK_AHEAD = 6;
+const FIRST_PERSON_OFFSET = new THREE.Vector3(0.28, 1.2, 0.65);
+const THIRD_PERSON_OFFSET = new THREE.Vector3(0, 3.2, -9.2);
+const FIRST_PERSON_LOOK_AHEAD = 7;
 const THIRD_PERSON_LOOK_AHEAD = 14;
+const FIRST_PERSON_FOV = 88;
+const THIRD_PERSON_FOV = 62;
+const FIRST_PERSON_CLIP_FORWARD = 0.35;
+const FIRST_PERSON_CLIP_UP = 0.18;
+const FIRST_PERSON_CLIP_PADDING = 0.08;
+const DRIVE_NEAR = 5;
+const DRIVE_FAR = 1200000;
 
 const START_LIGHTS_COUNT = 5;
-const START_LIGHT_INTERVAL = 1;
+const START_LIGHT_INTERVAL = 0.7;
 const START_LIGHT_MIN_HOLD = 0.2;
 const START_LIGHT_MAX_HOLD = 3;
 const START_LIGHT_GO_DURATION = 0.8;
@@ -73,6 +80,7 @@ export default class DriveController {
     desiredCameraPosition: THREE.Vector3;
     desiredCameraTarget: THREE.Vector3;
     forward: THREE.Vector3;
+    cameraClipBox: THREE.Box3;
     hudTimer: number;
 
     constructor(car: Car, track: RaceTrack, audio: AudioManager) {
@@ -86,7 +94,8 @@ export default class DriveController {
         this.engineAudio = new EngineAudio(
             audio,
             currentOption?.engineSound.low || 'engineLoop2',
-            currentOption?.engineSound.high || 'engineLoop3'
+            currentOption?.engineSound.high || 'engineLoop3',
+            currentOption?.engineSound.profile
         );
 
         this.active = false;
@@ -113,6 +122,7 @@ export default class DriveController {
         this.desiredCameraPosition = new THREE.Vector3();
         this.desiredCameraTarget = new THREE.Vector3();
         this.forward = new THREE.Vector3();
+        this.cameraClipBox = new THREE.Box3();
         this.hudTimer = 0;
 
         this.bindEvents();
@@ -131,6 +141,7 @@ export default class DriveController {
                 payload?.mode ||
                 (this.viewMode === 'third' ? 'first' : 'third');
             this.viewMode = next;
+            this.applyDriveFov();
             this.snapCameraToCar();
             UIEventBus.dispatch('driveView', { mode: this.viewMode });
         });
@@ -206,13 +217,15 @@ export default class DriveController {
         this.controlsEnabled = false;
 
         this.car.setDriveMode(true);
+        this.track.setActive(true);
 
         const carModel = this.car.model;
         const carOption = this.car.getCurrentCarOption();
         if (carOption?.engineSound) {
             this.engineAudio.setSoundSet(
                 carOption.engineSound.low,
-                carOption.engineSound.high
+                carOption.engineSound.high,
+                carOption.engineSound.profile
             );
         }
         if (carModel) {
@@ -232,6 +245,8 @@ export default class DriveController {
         this.viewMode = 'third';
 
         this.camera.setDriveMode(true);
+        this.camera.setDriveClip(DRIVE_NEAR, DRIVE_FAR);
+        this.applyDriveFov();
         this.snapCameraToCar();
         UIEventBus.dispatch('driveMode', { active: true });
         UIEventBus.dispatch('driveView', { mode: this.viewMode });
@@ -249,8 +264,11 @@ export default class DriveController {
 
         this.car.restoreDeskTransform();
         this.car.setDriveMode(false);
+        this.track.setActive(false);
 
         this.camera.setDriveMode(false);
+        this.camera.resetFov();
+        this.camera.resetClip();
         this.camera.transition(CameraKey.DESK, 900);
 
         UIEventBus.dispatch('driveMode', { active: false });
@@ -351,12 +369,39 @@ export default class DriveController {
         carModel.quaternion.copy(alignQuat.multiply(baseQuat));
     }
 
+    applyDriveFov() {
+        const targetFov =
+            this.viewMode === 'first' ? FIRST_PERSON_FOV : THIRD_PERSON_FOV;
+        this.camera.setDriveFov(targetFov);
+    }
+
+    applyFirstPersonClip() {
+        if (this.viewMode !== 'first') return;
+        const carModel = this.car.model;
+        if (!carModel) return;
+        const padding = FIRST_PERSON_CLIP_PADDING * this.unitsPerMeter;
+        this.cameraClipBox.setFromObject(carModel);
+        this.cameraClipBox.expandByScalar(padding);
+        if (this.cameraClipBox.containsPoint(this.desiredCameraPosition)) {
+            const pushForward = FIRST_PERSON_CLIP_FORWARD * this.unitsPerMeter;
+            const pushUp = FIRST_PERSON_CLIP_UP * this.unitsPerMeter;
+            this.desiredCameraPosition.addScaledVector(
+                this.forward,
+                pushForward
+            );
+            this.desiredCameraPosition.y += pushUp;
+        }
+    }
+
     setCarOnGround() {
         const carModel = this.car.model;
         if (!carModel) return;
         const bbox = new THREE.Box3().setFromObject(carModel);
         this.groundOffset = carModel.position.y - bbox.min.y;
-        carModel.position.y = this.track.getGroundY() + this.groundOffset;
+        const roadHeight = this.track.getRoadHeightAtPosition(
+            carModel.position
+        );
+        carModel.position.y = roadHeight + this.groundOffset;
     }
 
     update() {
@@ -440,12 +485,16 @@ export default class DriveController {
 
         const travel = this.speed * dt * this.unitsPerMeter;
         carModel.position.addScaledVector(this.forward, travel);
-        carModel.position.y = this.track.getGroundY() + this.groundOffset;
+        const roadHeight = this.track.getRoadHeightAtPosition(
+            carModel.position
+        );
+        carModel.position.y = roadHeight + this.groundOffset;
 
-        this.engineAudio.update(this.rpm, soundThrottle);
+        this.engineAudio.update(this.rpm, soundThrottle, dt);
     }
 
     updateGearAndRpm(throttle: number, dt: number) {
+        const previousGear = this.gear;
         const speedAbs = Math.abs(this.speed);
 
         if (this.speed < -0.5) {
@@ -476,6 +525,16 @@ export default class DriveController {
                 this.gear -= 1;
             }
         }
+
+        if (this.gear !== previousGear) {
+            const direction = this.gear > previousGear ? 'up' : 'down';
+            this.engineAudio.onShift(direction);
+            if (direction === 'up') {
+                this.rpm = Math.max(IDLE_RPM, this.rpm * 0.72);
+            } else {
+                this.rpm = Math.min(REDLINE_RPM, this.rpm * 1.08);
+            }
+        }
     }
 
     updateCamera(dt: number) {
@@ -497,6 +556,8 @@ export default class DriveController {
         if (this.forward.lengthSq() > 0) {
             this.forward.normalize();
         }
+
+        this.applyFirstPersonClip();
 
         const lookAhead =
             this.viewMode === 'first'
@@ -537,6 +598,8 @@ export default class DriveController {
         if (this.forward.lengthSq() > 0) {
             this.forward.normalize();
         }
+
+        this.applyFirstPersonClip();
         const lookAhead =
             this.viewMode === 'first'
                 ? FIRST_PERSON_LOOK_AHEAD

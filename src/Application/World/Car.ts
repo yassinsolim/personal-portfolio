@@ -13,7 +13,6 @@ const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const BODY_BLUE = new THREE.Color(0x050f2f);
 const TOYOTA_CROWN_GRAY = new THREE.Color(0x8f9296);
 const TOYOTA_CROWN_SCALE = 0.95;
-const TOYOTA_CROWN_ROTATION_OFFSET = Math.PI / 2;
 const TOYOTA_CROWN_POSITION_OFFSET = new THREE.Vector3(400, 0, 0);
 const TOYOTA_CROWN_BACK_SHIFT = 1 / 6;
 const TOYOTA_CROWN_FORWARD_SHIFT = -0.5;
@@ -33,6 +32,7 @@ export default class Car {
     cachedModels: Map<string, THREE.Group>;
     loadingPromises: Map<string, Promise<THREE.Group>>;
     sceneUnitsPerMeter: number;
+    deskGroundY: number;
     driveMode: boolean;
     deskTransform: {
         position: THREE.Vector3;
@@ -53,6 +53,7 @@ export default class Car {
         this.cachedModels = new Map();
         this.loadingPromises = new Map();
         this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
+        this.deskGroundY = this.getGroundYFromScene();
         this.driveMode = false;
         this.deskTransform = null;
         this.baseRotation = new THREE.Euler();
@@ -90,6 +91,7 @@ export default class Car {
         }
 
         this.model = car;
+        this.model.visible = true;
         this.scene.add(car);
         this.captureDeskTransform();
     }
@@ -180,7 +182,9 @@ export default class Car {
         const bbox = new THREE.Box3().setFromObject(car);
         // Some models (e.g., Toyota) have their geometry offset from origin.
         const pivotOffset = this.getPivotOffset(bbox, carOption);
-        const groundY = this.getGroundYFromScene();
+        const groundY = Number.isFinite(this.deskGroundY)
+            ? this.deskGroundY
+            : this.getGroundYFromScene();
         const groundOffset = groundY - bbox.min.y;
 
         car.position.set(CAR_POSITION.x, groundOffset, CAR_POSITION.z);
@@ -302,17 +306,17 @@ export default class Car {
 
     getCarRotation(carOption: CarOption) {
         const rotation = CAR_ROTATION.clone();
-        if (carOption.id === TOYOTA_CROWN_ID) {
-            rotation.y += TOYOTA_CROWN_ROTATION_OFFSET;
-        }
+        const deskOffset = carOption.deskYawOffset ?? 0;
+        rotation.y += deskOffset;
         return rotation;
     }
 
     getDriveRotation(carOption: CarOption) {
-        if (carOption.id === TOYOTA_CROWN_ID) {
-            return CAR_ROTATION.clone();
-        }
-        return this.getCarRotation(carOption);
+        const rotation = CAR_ROTATION.clone();
+        const deskOffset = carOption.deskYawOffset ?? 0;
+        const driveOffset = carOption.driveYawOffset ?? deskOffset;
+        rotation.y += driveOffset;
+        return rotation;
     }
 
     getCarScaleFactor(carOption: CarOption) {

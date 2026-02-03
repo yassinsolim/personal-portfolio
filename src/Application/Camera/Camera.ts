@@ -43,6 +43,9 @@ export default class Camera extends EventEmitter {
     driveMode: boolean;
     drivePosition: THREE.Vector3;
     driveTarget: THREE.Vector3;
+    baseFov: number;
+    baseNear: number;
+    baseFar: number;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -147,6 +150,9 @@ export default class Camera extends EventEmitter {
             10,
             900000
         );
+        this.baseFov = this.instance.fov;
+        this.baseNear = this.instance.near;
+        this.baseFar = this.instance.far;
         this.currentKeyframe = CameraKey.LOADING;
 
         this.scene.add(this.instance);
@@ -297,5 +303,27 @@ export default class Camera extends EventEmitter {
     setDriveView(position: THREE.Vector3, target: THREE.Vector3) {
         this.drivePosition.copy(position);
         this.driveTarget.copy(target);
+    }
+
+    setDriveFov(fov: number) {
+        if (!this.instance || this.instance.fov === fov) return;
+        this.instance.fov = fov;
+        this.instance.updateProjectionMatrix();
+    }
+
+    resetFov() {
+        this.setDriveFov(this.baseFov);
+    }
+
+    setDriveClip(near: number, far: number) {
+        if (!this.instance) return;
+        if (this.instance.near === near && this.instance.far === far) return;
+        this.instance.near = near;
+        this.instance.far = far;
+        this.instance.updateProjectionMatrix();
+    }
+
+    resetClip() {
+        this.setDriveClip(this.baseNear, this.baseFar);
     }
 }
