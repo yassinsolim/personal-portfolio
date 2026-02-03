@@ -7,6 +7,11 @@ const MOUSE_SENSITIVITY_X = 0.0022;
 const MOUSE_SENSITIVITY_Y = 0.0016;
 const MIN_PITCH = -0.35;
 const MAX_PITCH = 0.28;
+const BASE_FOV = 48;
+const MAX_FOV = 62;
+const MIN_CAMERA_DISTANCE = 8.8;
+const MAX_CAMERA_DISTANCE = 21;
+const SHAKE_SPEED_START = 22;
 
 export default class RaceChaseCamera {
     application: Application;
@@ -18,10 +23,15 @@ export default class RaceChaseCamera {
     pitchOffset: number;
     smoothPosition: THREE.Vector3;
     smoothLookAt: THREE.Vector3;
+    defaultFov: number;
+    defaultNear: number;
+    shakeTime: number;
     tmpUp: THREE.Vector3;
     tmpForward: THREE.Vector3;
     tmpSide: THREE.Vector3;
     tmpOffset: THREE.Vector3;
+    tmpAnchor: THREE.Vector3;
+    tmpToCamera: THREE.Vector3;
     keyDownHandler: (event: KeyboardEvent) => void;
     mouseDownHandler: (event: MouseEvent) => void;
     mouseMoveHandler: (event: MouseEvent) => void;
@@ -40,11 +50,16 @@ export default class RaceChaseCamera {
 
         this.smoothPosition = new THREE.Vector3();
         this.smoothLookAt = new THREE.Vector3();
+        this.defaultFov = this.application.camera.instance.fov;
+        this.defaultNear = this.application.camera.instance.near;
+        this.shakeTime = 0;
 
         this.tmpUp = new THREE.Vector3();
         this.tmpForward = new THREE.Vector3();
         this.tmpSide = new THREE.Vector3();
         this.tmpOffset = new THREE.Vector3();
+        this.tmpAnchor = new THREE.Vector3();
+        this.tmpToCamera = new THREE.Vector3();
 
         this.keyDownHandler = (event: KeyboardEvent) => {
             if (!this.active) return;
@@ -59,6 +74,7 @@ export default class RaceChaseCamera {
 
         this.mouseDownHandler = (event: MouseEvent) => {
             if (!this.active || this.paused || this.pointerLocked) return;
+            if (event.button !== 0) return;
 
             const target = event.target as HTMLElement | null;
             if (
@@ -161,11 +177,23 @@ export default class RaceChaseCamera {
 
     setActive(active: boolean) {
         this.active = active;
+        if (active) {
+            this.shakeTime = 0;
+            this.application.camera.instance.near = 0.45;
+            this.application.camera.instance.fov = BASE_FOV;
+            this.application.camera.instance.updateProjectionMatrix();
+            return;
+        }
+
         if (!active) {
             this.exitPointerLock();
             this.pointerLocked = false;
             this.yawOffset = 0;
             this.pitchOffset = 0.1;
+            this.shakeTime = 0;
+            this.application.camera.instance.near = this.defaultNear;
+            this.application.camera.instance.fov = this.defaultFov;
+            this.application.camera.instance.updateProjectionMatrix();
             UIEventBus.dispatch('race:inputReset', {
                 source: 'setInactive',
             });
@@ -180,6 +208,8 @@ export default class RaceChaseCamera {
             UIEventBus.dispatch('race:inputReset', {
                 source: 'setPaused',
             });
+            this.application.camera.instance.fov = BASE_FOV;
+            this.application.camera.instance.updateProjectionMatrix();
         }
     }
 
@@ -198,7 +228,13 @@ export default class RaceChaseCamera {
 
         this.tmpForward.applyAxisAngle(this.tmpUp, this.yawOffset).normalize();
 
-        const armDistance = THREE.MathUtils.clamp(9 + speed * 0.12, 9, 20);
+        this.tmpAnchor.copy(this.vehicle.getCameraAnchor());
+
+        const armDistance = THREE.MathUtils.clamp(
+            9.4 + speed * 0.12,
+            MIN_CAMERA_DISTANCE,
+            MAX_CAMERA_DISTANCE
+        );
         const armHeight = THREE.MathUtils.clamp(4 + speed * 0.03, 4, 8);
 
         this.tmpOffset
@@ -207,15 +243,83 @@ export default class RaceChaseCamera {
             .addScaledVector(this.tmpUp, armHeight)
             .applyAxisAngle(this.tmpSide, this.pitchOffset);
 
-        const targetPosition = telemetry.position.clone().add(this.tmpOffset);
-        const targetLookAt = telemetry.position
+        const targetPosition = this.tmpAnchor.clone().add(this.tmpOffset);
+        const targetLookAt = this.tmpAnchor
             .clone()
-            .addScaledVector(this.tmpForward, 10)
-            .addScaledVector(this.tmpUp, 2);
+            .addScaledVector(this.tmpForward, 9 + speed * 0.06)
+            .addScaledVector(this.tmpUp, 1.2);
+
+        this.tmpToCamera.subVectors(targetPosition, this.tmpAnchor);
+        const distance = this.tmpToCamera.length();
+        if (distance > 0.0001) {
+            this.tmpToCamera.normalize();
+            const safeDistance = Math.max(
+                MIN_CAMERA_DISTANCE,
+                this.vehicle.getCameraBodyRadius() + 1.4
+            );
+            const clampedDistance = THREE.MathUtils.clamp(
+                distance,
+                safeDistance,
+                MAX_CAMERA_DISTANCE
+            );
+            targetPosition.copy(this.tmpAnchor).addScaledVector(
+                this.tmpToCamera,
+                clampedDistance
+            );
+        }
 
         const smoothFactor = THREE.MathUtils.clamp(deltaSeconds * 8, 0, 1);
         this.smoothPosition.lerp(targetPosition, smoothFactor);
         this.smoothLookAt.lerp(targetLookAt, smoothFactor);
+
+        this.tmpToCamera.subVectors(this.smoothPosition, this.tmpAnchor);
+        const smoothDistance = this.tmpToCamera.length();
+        const minSafeDistance = Math.max(
+            MIN_CAMERA_DISTANCE,
+            this.vehicle.getCameraBodyRadius() + 1.2
+        );
+        if (smoothDistance > 0.0001 && smoothDistance < minSafeDistance) {
+            this.tmpToCamera.normalize();
+            this.smoothPosition
+                .copy(this.tmpAnchor)
+                .addScaledVector(this.tmpToCamera, minSafeDistance);
+        }
+
+        const targetFov = this.paused
+            ? BASE_FOV
+            : THREE.MathUtils.lerp(
+                  BASE_FOV,
+                  MAX_FOV,
+                  THREE.MathUtils.clamp((speed - 20) / 120, 0, 1)
+              );
+        this.application.camera.instance.fov = THREE.MathUtils.lerp(
+            this.application.camera.instance.fov,
+            targetFov,
+            THREE.MathUtils.clamp(deltaSeconds * 5.5, 0, 1)
+        );
+        this.application.camera.instance.updateProjectionMatrix();
+
+        this.shakeTime += deltaSeconds * (1 + speed * 0.045);
+        const speedShake = THREE.MathUtils.clamp(
+            (speed - SHAKE_SPEED_START) / 105,
+            0,
+            1
+        );
+        const driftShake = THREE.MathUtils.clamp(telemetry.driftIntensity, 0, 1);
+        const shakeAmount =
+            (speedShake * 0.085 + driftShake * 0.11) * (this.paused ? 0 : 1);
+        if (shakeAmount > 0.0001) {
+            const shakeSide =
+                Math.sin(this.shakeTime * 17.4) * shakeAmount * 0.42;
+            const shakeUp =
+                Math.sin(this.shakeTime * 23.8 + 0.7) * shakeAmount * 0.28;
+            this.smoothPosition
+                .addScaledVector(this.tmpSide, shakeSide)
+                .addScaledVector(this.tmpUp, shakeUp);
+            this.smoothLookAt
+                .addScaledVector(this.tmpSide, shakeSide * 0.45)
+                .addScaledVector(this.tmpUp, shakeUp * 0.3);
+        }
 
         this.application.camera.instance.position.copy(this.smoothPosition);
         this.application.camera.instance.lookAt(this.smoothLookAt);
