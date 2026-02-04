@@ -239,6 +239,9 @@ export default class RaceManager {
                     speedMps: telemetry.speedMps,
                     carId: telemetry.carId,
                     gear: telemetry.gear,
+                    slipRatio: telemetry.slipRatio,
+                    driftIntensity: telemetry.driftIntensity,
+                    drivetrain: telemetry.drivetrain,
                 },
                 delta
             );
@@ -289,6 +292,9 @@ export default class RaceManager {
                     speedMps: telemetry.speedMps,
                     carId: telemetry.carId,
                     gear: telemetry.gear,
+                    slipRatio: telemetry.slipRatio,
+                    driftIntensity: 0,
+                    drivetrain: telemetry.drivetrain,
                 },
                 delta
             );

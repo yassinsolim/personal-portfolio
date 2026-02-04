@@ -6,6 +6,9 @@ type EngineTelemetry = {
     speedMps: number;
     carId: string;
     gear: number;
+    slipRatio: number;
+    driftIntensity: number;
+    drivetrain: 'RWD' | 'AWD' | 'FWD';
 };
 
 type CarAudioProfile = {
@@ -22,30 +25,30 @@ type CarAudioProfile = {
 };
 
 const DEFAULT_PROFILE: CarAudioProfile = {
-    idleFrequency: 28,
-    lowFrequency: 46,
-    highFrequency: 82,
-    idleGain: 0.16,
-    lowGain: 0.18,
-    highGain: 0.11,
+    idleFrequency: 26,
+    lowFrequency: 42,
+    highFrequency: 76,
+    idleGain: 0.14,
+    lowGain: 0.16,
+    highGain: 0.085,
     driveMultiplier: 1,
     waveformIdle: 'sine',
     waveformLow: 'triangle',
-    waveformHigh: 'triangle',
+    waveformHigh: 'sine',
 };
 
 const CAR_PROFILES: Record<string, CarAudioProfile> = {
     'amg-one': {
-        idleFrequency: 31,
-        lowFrequency: 55,
-        highFrequency: 95,
-        idleGain: 0.13,
-        lowGain: 0.2,
-        highGain: 0.15,
+        idleFrequency: 29,
+        lowFrequency: 53,
+        highFrequency: 90,
+        idleGain: 0.11,
+        lowGain: 0.185,
+        highGain: 0.12,
         driveMultiplier: 1.12,
-        waveformIdle: 'triangle',
-        waveformLow: 'sawtooth',
-        waveformHigh: 'triangle',
+        waveformIdle: 'sine',
+        waveformLow: 'triangle',
+        waveformHigh: 'sine',
     },
     'bmw-e92-m3': {
         idleFrequency: 26,
@@ -53,55 +56,55 @@ const CAR_PROFILES: Record<string, CarAudioProfile> = {
         highFrequency: 78,
         idleGain: 0.18,
         lowGain: 0.17,
-        highGain: 0.09,
+        highGain: 0.082,
         driveMultiplier: 0.96,
         waveformIdle: 'sine',
         waveformLow: 'triangle',
-        waveformHigh: 'triangle',
+        waveformHigh: 'sine',
     },
     'amg-c63-507': {
         idleFrequency: 24,
         lowFrequency: 40,
-        highFrequency: 74,
-        idleGain: 0.21,
-        lowGain: 0.15,
-        highGain: 0.08,
+        highFrequency: 70,
+        idleGain: 0.2,
+        lowGain: 0.145,
+        highGain: 0.076,
         driveMultiplier: 0.9,
-        waveformIdle: 'triangle',
-        waveformLow: 'sawtooth',
-        waveformHigh: 'triangle',
+        waveformIdle: 'sine',
+        waveformLow: 'triangle',
+        waveformHigh: 'sine',
     },
     'amg-c63s-coupe': {
         idleFrequency: 25,
         lowFrequency: 44,
-        highFrequency: 80,
-        idleGain: 0.19,
-        lowGain: 0.18,
-        highGain: 0.1,
+        highFrequency: 76,
+        idleGain: 0.175,
+        lowGain: 0.17,
+        highGain: 0.092,
         driveMultiplier: 0.94,
-        waveformIdle: 'triangle',
-        waveformLow: 'sawtooth',
-        waveformHigh: 'triangle',
+        waveformIdle: 'sine',
+        waveformLow: 'triangle',
+        waveformHigh: 'sine',
     },
     'bmw-f82-m4': {
         idleFrequency: 27,
         lowFrequency: 47,
-        highFrequency: 84,
-        idleGain: 0.17,
-        lowGain: 0.18,
-        highGain: 0.11,
+        highFrequency: 81,
+        idleGain: 0.16,
+        lowGain: 0.165,
+        highGain: 0.097,
         driveMultiplier: 1.02,
         waveformIdle: 'sine',
         waveformLow: 'triangle',
-        waveformHigh: 'triangle',
+        waveformHigh: 'sine',
     },
     'toyota-crown-platinum': {
         idleFrequency: 22,
         lowFrequency: 36,
-        highFrequency: 65,
-        idleGain: 0.22,
-        lowGain: 0.13,
-        highGain: 0.06,
+        highFrequency: 62,
+        idleGain: 0.2,
+        lowGain: 0.12,
+        highGain: 0.056,
         driveMultiplier: 0.78,
         waveformIdle: 'sine',
         waveformLow: 'triangle',
@@ -121,15 +124,25 @@ export default class RaceEngineAudio {
     lastGear: number;
     masterGain: GainNode | null;
     engineGain: GainNode | null;
+    effectsGain: GainNode | null;
     idleGain: GainNode | null;
     lowGain: GainNode | null;
     highGain: GainNode | null;
+    windGain: GainNode | null;
+    roadGain: GainNode | null;
+    tireGain: GainNode | null;
     idleOsc: OscillatorNode | null;
     lowOsc: OscillatorNode | null;
     highOsc: OscillatorNode | null;
+    windNoise: AudioBufferSourceNode | null;
+    roadNoise: AudioBufferSourceNode | null;
+    tireNoise: AudioBufferSourceNode | null;
     idleFilter: BiquadFilterNode | null;
     lowFilter: BiquadFilterNode | null;
     highFilter: BiquadFilterNode | null;
+    windFilter: BiquadFilterNode | null;
+    roadFilter: BiquadFilterNode | null;
+    tireFilter: BiquadFilterNode | null;
     compressor: DynamicsCompressorNode | null;
     finalLowPass: BiquadFilterNode | null;
     unlockHandler: () => void;
@@ -147,15 +160,25 @@ export default class RaceEngineAudio {
 
         this.masterGain = null;
         this.engineGain = null;
+        this.effectsGain = null;
         this.idleGain = null;
         this.lowGain = null;
         this.highGain = null;
+        this.windGain = null;
+        this.roadGain = null;
+        this.tireGain = null;
         this.idleOsc = null;
         this.lowOsc = null;
         this.highOsc = null;
+        this.windNoise = null;
+        this.roadNoise = null;
+        this.tireNoise = null;
         this.idleFilter = null;
         this.lowFilter = null;
         this.highFilter = null;
+        this.windFilter = null;
+        this.roadFilter = null;
+        this.tireFilter = null;
         this.compressor = null;
         this.finalLowPass = null;
 
@@ -204,6 +227,21 @@ export default class RaceEngineAudio {
         );
     }
 
+    createNoiseSource() {
+        if (!this.context) return null;
+
+        const buffer = this.context.createBuffer(1, this.context.sampleRate * 2, this.context.sampleRate);
+        const channel = buffer.getChannelData(0);
+        for (let i = 0; i < channel.length; i++) {
+            channel[i] = (Math.random() * 2 - 1) * 0.7;
+        }
+
+        const source = this.context.createBufferSource();
+        source.buffer = buffer;
+        source.loop = true;
+        return source;
+    }
+
     ensureContext() {
         if (this.initialized) return;
 
@@ -216,13 +254,20 @@ export default class RaceEngineAudio {
 
         this.masterGain = this.context.createGain();
         this.engineGain = this.context.createGain();
+        this.effectsGain = this.context.createGain();
         this.idleGain = this.context.createGain();
         this.lowGain = this.context.createGain();
         this.highGain = this.context.createGain();
+        this.windGain = this.context.createGain();
+        this.roadGain = this.context.createGain();
+        this.tireGain = this.context.createGain();
 
         this.idleFilter = this.context.createBiquadFilter();
         this.lowFilter = this.context.createBiquadFilter();
         this.highFilter = this.context.createBiquadFilter();
+        this.windFilter = this.context.createBiquadFilter();
+        this.roadFilter = this.context.createBiquadFilter();
+        this.tireFilter = this.context.createBiquadFilter();
         this.compressor = this.context.createDynamicsCompressor();
         this.finalLowPass = this.context.createBiquadFilter();
 
@@ -236,27 +281,46 @@ export default class RaceEngineAudio {
 
         this.highFilter.type = 'highpass';
         this.highFilter.frequency.value = 1100;
-        this.highFilter.Q.value = 0.5;
+        this.highFilter.Q.value = 0.38;
 
-        this.compressor.threshold.value = -22;
-        this.compressor.knee.value = 18;
-        this.compressor.ratio.value = 2.3;
-        this.compressor.attack.value = 0.008;
-        this.compressor.release.value = 0.17;
+        this.windFilter.type = 'highpass';
+        this.windFilter.frequency.value = 650;
+        this.windFilter.Q.value = 0.3;
+
+        this.roadFilter.type = 'bandpass';
+        this.roadFilter.frequency.value = 170;
+        this.roadFilter.Q.value = 0.95;
+
+        this.tireFilter.type = 'bandpass';
+        this.tireFilter.frequency.value = 1600;
+        this.tireFilter.Q.value = 2.8;
+
+        this.compressor.threshold.value = -24;
+        this.compressor.knee.value = 20;
+        this.compressor.ratio.value = 2.1;
+        this.compressor.attack.value = 0.012;
+        this.compressor.release.value = 0.2;
 
         this.finalLowPass.type = 'lowpass';
-        this.finalLowPass.frequency.value = 6000;
-        this.finalLowPass.Q.value = 0.45;
+        this.finalLowPass.frequency.value = 5400;
+        this.finalLowPass.Q.value = 0.42;
 
         this.masterGain.gain.value = 0;
         this.engineGain.gain.value = 0;
+        this.effectsGain.gain.value = 0;
         this.idleGain.gain.value = 0;
         this.lowGain.gain.value = 0;
         this.highGain.gain.value = 0;
+        this.windGain.gain.value = 0;
+        this.roadGain.gain.value = 0;
+        this.tireGain.gain.value = 0;
 
         this.idleOsc = this.context.createOscillator();
         this.lowOsc = this.context.createOscillator();
         this.highOsc = this.context.createOscillator();
+        this.windNoise = this.createNoiseSource();
+        this.roadNoise = this.createNoiseSource();
+        this.tireNoise = this.createNoiseSource();
 
         this.idleOsc.connect(this.idleFilter);
         this.lowOsc.connect(this.lowFilter);
@@ -270,7 +334,24 @@ export default class RaceEngineAudio {
         this.lowGain.connect(this.engineGain);
         this.highGain.connect(this.engineGain);
 
+        if (this.windNoise && this.windFilter && this.windGain) {
+            this.windNoise.connect(this.windFilter);
+            this.windFilter.connect(this.windGain);
+            this.windGain.connect(this.effectsGain);
+        }
+        if (this.roadNoise && this.roadFilter && this.roadGain) {
+            this.roadNoise.connect(this.roadFilter);
+            this.roadFilter.connect(this.roadGain);
+            this.roadGain.connect(this.effectsGain);
+        }
+        if (this.tireNoise && this.tireFilter && this.tireGain) {
+            this.tireNoise.connect(this.tireFilter);
+            this.tireFilter.connect(this.tireGain);
+            this.tireGain.connect(this.effectsGain);
+        }
+
         this.engineGain.connect(this.compressor);
+        this.effectsGain.connect(this.compressor);
         this.compressor.connect(this.finalLowPass);
         this.finalLowPass.connect(this.masterGain);
         this.masterGain.connect(this.context.destination);
@@ -280,6 +361,9 @@ export default class RaceEngineAudio {
         this.idleOsc.start();
         this.lowOsc.start();
         this.highOsc.start();
+        this.windNoise?.start();
+        this.roadNoise?.start();
+        this.tireNoise?.start();
 
         this.initialized = true;
         this.applyMasterMix();
@@ -324,17 +408,21 @@ export default class RaceEngineAudio {
     }
 
     applyMasterMix() {
-        if (!this.context || !this.masterGain || !this.engineGain) return;
+        if (!this.context || !this.masterGain || !this.engineGain || !this.effectsGain) return;
 
         const now = this.context.currentTime;
         const masterTarget = this.muted ? 0 : this.masterVolume;
-        const engineTarget = this.raceActive && !this.paused ? 0.86 : 0;
+        const engineTarget = this.raceActive && !this.paused ? 0.82 : 0;
+        const effectsTarget = this.raceActive && !this.paused ? 0.72 : 0;
 
         this.masterGain.gain.cancelScheduledValues(now);
         this.masterGain.gain.setTargetAtTime(masterTarget, now, 0.06);
 
         this.engineGain.gain.cancelScheduledValues(now);
         this.engineGain.gain.setTargetAtTime(engineTarget, now, 0.11);
+
+        this.effectsGain.gain.cancelScheduledValues(now);
+        this.effectsGain.gain.setTargetAtTime(effectsTarget, now, 0.12);
     }
 
     triggerShiftTransient(nextGear: number) {
@@ -348,22 +436,22 @@ export default class RaceEngineAudio {
         const filter = this.context.createBiquadFilter();
 
         filter.type = 'bandpass';
-        filter.frequency.value = nextGear > this.lastGear ? 1020 : 840;
-        filter.Q.value = 3.2;
+        filter.frequency.value = nextGear > this.lastGear ? 920 : 760;
+        filter.Q.value = 2.6;
 
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(nextGear > this.lastGear ? 320 : 240, now);
-        osc.frequency.exponentialRampToValueAtTime(140, now + 0.16);
+        osc.frequency.setValueAtTime(nextGear > this.lastGear ? 270 : 220, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.18);
 
         gain.gain.setValueAtTime(0.0001, now);
-        gain.gain.exponentialRampToValueAtTime(0.028, now + 0.018);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+        gain.gain.exponentialRampToValueAtTime(0.022, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
 
         osc.connect(filter);
         filter.connect(gain);
         gain.connect(this.engineGain);
         osc.start(now);
-        osc.stop(now + 0.22);
+        osc.stop(now + 0.26);
     }
 
     update(telemetry: EngineTelemetry, deltaSeconds: number) {
@@ -386,18 +474,25 @@ export default class RaceEngineAudio {
         if (!this.idleFilter || !this.lowFilter || !this.highFilter) return;
         if (!this.finalLowPass) return;
 
-        const rpm = Math.max(900, Math.min(8000, telemetry.rpm || 900));
-        const rpmNormalized = (rpm - 900) / (7600 - 900);
+        const rpm = Math.max(900, Math.min(11000, telemetry.rpm || 900));
+        const rpmNormalized = (rpm - 900) / (9000 - 900);
         const rpmClamped = Math.min(1, Math.max(0, rpmNormalized));
         const throttle = Math.min(1, Math.max(0, telemetry.throttle || 0));
+        const speed = Math.max(0, Math.abs(telemetry.speedMps || 0));
+        const speedNorm = Math.min(1, speed / 88);
+        const slipRatio = Math.min(1, Math.max(0, telemetry.slipRatio || 0));
+        const driftIntensity = Math.min(
+            1,
+            Math.max(0, telemetry.driftIntensity || 0)
+        );
 
         const now = this.context.currentTime;
-        const smoothing = Math.min(0.14, Math.max(0.045, deltaSeconds * 0.72));
+        const smoothing = Math.min(0.12, Math.max(0.035, deltaSeconds * 0.66));
         const fundamentalHz = (rpm / 60) * profile.driveMultiplier;
 
-        const idleFrequency = profile.idleFrequency + fundamentalHz * 0.38;
-        const lowFrequency = profile.lowFrequency + fundamentalHz * 0.86;
-        const highFrequency = profile.highFrequency + fundamentalHz * 1.62;
+        const idleFrequency = profile.idleFrequency + fundamentalHz * 0.34;
+        const lowFrequency = profile.lowFrequency + fundamentalHz * 0.81;
+        const highFrequency = profile.highFrequency + fundamentalHz * 1.42;
 
         this.idleOsc.frequency.setTargetAtTime(
             Math.max(18, idleFrequency),
@@ -419,14 +514,14 @@ export default class RaceEngineAudio {
         const lowFadeIn = this.smoothStep(0.06, 0.4, rpmClamped);
         const highFadeIn = this.smoothStep(0.46, 0.95, rpmClamped);
 
-        const idleTarget = profile.idleGain * idleFadeOut * (0.95 - throttle * 0.22);
+        const idleTarget = profile.idleGain * idleFadeOut * (0.92 - throttle * 0.2);
         const lowTarget =
             profile.lowGain *
             lowFadeIn *
-            (1 - highFadeIn * 0.55) *
-            (0.55 + throttle * 0.68);
+            (1 - highFadeIn * 0.52) *
+            (0.52 + throttle * 0.72);
         const highTarget =
-            profile.highGain * highFadeIn * (0.2 + throttle * 0.94);
+            profile.highGain * highFadeIn * (0.17 + throttle * 0.9);
 
         this.idleGain.gain.setTargetAtTime(
             Math.max(0, idleTarget),
@@ -445,26 +540,61 @@ export default class RaceEngineAudio {
         );
 
         this.idleFilter.frequency.setTargetAtTime(
-            180 + rpmClamped * 240 + throttle * 140,
+            160 + rpmClamped * 220 + throttle * 120,
             now,
             smoothing
         );
         this.lowFilter.frequency.setTargetAtTime(
-            380 + rpmClamped * 820 + throttle * 140,
+            340 + rpmClamped * 760 + throttle * 180,
             now,
             smoothing
         );
         this.highFilter.frequency.setTargetAtTime(
-            860 + rpmClamped * 2600 + throttle * 520,
+            760 + rpmClamped * 2200 + throttle * 420,
             now,
             smoothing
         );
 
         this.finalLowPass.frequency.setTargetAtTime(
-            4200 + rpmClamped * 2200 + throttle * 420,
+            3800 + rpmClamped * 2000 + throttle * 560,
             now,
-            0.09
+            0.1
         );
+
+        if (
+            this.windGain &&
+            this.roadGain &&
+            this.tireGain &&
+            this.windFilter &&
+            this.roadFilter &&
+            this.tireFilter
+        ) {
+            const roadTarget = (0.015 + speedNorm * 0.09) * (0.4 + throttle * 0.7);
+            const windTarget = Math.max(0, speedNorm - 0.18) * 0.16;
+            const drivetrainTireScale = telemetry.drivetrain === 'RWD' ? 1 : 0.85;
+            const tireTarget =
+                Math.max(0, slipRatio - 0.14) * 0.32 * drivetrainTireScale +
+                driftIntensity * 0.25;
+
+            this.roadGain.gain.setTargetAtTime(roadTarget, now, 0.08);
+            this.windGain.gain.setTargetAtTime(windTarget, now, 0.12);
+            this.tireGain.gain.setTargetAtTime(tireTarget, now, 0.04);
+
+            this.windFilter.frequency.setTargetAtTime(
+                560 + speedNorm * 2400,
+                now,
+                0.1
+            );
+            this.roadFilter.frequency.setTargetAtTime(
+                120 + speedNorm * 380,
+                now,
+                0.09
+            );
+            this.tireFilter.frequency.setTargetAtTime(
+                1200 + slipRatio * 1800 + driftIntensity * 500,
+                now,
+                0.04
+            );
+        }
     }
 }
-
