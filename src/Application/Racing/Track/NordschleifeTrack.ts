@@ -24,6 +24,7 @@ export default class NordschleifeTrack {
     scene: THREE.Scene;
     root: THREE.Group;
     visualMesh: THREE.Mesh;
+    edgeMarkings: THREE.Group;
     colliderMesh: THREE.Mesh;
     visualCurve: THREE.CatmullRomCurve3;
     colliderCurve: THREE.CatmullRomCurve3;
@@ -59,12 +60,17 @@ export default class NordschleifeTrack {
         this.colliderCurve = this.createCurveFromAsset(colliderData);
 
         this.visualMesh = this.createVisualTrackMesh(visualData, this.visualCurve);
+        this.edgeMarkings = this.createEdgeMarkingsMesh(
+            visualData,
+            this.visualCurve
+        );
         this.colliderMesh = this.createColliderMesh(
             colliderData,
             this.colliderCurve
         );
 
         this.root.add(this.visualMesh);
+        this.root.add(this.edgeMarkings);
         this.root.add(this.colliderMesh);
         parent.add(this.root);
 
@@ -113,6 +119,133 @@ export default class NordschleifeTrack {
         mesh.receiveShadow = true;
         mesh.castShadow = false;
         return mesh;
+    }
+
+    createEdgeMarkingsMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
+        const group = new THREE.Group();
+        group.name = 'nordschleife-edge-markings';
+
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xf1f1f1,
+            roughness: 0.55,
+            metalness: 0.02,
+            side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -2,
+        });
+
+        const leftStrip = new THREE.Mesh(
+            this.createEdgeStripGeometry(data, curve, 0.84, 0.97),
+            material.clone()
+        );
+        leftStrip.name = 'nordschleife-edge-left';
+        leftStrip.receiveShadow = true;
+        leftStrip.castShadow = false;
+
+        const rightStrip = new THREE.Mesh(
+            this.createEdgeStripGeometry(data, curve, -0.97, -0.84),
+            material.clone()
+        );
+        rightStrip.name = 'nordschleife-edge-right';
+        rightStrip.receiveShadow = true;
+        rightStrip.castShadow = false;
+
+        group.add(leftStrip);
+        group.add(rightStrip);
+        return group;
+    }
+
+    createEdgeStripGeometry(
+        data: TrackAssetData,
+        curve: THREE.Curve<THREE.Vector3>,
+        outerFactor: number,
+        innerFactor: number
+    ) {
+        const samples = Math.max(64, data.samples ?? DEFAULT_SAMPLES);
+        const width = data.width ?? DEFAULT_WIDTH;
+        const halfWidth = width * 0.5;
+        const uvScale = data.uvScale ?? DEFAULT_UV_SCALE;
+        const elevationOffset = 0.12;
+
+        const tangent = new THREE.Vector3();
+        const point = new THREE.Vector3();
+        const side = new THREE.Vector3();
+        const normal = new THREE.Vector3(0, 1, 0);
+        const previousSide = new THREE.Vector3(1, 0, 0);
+        const outer = new THREE.Vector3();
+        const inner = new THREE.Vector3();
+        const previousPoint = new THREE.Vector3();
+        const segmentDistance = new THREE.Vector3();
+
+        const vertices: number[] = [];
+        const uvs: number[] = [];
+        const indices: number[] = [];
+        let distanceTravelled = 0;
+
+        curve.getPointAt(0, previousPoint);
+
+        for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+
+            curve.getPointAt(t, point);
+            curve.getTangentAt(t, tangent).normalize();
+
+            side.crossVectors(normal, tangent);
+            if (side.lengthSq() < 1e-6) {
+                side.copy(previousSide);
+            } else {
+                side.normalize();
+                if (side.dot(previousSide) < 0) {
+                    side.multiplyScalar(-1);
+                }
+                previousSide.copy(side);
+            }
+
+            const bankAngle = Math.sin(t * Math.PI * 16) * 0.045;
+            normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
+            side.crossVectors(normal, tangent).normalize();
+
+            outer
+                .copy(point)
+                .addScaledVector(side, halfWidth * outerFactor)
+                .addScaledVector(normal, elevationOffset);
+            inner
+                .copy(point)
+                .addScaledVector(side, halfWidth * innerFactor)
+                .addScaledVector(normal, elevationOffset);
+
+            vertices.push(outer.x, outer.y, outer.z, inner.x, inner.y, inner.z);
+
+            if (i > 0) {
+                segmentDistance.subVectors(point, previousPoint);
+                distanceTravelled += segmentDistance.length();
+            }
+            const v = distanceTravelled * uvScale;
+            uvs.push(0, v, 1, v);
+
+            previousPoint.copy(point);
+        }
+
+        for (let i = 0; i < samples; i++) {
+            const a = i * 2;
+            const b = a + 1;
+            const c = a + 2;
+            const d = a + 3;
+            indices.push(a, b, d, a, d, c);
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setIndex(indices);
+        geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(vertices, 3)
+        );
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        return geometry;
     }
 
     createColliderMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
@@ -304,4 +437,3 @@ export default class NordschleifeTrack {
         this.updateDebugColliderRay();
     }
 }
-
