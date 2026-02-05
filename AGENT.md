@@ -54,3 +54,26 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - [x] Phase 6: Supabase leaderboard integration + fallback
 - [x] Phase 7: RPM engine audio profiles + shift transient
 - [x] Phase 8: polish + performance + ghost replay + credits
+
+## Stabilization Notes (2026-02-08)
+- Added per-car race tuning metadata in `src/Application/carOptions.ts`:
+  - drivetrain, top speed, accel envelope, gear ratios, RPM targets, references.
+- Hardened free-cam/race-mode control handoff in `src/Application/Camera/Camera.ts`
+  to avoid stale OrbitControls transitions.
+- Reworked `src/Application/Racing/Vehicle/RaceVehicle.ts`:
+  - dynamic per-car longitudinal model
+  - drift state (`RWD`-gated), slip telemetry
+  - wheel detection + visual spin/steer animation
+  - dynamic ride-height from wheel radius and improved collider grounding
+  - smoke emission hooks via new `src/Application/Racing/Effects/DriftSmoke.ts`
+- Updated chase camera in `src/Application/Racing/Camera/RaceChaseCamera.ts`:
+  - anti-clipping distance clamps around car body
+  - lower race near-plane, speed FOV ramp, subtle speed/drift shake
+- Extended race audio in `src/Application/Racing/Audio/RaceEngineAudio.ts`:
+  - smoother engine retune, softer shift transient
+  - procedural wind/road/tire noise layers tied to speed/slip.
+- Added edge strip markings to `src/Application/Racing/Track/NordschleifeTrack.ts`.
+
+## Known Validation Gap
+- Full interactive manual driving validation (pointer lock, control feel, drift tuning,
+  audio taste) still requires browser-in-the-loop checks.
