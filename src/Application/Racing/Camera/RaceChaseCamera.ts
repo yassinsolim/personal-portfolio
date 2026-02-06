@@ -9,9 +9,11 @@ const MIN_PITCH = -0.35;
 const MAX_PITCH = 0.28;
 const BASE_FOV = 48;
 const MAX_FOV = 62;
-const MIN_CAMERA_DISTANCE = 8.8;
+const MIN_CAMERA_DISTANCE = 10.2;
 const MAX_CAMERA_DISTANCE = 21;
 const SHAKE_SPEED_START = 22;
+const RACE_CAMERA_NEAR = 0.12;
+const DRIFT_SHAKE_SCALE = 0.5;
 
 export default class RaceChaseCamera {
     application: Application;
@@ -19,6 +21,7 @@ export default class RaceChaseCamera {
     active: boolean;
     paused: boolean;
     pointerLocked: boolean;
+    pointerLockRequestPending: boolean;
     yawOffset: number;
     pitchOffset: number;
     smoothPosition: THREE.Vector3;
@@ -45,6 +48,7 @@ export default class RaceChaseCamera {
         this.active = false;
         this.paused = false;
         this.pointerLocked = false;
+        this.pointerLockRequestPending = false;
         this.yawOffset = 0;
         this.pitchOffset = 0.1;
 
@@ -101,6 +105,7 @@ export default class RaceChaseCamera {
 
         this.pointerLockChangeHandler = () => {
             const element = this.application.renderer.instance.domElement;
+            this.pointerLockRequestPending = false;
             this.pointerLocked = document.pointerLockElement === element;
             UIEventBus.dispatch('race:pointerLockChanged', {
                 locked: this.pointerLocked,
@@ -113,6 +118,8 @@ export default class RaceChaseCamera {
         };
 
         this.pointerLockErrorHandler = () => {
+            this.pointerLockRequestPending = false;
+            this.pointerLocked = false;
             UIEventBus.dispatch('race:pointerLockChanged', {
                 locked: false,
             });
@@ -147,21 +154,51 @@ export default class RaceChaseCamera {
     }
 
     requestPointerLock() {
-        if (!this.active || this.paused) return;
+        if (!this.active || this.paused || this.pointerLockRequestPending) return;
         const canvas = this.application.renderer.instance.domElement;
         if (
             !canvas ||
             !canvas.isConnected ||
             !document.hasFocus() ||
-            document.pointerLockElement === canvas
+            document.pointerLockElement === canvas ||
+            document.pointerLockElement !== null
         ) {
             return;
         }
 
         if (canvas.requestPointerLock) {
             try {
-                canvas.requestPointerLock();
+                this.pointerLockRequestPending = true;
+                const requestPointerLock =
+                    canvas.requestPointerLock as unknown as () => void | Promise<void>;
+                const maybePromise = requestPointerLock();
+                const pointerLockPromise = maybePromise as Promise<void> | undefined;
+
+                if (
+                    pointerLockPromise &&
+                    typeof pointerLockPromise.catch === 'function'
+                ) {
+                    pointerLockPromise
+                        .catch((error) => {
+                            if (this.isExpectedPointerLockAbort(error)) {
+                                return;
+                            }
+                            console.warn(
+                                '[Race] Pointer lock request failed',
+                                error
+                            );
+                            UIEventBus.dispatch('race:pointerLockChanged', {
+                                locked: false,
+                            });
+                        })
+                        .finally(() => {
+                            this.pointerLockRequestPending = false;
+                        });
+                } else {
+                    this.pointerLockRequestPending = false;
+                }
             } catch (error) {
+                this.pointerLockRequestPending = false;
                 UIEventBus.dispatch('race:pointerLockChanged', {
                     locked: false,
                 });
@@ -169,7 +206,20 @@ export default class RaceChaseCamera {
         }
     }
 
+    isExpectedPointerLockAbort(error: unknown) {
+        if (!error) return false;
+        const message =
+            (error as { message?: string }).message ||
+            String(error);
+        return (
+            message.includes('exited the lock before this request was completed') ||
+            message.includes('user has exited the lock') ||
+            message.includes('request is not allowed')
+        );
+    }
+
     exitPointerLock() {
+        this.pointerLockRequestPending = false;
         if (document.pointerLockElement) {
             document.exitPointerLock();
         }
@@ -179,7 +229,7 @@ export default class RaceChaseCamera {
         this.active = active;
         if (active) {
             this.shakeTime = 0;
-            this.application.camera.instance.near = 0.45;
+            this.application.camera.instance.near = RACE_CAMERA_NEAR;
             this.application.camera.instance.fov = BASE_FOV;
             this.application.camera.instance.updateProjectionMatrix();
             return;
@@ -188,6 +238,7 @@ export default class RaceChaseCamera {
         if (!active) {
             this.exitPointerLock();
             this.pointerLocked = false;
+            this.pointerLockRequestPending = false;
             this.yawOffset = 0;
             this.pitchOffset = 0.1;
             this.shakeTime = 0;
@@ -205,6 +256,7 @@ export default class RaceChaseCamera {
         this.paused = paused;
         if (paused) {
             this.exitPointerLock();
+            this.pointerLockRequestPending = false;
             UIEventBus.dispatch('race:inputReset', {
                 source: 'setPaused',
             });
@@ -255,7 +307,7 @@ export default class RaceChaseCamera {
             this.tmpToCamera.normalize();
             const safeDistance = Math.max(
                 MIN_CAMERA_DISTANCE,
-                this.vehicle.getCameraBodyRadius() + 1.4
+                this.vehicle.getCameraBodyRadius() + 1.9
             );
             const clampedDistance = THREE.MathUtils.clamp(
                 distance,
@@ -276,7 +328,7 @@ export default class RaceChaseCamera {
         const smoothDistance = this.tmpToCamera.length();
         const minSafeDistance = Math.max(
             MIN_CAMERA_DISTANCE,
-            this.vehicle.getCameraBodyRadius() + 1.2
+            this.vehicle.getCameraBodyRadius() + 1.7
         );
         if (smoothDistance > 0.0001 && smoothDistance < minSafeDistance) {
             this.tmpToCamera.normalize();
@@ -307,7 +359,9 @@ export default class RaceChaseCamera {
         );
         const driftShake = THREE.MathUtils.clamp(telemetry.driftIntensity, 0, 1);
         const shakeAmount =
-            (speedShake * 0.085 + driftShake * 0.11) * (this.paused ? 0 : 1);
+            (speedShake * 0.085 + driftShake * 0.11) *
+            DRIFT_SHAKE_SCALE *
+            (this.paused ? 0 : 1);
         if (shakeAmount > 0.0001) {
             const shakeSide =
                 Math.sin(this.shakeTime * 17.4) * shakeAmount * 0.42;
