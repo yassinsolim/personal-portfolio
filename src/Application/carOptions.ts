@@ -16,6 +16,14 @@ export type CarPerformanceReference = {
 };
 
 export type CarRaceConfig = {
+    visualForwardAxis?: 'positiveZ' | 'negativeZ';
+    wheelNodeMap?: {
+        frontLeft?: string[];
+        frontRight?: string[];
+        rearLeft?: string[];
+        rearRight?: string[];
+        candidates?: string[];
+    };
     drivetrain: DrivetrainType;
     topSpeedKph: number;
     zeroToHundredSec: number;
@@ -44,6 +52,10 @@ export const carOptions: CarOption[] = [
             'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
         lengthMeters: 4.75,
         race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                candidates: ['rim', 'rim1', 'tire_f', 'tire_r'],
+            },
             drivetrain: 'AWD',
             topSpeedKph: 352,
             zeroToHundredSec: 2.9,
@@ -77,6 +89,13 @@ export const carOptions: CarOption[] = [
             'models/Cars/bmw_m3_e92_stance/source/bmw_m3_e92_stance.glb',
         lengthMeters: 4.615,
         race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['e92_wheel_05a_19x9.002'],
+                frontRight: ['e92_wheel_05a_19x9'],
+                rearLeft: ['e92_wheel_05a_19x9.003'],
+                rearRight: ['e92_wheel_05a_19x9.001'],
+            },
             drivetrain: 'RWD',
             topSpeedKph: 250,
             zeroToHundredSec: 4.8,
@@ -109,6 +128,13 @@ export const carOptions: CarOption[] = [
             'models/Cars/2014_mercedes-benz_c63_amg_edition_507/source/2014_mercedes-benz_c63_amg_edition_507.glb',
         lengthMeters: 4.72,
         race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['3dwheel front l'],
+                frontRight: ['3dwheel front r'],
+                rearLeft: ['3dwheel rear l'],
+                rearRight: ['3dwheel rear r'],
+            },
             drivetrain: 'RWD',
             topSpeedKph: 280,
             zeroToHundredSec: 4.2,
@@ -141,6 +167,13 @@ export const carOptions: CarOption[] = [
             'models/Cars/2019_mercedes-benz_c63_s_amg_coupe/source/2019_mercedes-benz_c63_s_amg_coupe.glb',
         lengthMeters: 4.75,
         race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['3dwheel front l'],
+                frontRight: ['3dwheel front r'],
+                rearLeft: ['3dwheel rear l'],
+                rearRight: ['3dwheel rear r'],
+            },
             drivetrain: 'RWD',
             topSpeedKph: 290,
             zeroToHundredSec: 3.9,
@@ -172,6 +205,13 @@ export const carOptions: CarOption[] = [
         modelPath: 'models/Cars/bmw_m4_f82/source/bmw_m4_f82.glb',
         lengthMeters: 4.67,
         race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['arm4_vt_wheel.002'],
+                frontRight: ['arm4_vt_wheel'],
+                rearLeft: ['arm4_vt_wheel.003'],
+                rearRight: ['arm4_vt_wheel.001'],
+            },
             drivetrain: 'RWD',
             topSpeedKph: 250,
             zeroToHundredSec: 4.1,
@@ -204,6 +244,7 @@ export const carOptions: CarOption[] = [
             'models/Cars/toyota_crown_2025/source/toyota_crown_2025.glb',
         lengthMeters: 4.98,
         race: {
+            visualForwardAxis: 'positiveZ',
             drivetrain: 'AWD',
             topSpeedKph: 208,
             zeroToHundredSec: 5.3,

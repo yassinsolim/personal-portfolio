@@ -22,7 +22,11 @@ const LONG_AXIS_THRESHOLD = 1.12;
 const DRIFT_ENTRY_SPEED_MPS = 9;
 const DRIFT_RELEASE_SPEED_MPS = 5;
 const SMOKE_SPAWN_INTERVAL = 0.03;
-const WHEEL_NAME_HINTS = ['wheel', 'tire', 'tyre', 'rim'];
+const STEERING_SENSITIVITY_SCALE = 0.6;
+const WHEEL_NAME_HINT_REGEX =
+    /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
+const WHEEL_MATERIAL_HINT_REGEX =
+    /(wheel|tire|tyre|rim|rubber|michelin|hub|disk|brake)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
 
@@ -49,11 +53,14 @@ type WheelRig = {
     front: boolean;
     rear: boolean;
     left: boolean;
+    mappedCorner: boolean;
     localCenter: THREE.Vector3;
     baseQuaternion: THREE.Quaternion;
     spinSign: number;
     radius: number;
 };
+
+type WheelNodeMap = NonNullable<CarRaceConfig['wheelNodeMap']>;
 
 export default class RaceVehicle {
     application: Application;
@@ -310,11 +317,20 @@ export default class RaceVehicle {
         const scale = option && rawLength > 0 ? option.lengthMeters / rawLength : 1;
         model.scale.setScalar(scale);
         model.rotation.set(0, this.getVisualForwardOffsetY(model), 0);
-        model.updateMatrixWorld(true);
+
+        if (option?.race.visualForwardAxis === 'negativeZ') {
+            model.rotation.y += Math.PI;
+        }
+
         this.alignVisualFrontToPositiveZ(model);
         model.updateMatrixWorld(true);
 
-        const wheelRig = this.buildWheelRig(model);
+        let wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
+        if (this.shouldFlipModelForwardFromMappedWheels(wheelRig, option?.race.visualForwardAxis || 'positiveZ')) {
+            model.rotation.y += Math.PI;
+            model.updateMatrixWorld(true);
+            wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
+        }
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
@@ -397,7 +413,204 @@ export default class RaceVehicle {
         }
     }
 
-    buildWheelRig(model: THREE.Object3D) {
+    shouldFlipModelForwardFromMappedWheels(
+        wheels: WheelRig[],
+        expectedForward: 'positiveZ' | 'negativeZ'
+    ) {
+        const mappedFront = wheels.filter(
+            (wheel) => wheel.mappedCorner && wheel.front
+        );
+        const mappedRear = wheels.filter(
+            (wheel) => wheel.mappedCorner && wheel.rear
+        );
+
+        if (!mappedFront.length || !mappedRear.length) return false;
+
+        const frontAverage =
+            mappedFront.reduce((sum, wheel) => sum + wheel.localCenter.z, 0) /
+            mappedFront.length;
+        const rearAverage =
+            mappedRear.reduce((sum, wheel) => sum + wheel.localCenter.z, 0) /
+            mappedRear.length;
+
+        if (expectedForward === 'positiveZ') {
+            return frontAverage < rearAverage;
+        }
+
+        return frontAverage > rearAverage;
+    }
+
+    buildMappedWheelRig(
+        model: THREE.Object3D,
+        wheelNodeMap?: WheelNodeMap
+    ): WheelRig[] {
+        if (!wheelNodeMap) return [];
+
+        const mappedWheels: WheelRig[] = [];
+        const candidates = new Map<string, THREE.Object3D>();
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+
+        const explicitCorners: Array<{
+            front: boolean;
+            left: boolean;
+            names?: string[];
+        }> = [
+            {
+                front: true,
+                left: true,
+                names: wheelNodeMap.frontLeft,
+            },
+            {
+                front: true,
+                left: false,
+                names: wheelNodeMap.frontRight,
+            },
+            {
+                front: false,
+                left: true,
+                names: wheelNodeMap.rearLeft,
+            },
+            {
+                front: false,
+                left: false,
+                names: wheelNodeMap.rearRight,
+            },
+        ];
+
+        const hasExplicitCorners = explicitCorners.some(
+            (entry) => (entry.names || []).length > 0
+        );
+
+        if (hasExplicitCorners) {
+            for (const corner of explicitCorners) {
+                const node = this.findNodeByHints(model, corner.names || []);
+                if (!node) continue;
+
+                const box = new THREE.Box3().setFromObject(node);
+                if (box.isEmpty()) continue;
+                box.getSize(size);
+                const radius = Math.max(size.x, size.y, size.z) * 0.5;
+                if (!this.isWheelRadiusPlausible(radius)) continue;
+
+                box.getCenter(center);
+                model.worldToLocal(center);
+
+                mappedWheels.push({
+                    object: node,
+                    front: corner.front,
+                    rear: !corner.front,
+                    left: corner.left,
+                    mappedCorner: true,
+                    localCenter: center.clone(),
+                    baseQuaternion: node.quaternion.clone(),
+                    spinSign: corner.left ? 1 : -1,
+                    radius,
+                });
+            }
+
+            if (mappedWheels.length >= 3) {
+                return mappedWheels;
+            }
+        }
+
+        if (!wheelNodeMap.candidates || wheelNodeMap.candidates.length === 0) {
+            return [];
+        }
+
+        for (const hint of wheelNodeMap.candidates) {
+            const node = this.findNodeByHints(model, [hint]);
+            if (node) {
+                candidates.set(node.uuid, node);
+            }
+        }
+
+        const candidateWheels: WheelRig[] = [];
+        for (const node of candidates.values()) {
+            const box = new THREE.Box3().setFromObject(node);
+            if (box.isEmpty()) continue;
+            box.getSize(size);
+            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            if (!this.isWheelRadiusPlausible(radius)) continue;
+
+            box.getCenter(center);
+            model.worldToLocal(center);
+
+            candidateWheels.push({
+                object: node,
+                front: false,
+                rear: false,
+                left: false,
+                mappedCorner: false,
+                localCenter: center.clone(),
+                baseQuaternion: node.quaternion.clone(),
+                spinSign: center.x <= 0 ? 1 : -1,
+                radius,
+            });
+        }
+
+        if (candidateWheels.length < 2) {
+            return [];
+        }
+
+        const medianX = this.getMedian(
+            candidateWheels.map((candidate) => candidate.localCenter.x)
+        );
+        const medianZ = this.getMedian(
+            candidateWheels.map((candidate) => candidate.localCenter.z)
+        );
+
+        candidateWheels.forEach((wheel) => {
+            wheel.front = wheel.localCenter.z >= medianZ;
+            wheel.rear = !wheel.front;
+            wheel.left = wheel.localCenter.x <= medianX;
+            wheel.spinSign = wheel.left ? 1 : -1;
+        });
+
+        const frontAxle = this.pickAxlePair(
+            candidateWheels.filter((wheel) => wheel.front)
+        );
+        const rearAxle = this.pickAxlePair(
+            candidateWheels.filter((wheel) => wheel.rear)
+        );
+        return [...frontAxle, ...rearAxle];
+    }
+
+    findNodeByHints(
+        model: THREE.Object3D,
+        hints: string[]
+    ): THREE.Object3D | null {
+        if (!hints.length) return null;
+
+        const loweredHints = hints.map((hint) => hint.toLowerCase());
+        let exactMatch: THREE.Object3D | null = null;
+        let containsMatch: THREE.Object3D | null = null;
+
+        model.traverse((child) => {
+            if (exactMatch) return;
+            const childName = child.name.toLowerCase();
+            if (!childName) return;
+
+            for (const hint of loweredHints) {
+                if (childName === hint) {
+                    exactMatch = child;
+                    return;
+                }
+                if (!containsMatch && childName.includes(hint)) {
+                    containsMatch = child;
+                }
+            }
+        });
+
+        return exactMatch || containsMatch;
+    }
+
+    buildWheelRig(model: THREE.Object3D, wheelNodeMap?: WheelNodeMap) {
+        const mapped = this.buildMappedWheelRig(model, wheelNodeMap);
+        if (mapped.length >= 3) {
+            return mapped;
+        }
+
         const candidates = new Map<
             string,
             {
@@ -412,11 +625,19 @@ export default class RaceVehicle {
         >();
         const center = new THREE.Vector3();
         const size = new THREE.Vector3();
+        const modelBox = new THREE.Box3().setFromObject(model);
+        const modelCenter = new THREE.Vector3();
+        const modelSize = new THREE.Vector3();
+        modelBox.getCenter(modelCenter);
+        modelBox.getSize(modelSize);
+        const sideThreshold = Math.max(0.25, modelSize.x * 0.18);
+        const longitudinalThreshold = Math.max(0.2, modelSize.z * 0.14);
+        const verticalThreshold = modelCenter.y + modelSize.y * 0.25;
 
         model.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
             const name = child.name.toLowerCase();
-            if (!this.isWheelName(name)) return;
+            if (!this.isWheelCandidateMesh(child, name)) return;
 
             const node = this.resolveWheelNode(child, model);
             const nodeName = node.name.toLowerCase();
@@ -425,10 +646,15 @@ export default class RaceVehicle {
 
             box.getSize(size);
             const radius = Math.max(size.x, size.y, size.z) * 0.5;
-            if (radius < 0.08 || radius > 1.3) return;
+            if (!this.isWheelRadiusPlausible(radius)) return;
 
             box.getCenter(center);
             model.worldToLocal(center);
+            const centerWorld = box.getCenter(new THREE.Vector3());
+
+            if (Math.abs(centerWorld.x) < sideThreshold) return;
+            if (Math.abs(centerWorld.z) < longitudinalThreshold) return;
+            if (centerWorld.y > verticalThreshold) return;
 
             const existing = candidates.get(node.uuid);
             if (existing && existing.radius >= radius) return;
@@ -494,6 +720,7 @@ export default class RaceVehicle {
                 front,
                 rear: !front,
                 left,
+                mappedCorner: false,
                 localCenter: candidate.center.clone(),
                 baseQuaternion: candidate.object.quaternion.clone(),
                 spinSign: left ? 1 : -1,
@@ -516,25 +743,23 @@ export default class RaceVehicle {
     pickAxlePair(candidates: WheelRig[]) {
         if (candidates.length <= 2) return candidates;
 
-        let leftmost = candidates[0];
-        let rightmost = candidates[0];
-        candidates.forEach((candidate) => {
-            if (candidate.left && !leftmost.left) {
-                leftmost = candidate;
-            }
-            if (!candidate.left && rightmost.left) {
-                rightmost = candidate;
-            }
-            if (candidate.left && candidate.localCenter.x < leftmost.localCenter.x) {
-                leftmost = candidate;
-            }
-            if (!candidate.left && candidate.localCenter.x > rightmost.localCenter.x) {
-                rightmost = candidate;
-            }
-        });
+        const leftCandidates = candidates
+            .filter((candidate) => candidate.left)
+            .sort((a, b) => a.localCenter.x - b.localCenter.x);
+        const rightCandidates = candidates
+            .filter((candidate) => !candidate.left)
+            .sort((a, b) => b.localCenter.x - a.localCenter.x);
 
-        if (leftmost === rightmost) return [leftmost];
-        return [leftmost, rightmost];
+        if (leftCandidates.length > 0 && rightCandidates.length > 0) {
+            return [leftCandidates[0], rightCandidates[0]];
+        }
+
+        return candidates
+            .slice()
+            .sort(
+                (a, b) => Math.abs(b.localCenter.x) - Math.abs(a.localCenter.x)
+            )
+            .slice(0, 2);
     }
 
     getDetectedWheelRadius(wheels: WheelRig[]) {
@@ -566,9 +791,34 @@ export default class RaceVehicle {
         return sorted[middle];
     }
 
+    isWheelRadiusPlausible(radius: number) {
+        return radius >= 0.12 && radius <= 0.8;
+    }
+
+    isWheelCandidateMesh(mesh: THREE.Mesh, meshName: string) {
+        if (this.isWheelName(meshName)) return true;
+
+        if (Array.isArray(mesh.material)) {
+            return mesh.material.some((material) =>
+                this.isWheelMaterialName(material?.name || '')
+            );
+        }
+
+        return this.isWheelMaterialName(mesh.material?.name || '');
+    }
+
+    isWheelMaterialName(name: string) {
+        const lowered = name.toLowerCase();
+        if (!lowered) return false;
+        if (lowered.includes('trim')) return false;
+        return WHEEL_MATERIAL_HINT_REGEX.test(lowered);
+    }
+
     isWheelName(name: string) {
         const lowered = name.toLowerCase();
-        return WHEEL_NAME_HINTS.some((hint) => lowered.includes(hint));
+        if (!lowered) return false;
+        if (lowered.includes('trim')) return false;
+        return WHEEL_NAME_HINT_REGEX.test(lowered);
     }
 
     matchesAnyHint(name: string, hints: string[]) {
@@ -820,10 +1070,14 @@ export default class RaceVehicle {
         const speedFactor = THREE.MathUtils.clamp(speed / 52, 0, 1);
         const maxSteerAngle = THREE.MathUtils.degToRad(
             this.currentTuning.maxSteerAngleDeg
-        );
+        ) * STEERING_SENSITIVITY_SCALE;
         const steerScale = THREE.MathUtils.lerp(1, 0.38, speedFactor);
         const targetSteerAngle = steer * maxSteerAngle * steerScale;
-        const steerLerp = THREE.MathUtils.clamp(deltaSeconds * 10, 0, 1);
+        const steerLerp = THREE.MathUtils.clamp(
+            deltaSeconds * 10 * STEERING_SENSITIVITY_SCALE,
+            0,
+            1
+        );
         this.steerAngle = THREE.MathUtils.lerp(
             this.steerAngle,
             targetSteerAngle,
@@ -837,7 +1091,9 @@ export default class RaceVehicle {
         }
 
         const wheelBase = Math.max(2.2, this.bodySize.z * 0.62);
-        let yawRate = (this.speedMps / wheelBase) * Math.tan(this.steerAngle);
+        let yawRate =
+            (this.speedMps / wheelBase) *
+            Math.tan(this.steerAngle);
 
         const driftEligible =
             this.currentTuning.drivetrain === 'RWD' &&
@@ -853,7 +1109,9 @@ export default class RaceVehicle {
                 speed *
                 (0.45 + this.driftAmount * 0.94) *
                 deltaSeconds;
-            yawRate += steer * (0.48 + this.driftAmount * 1.18);
+            yawRate +=
+                steer *
+                (0.48 + this.driftAmount * 1.18);
         } else {
             const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.8 : 3.3;
             this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * releaseSpeed);
