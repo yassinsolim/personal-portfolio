@@ -7,6 +7,7 @@ const DEFAULT_UV_SCALE = 0.0015;
 const DEFAULT_SAMPLES = 1200;
 const DEFAULT_WIDTH = 36;
 const ROOT_MARKER = 'nordschleifeTrackRoot';
+const CENTER_DASH_WIDTH = 1.15;
 
 type TrackAssetData = {
     name?: string;
@@ -25,6 +26,7 @@ export default class NordschleifeTrack {
     root: THREE.Group;
     visualMesh: THREE.Mesh;
     edgeMarkings: THREE.Group;
+    centerLine: THREE.Mesh;
     colliderMesh: THREE.Mesh;
     visualCurve: THREE.CatmullRomCurve3;
     colliderCurve: THREE.CatmullRomCurve3;
@@ -64,6 +66,10 @@ export default class NordschleifeTrack {
             visualData,
             this.visualCurve
         );
+        this.centerLine = this.createCenterDashMesh(
+            visualData,
+            this.visualCurve
+        );
         this.colliderMesh = this.createColliderMesh(
             colliderData,
             this.colliderCurve
@@ -71,6 +77,7 @@ export default class NordschleifeTrack {
 
         this.root.add(this.visualMesh);
         this.root.add(this.edgeMarkings);
+        this.root.add(this.centerLine);
         this.root.add(this.colliderMesh);
         parent.add(this.root);
 
@@ -107,10 +114,12 @@ export default class NordschleifeTrack {
 
     createVisualTrackMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
         const geometry = this.createTrackSurfaceGeometry(data, curve);
+        const asphaltTexture = this.createAsphaltTexture();
         const material = new THREE.MeshStandardMaterial({
-            color: 0x2b2f35,
-            roughness: 0.92,
-            metalness: 0.08,
+            color: 0x303338,
+            roughness: 0.94,
+            metalness: 0.03,
+            map: asphaltTexture,
             side: THREE.DoubleSide,
         });
 
@@ -119,6 +128,45 @@ export default class NordschleifeTrack {
         mesh.receiveShadow = true;
         mesh.castShadow = false;
         return mesh;
+    }
+
+    createAsphaltTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return new THREE.Texture();
+        }
+
+        context.fillStyle = '#2b2f34';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 5400; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const intensity = 28 + Math.random() * 44;
+            context.fillStyle = `rgb(${intensity},${intensity},${intensity})`;
+            context.fillRect(x, y, 1, 1);
+        }
+
+        context.globalAlpha = 0.14;
+        context.strokeStyle = '#17191d';
+        context.lineWidth = 1;
+        for (let i = 0; i < 18; i++) {
+            context.beginPath();
+            context.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
+            context.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+            context.stroke();
+        }
+        context.globalAlpha = 1;
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(95, 95);
+        texture.needsUpdate = true;
+        return texture;
     }
 
     createEdgeMarkingsMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
@@ -224,6 +272,141 @@ export default class NordschleifeTrack {
             const v = distanceTravelled * uvScale;
             uvs.push(0, v, 1, v);
 
+            previousPoint.copy(point);
+        }
+
+        for (let i = 0; i < samples; i++) {
+            const a = i * 2;
+            const b = a + 1;
+            const c = a + 2;
+            const d = a + 3;
+            indices.push(a, b, d, a, d, c);
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setIndex(indices);
+        geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(vertices, 3)
+        );
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        return geometry;
+    }
+
+    createCenterDashMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
+        const geometry = this.createCenterStripGeometry(data, curve);
+        const dashTexture = this.createDashTexture();
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xf4f4f4,
+            roughness: 0.42,
+            metalness: 0.02,
+            side: THREE.DoubleSide,
+            transparent: true,
+            alphaMap: dashTexture,
+            alphaTest: 0.35,
+            polygonOffset: true,
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -3,
+        });
+
+        const centerLine = new THREE.Mesh(geometry, material);
+        centerLine.name = 'nordschleife-centerline';
+        centerLine.receiveShadow = true;
+        centerLine.castShadow = false;
+        return centerLine;
+    }
+
+    createDashTexture() {
+        const canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 256;
+        const context = canvas.getContext('2d');
+        if (!context) {
+            return new THREE.Texture();
+        }
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        const dashHeight = 72;
+        const gapHeight = 54;
+        let y = 0;
+        while (y < canvas.height) {
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, y, canvas.width, dashHeight);
+            y += dashHeight + gapHeight;
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(1, 30);
+        texture.needsUpdate = true;
+        return texture;
+    }
+
+    createCenterStripGeometry(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
+        const samples = Math.max(64, data.samples ?? DEFAULT_SAMPLES);
+        const halfWidth = CENTER_DASH_WIDTH * 0.5;
+        const elevationOffset = 0.14;
+
+        const tangent = new THREE.Vector3();
+        const point = new THREE.Vector3();
+        const side = new THREE.Vector3();
+        const normal = new THREE.Vector3(0, 1, 0);
+        const previousSide = new THREE.Vector3(1, 0, 0);
+        const left = new THREE.Vector3();
+        const right = new THREE.Vector3();
+        const previousPoint = new THREE.Vector3();
+        const segmentDistance = new THREE.Vector3();
+
+        const vertices: number[] = [];
+        const uvs: number[] = [];
+        const indices: number[] = [];
+        let distanceTravelled = 0;
+
+        curve.getPointAt(0, previousPoint);
+
+        for (let i = 0; i <= samples; i++) {
+            const t = i / samples;
+
+            curve.getPointAt(t, point);
+            curve.getTangentAt(t, tangent).normalize();
+
+            side.crossVectors(normal, tangent);
+            if (side.lengthSq() < 1e-6) {
+                side.copy(previousSide);
+            } else {
+                side.normalize();
+                if (side.dot(previousSide) < 0) {
+                    side.multiplyScalar(-1);
+                }
+                previousSide.copy(side);
+            }
+
+            const bankAngle = Math.sin(t * Math.PI * 16) * 0.045;
+            normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
+            side.crossVectors(normal, tangent).normalize();
+
+            left
+                .copy(point)
+                .addScaledVector(side, halfWidth)
+                .addScaledVector(normal, elevationOffset);
+            right
+                .copy(point)
+                .addScaledVector(side, -halfWidth)
+                .addScaledVector(normal, elevationOffset);
+
+            vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
+
+            if (i > 0) {
+                segmentDistance.subVectors(point, previousPoint);
+                distanceTravelled += segmentDistance.length();
+            }
+
+            const v = distanceTravelled * 0.025;
+            uvs.push(0, v, 1, v);
             previousPoint.copy(point);
         }
 
