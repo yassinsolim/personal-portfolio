@@ -1,5 +1,8 @@
 import UIEventBus from '../../UI/EventBus';
 
+const STEER_LEFT_VALUE = -1;
+const STEER_RIGHT_VALUE = 1;
+
 type DrivingInputState = {
     throttle: number;
     brake: number;
@@ -30,7 +33,7 @@ export default class DrivingInput {
         this.keyDownHandler = (event: KeyboardEvent) => {
             if (!this.enabled) return;
             if ((event as any).inComputer) return;
-            if (this.shouldIgnoreInputTarget(event.target as HTMLElement | null)) {
+            if (this.shouldIgnoreInputTarget(event.target)) {
                 return;
             }
             if (event.code === 'Space') {
@@ -77,9 +80,9 @@ export default class DrivingInput {
         });
     }
 
-    shouldIgnoreInputTarget(target: HTMLElement | null) {
-        if (!target) return false;
-        const tag = target.tagName.toLowerCase();
+    shouldIgnoreInputTarget(target: EventTarget | null) {
+        if (!(target instanceof HTMLElement)) return false;
+        const tag = (target.tagName || '').toLowerCase();
         return tag === 'input' || tag === 'textarea' || tag === 'select';
     }
 
@@ -102,9 +105,9 @@ export default class DrivingInput {
         const smoothing = Math.min(1, Math.max(0.08, deltaSeconds * 8));
         const targetThrottle = this.keyState.KeyW ? 1 : 0;
         const targetBrake = this.keyState.KeyS ? 1 : 0;
-        const steerLeft = this.keyState.KeyA ? 1 : 0;
-        const steerRight = this.keyState.KeyD ? 1 : 0;
-        const steerTarget = steerRight - steerLeft;
+        const steerLeft = this.keyState.KeyA ? STEER_LEFT_VALUE : 0;
+        const steerRight = this.keyState.KeyD ? STEER_RIGHT_VALUE : 0;
+        const steerTarget = steerLeft + steerRight;
         const handbrakeTarget = this.keyState.Space ? 1 : 0;
 
         this.smoothState.throttle +=
