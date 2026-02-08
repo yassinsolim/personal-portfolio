@@ -251,6 +251,7 @@ export default class Camera extends EventEmitter {
 
     createControls() {
         this.renderer = this.application.renderer;
+        this.patchSafePointerCapture(this.renderer.instance.domElement);
         this.orbitControls = new OrbitControls(
             this.instance,
             this.renderer.instance.domElement
@@ -271,6 +272,37 @@ export default class Camera extends EventEmitter {
 
         this.orbitControls.update();
         this.syncOrbitControlsState();
+    }
+
+    patchSafePointerCapture(canvas: HTMLCanvasElement) {
+        const patchedFlag = '__raceSafePointerCapturePatched';
+        const anyCanvas = canvas as HTMLCanvasElement & {
+            [patchedFlag]?: boolean;
+        };
+        if (anyCanvas[patchedFlag]) return;
+        anyCanvas[patchedFlag] = true;
+
+        const originalSetPointerCapture =
+            canvas.setPointerCapture?.bind(canvas);
+        if (!originalSetPointerCapture) return;
+
+        canvas.setPointerCapture = ((pointerId: number) => {
+            try {
+                originalSetPointerCapture(pointerId);
+            } catch (error) {
+                const message = String(
+                    (error as { message?: string })?.message || error
+                ).toLowerCase();
+                if (
+                    message.includes('invalidstateerror') ||
+                    message.includes('not active') ||
+                    message.includes('failed to execute')
+                ) {
+                    return;
+                }
+                throw error;
+            }
+        }) as unknown as (pointerId: number) => void;
     }
 
     update() {
