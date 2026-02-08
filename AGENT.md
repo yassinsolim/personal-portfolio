@@ -77,3 +77,20 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 ## Known Validation Gap
 - Full interactive manual driving validation (pointer lock, control feel, drift tuning,
   audio taste) still requires browser-in-the-loop checks.
+
+## Focused Bugfix Pass (Current)
+- Scope: pointer-lock uncaught error, steering direction/sensitivity, wheel rig correctness,
+  chase camera clipping + wobble, and track readability (center dash/asphalt pass).
+- In progress checks:
+  - [x] Root-cause inspection on pointer-lock promise rejection path.
+  - [x] Root-cause inspection on wheel fallback false positives (`rim` matched `trim`).
+  - [x] Apply targeted fixes by subsystem + small commits.
+  - [x] Validate with `npm.cmd run build` (pass after current edits).
+  - [x] Validate interaction flow in running dev server and ensure no lingering open ports.
+ - Notes:
+   - Added explicit wheel corner mappings for E92/F82 to avoid fallback misclassification.
+   - Steering sensitivity now reduced via max-angle + response scaling (removed extra yaw scaling).
+   - Automated browser regression run (Playwright + dev server) showed:
+     - no `pointerlock`/`setPointerCapture` runtime errors
+     - resumed throttle input remains responsive
+     - no lingering dev listener after teardown
