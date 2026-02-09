@@ -19,14 +19,20 @@ const GRAVITY = 32;
 const RAYCAST_HEIGHT = 320;
 const RAYCAST_DISTANCE = 1200;
 const LONG_AXIS_THRESHOLD = 1.12;
-const DRIFT_ENTRY_SPEED_MPS = 9;
-const DRIFT_RELEASE_SPEED_MPS = 5;
+const DRIFT_ENTRY_SPEED_MPS = 7.5;
+const DRIFT_RELEASE_SPEED_MPS = 4.5;
 const SMOKE_SPAWN_INTERVAL = 0.03;
-const STEERING_SENSITIVITY_SCALE = 0.6;
+const STEERING_SENSITIVITY_SCALE = 0.22;
+const AMG_ONE_ID = 'amg-one';
+const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
+const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
+const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =
     /(wheel|tire|tyre|rim|rubber|michelin|hub|disk|brake)/i;
+const NON_WHEEL_NAME_HINT_REGEX =
+    /(trim|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
 
@@ -76,6 +82,7 @@ export default class RaceVehicle {
     currentTuning: CarRaceConfig;
     cachedModels: Map<string, THREE.Group>;
     loadingPromises: Map<string, Promise<THREE.Group>>;
+    wheelWarningCarIds: Set<string>;
     active: boolean;
     grounded: boolean;
     gear: number;
@@ -141,6 +148,7 @@ export default class RaceVehicle {
         this.currentTuning =
             carOptionsById[this.currentCarId]?.race ||
             carOptionsById[defaultCarId].race;
+        this.wheelWarningCarIds = new Set();
 
         this.active = false;
         this.grounded = false;
@@ -262,7 +270,12 @@ export default class RaceVehicle {
         if (existingPromise) {
             existingPromise
                 .then((model) => this.swapModelIfCurrent(carId, model))
-                .catch(() => {});
+                .catch((error) => {
+                    console.warn(
+                        `[RaceVehicle] Failed to load car model for ${carId}`,
+                        error
+                    );
+                });
             return;
         }
 
@@ -287,7 +300,12 @@ export default class RaceVehicle {
                 this.cachedModels.set(carId, model);
                 this.swapModelIfCurrent(carId, model);
             })
-            .catch(() => {})
+            .catch((error) => {
+                console.warn(
+                    `[RaceVehicle] Failed to load car model for ${carId}`,
+                    error
+                );
+            })
             .finally(() => {
                 this.loadingPromises.delete(carId);
             });
@@ -310,7 +328,7 @@ export default class RaceVehicle {
 
     prepareModel(model: THREE.Group, carId: string) {
         this.cloneMaterials(model);
-        this.applyMaterialTweaks(model);
+        this.applyMaterialTweaks(model, carId);
 
         const option = carOptionsById[carId];
         const rawLength = this.getModelLength(model);
@@ -331,11 +349,18 @@ export default class RaceVehicle {
             model.updateMatrixWorld(true);
             wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
         }
+        wheelRig = this.filterValidWheelRig(carId, wheelRig);
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
         const bbox = new THREE.Box3().setFromObject(model);
-        model.position.set(0, -rideHeight - bbox.min.y, 0);
+        const wheelBottom = this.getWheelContactBottom(wheelRig);
+        const contactBottom = wheelBottom ?? bbox.min.y;
+        model.position.set(
+            0,
+            -rideHeight - contactBottom + (option?.race.groundOffsetMeters || 0),
+            0
+        );
         model.updateMatrixWorld(true);
 
         const shiftedBox = new THREE.Box3().setFromObject(model);
@@ -383,7 +408,7 @@ export default class RaceVehicle {
         const center = new THREE.Vector3();
 
         model.traverse((child) => {
-            const name = child.name.toLowerCase();
+            const name = (child.name || '').toLowerCase();
             if (!name) return;
             if (
                 !this.matchesAnyHint(name, FRONT_HINTS) &&
@@ -396,6 +421,7 @@ export default class RaceVehicle {
             if (box.isEmpty()) return;
             box.getCenter(center);
             model.worldToLocal(center);
+            center.applyQuaternion(model.quaternion);
 
             if (this.matchesAnyHint(name, FRONT_HINTS)) {
                 frontSum += center.z;
@@ -438,6 +464,61 @@ export default class RaceVehicle {
         }
 
         return frontAverage > rearAverage;
+    }
+
+    filterValidWheelRig(carId: string, wheels: WheelRig[]) {
+        if (!this.isWheelRigValid(wheels)) {
+            if (!this.wheelWarningCarIds.has(carId)) {
+                this.wheelWarningCarIds.add(carId);
+                console.warn(
+                    `[RaceVehicle] Could not resolve 4 valid wheel nodes for ${carId}. Wheel animation disabled for this car.`
+                );
+            }
+            return [] as WheelRig[];
+        }
+        return wheels;
+    }
+
+    isWheelRigValid(wheels: WheelRig[]) {
+        if (wheels.length < 4) return false;
+
+        const unique = new Map<string, WheelRig>();
+        for (const wheel of wheels) {
+            if (!wheel.object?.uuid) continue;
+            if (!unique.has(wheel.object.uuid)) {
+                unique.set(wheel.object.uuid, wheel);
+            }
+        }
+
+        if (unique.size < 4) return false;
+
+        const normalized = Array.from(unique.values());
+        const frontCount = normalized.filter((wheel) => wheel.front).length;
+        const rearCount = normalized.filter((wheel) => wheel.rear).length;
+        const leftCount = normalized.filter((wheel) => wheel.left).length;
+        const rightCount = normalized.filter((wheel) => !wheel.left).length;
+        if (frontCount < 2 || rearCount < 2 || leftCount < 2 || rightCount < 2) {
+            return false;
+        }
+
+        return normalized.every((wheel) =>
+            this.isWheelRadiusPlausible(wheel.radius)
+        );
+    }
+
+    getWheelContactBottom(wheels: WheelRig[]) {
+        if (!wheels.length) return null;
+
+        let minBottom = Infinity;
+        wheels.forEach((wheel) => {
+            const bottom = wheel.localCenter.y - wheel.radius;
+            if (bottom < minBottom) {
+                minBottom = bottom;
+            }
+        });
+
+        if (!Number.isFinite(minBottom)) return null;
+        return minBottom;
     }
 
     buildMappedWheelRig(
@@ -495,6 +576,7 @@ export default class RaceVehicle {
 
                 box.getCenter(center);
                 model.worldToLocal(center);
+                center.applyQuaternion(model.quaternion);
 
                 mappedWheels.push({
                     object: node,
@@ -509,7 +591,14 @@ export default class RaceVehicle {
                 });
             }
 
-            if (mappedWheels.length >= 3) {
+            if (mappedWheels.length >= 4) {
+                const medianX = this.getMedian(
+                    mappedWheels.map((wheel) => wheel.localCenter.x)
+                );
+                mappedWheels.forEach((wheel) => {
+                    wheel.left = wheel.localCenter.x <= medianX;
+                    wheel.spinSign = wheel.left ? 1 : -1;
+                });
                 return mappedWheels;
             }
         }
@@ -535,6 +624,7 @@ export default class RaceVehicle {
 
             box.getCenter(center);
             model.worldToLocal(center);
+            center.applyQuaternion(model.quaternion);
 
             candidateWheels.push({
                 object: node,
@@ -549,7 +639,7 @@ export default class RaceVehicle {
             });
         }
 
-        if (candidateWheels.length < 2) {
+        if (candidateWheels.length < 4) {
             return [];
         }
 
@@ -573,7 +663,11 @@ export default class RaceVehicle {
         const rearAxle = this.pickAxlePair(
             candidateWheels.filter((wheel) => wheel.rear)
         );
-        return [...frontAxle, ...rearAxle];
+        const combined = [...frontAxle, ...rearAxle];
+        if (combined.length < 4) {
+            return [];
+        }
+        return combined;
     }
 
     findNodeByHints(
@@ -588,7 +682,7 @@ export default class RaceVehicle {
 
         model.traverse((child) => {
             if (exactMatch) return;
-            const childName = child.name.toLowerCase();
+            const childName = (child.name || '').toLowerCase();
             if (!childName) return;
 
             for (const hint of loweredHints) {
@@ -607,7 +701,7 @@ export default class RaceVehicle {
 
     buildWheelRig(model: THREE.Object3D, wheelNodeMap?: WheelNodeMap) {
         const mapped = this.buildMappedWheelRig(model, wheelNodeMap);
-        if (mapped.length >= 3) {
+        if (mapped.length >= 4) {
             return mapped;
         }
 
@@ -636,11 +730,11 @@ export default class RaceVehicle {
 
         model.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
-            const name = child.name.toLowerCase();
+            const name = (child.name || '').toLowerCase();
             if (!this.isWheelCandidateMesh(child, name)) return;
 
             const node = this.resolveWheelNode(child, model);
-            const nodeName = node.name.toLowerCase();
+            const nodeName = (node.name || '').toLowerCase();
             const box = new THREE.Box3().setFromObject(node);
             if (box.isEmpty()) return;
 
@@ -650,6 +744,7 @@ export default class RaceVehicle {
 
             box.getCenter(center);
             model.worldToLocal(center);
+            center.applyQuaternion(model.quaternion);
             const centerWorld = box.getCenter(new THREE.Vector3());
 
             if (Math.abs(centerWorld.x) < sideThreshold) return;
@@ -680,9 +775,7 @@ export default class RaceVehicle {
             .sort((a, b) => b.radius - a.radius)
             .slice(0, 12);
 
-        if (!sorted.length) {
-            return [] as WheelRig[];
-        }
+        if (!sorted.length) return [];
 
         const medianX = this.getMedian(sorted.map((candidate) => candidate.center.x));
         const medianZ = this.getMedian(sorted.map((candidate) => candidate.center.z));
@@ -734,10 +827,10 @@ export default class RaceVehicle {
         const rearAxle = this.pickAxlePair(wheels.filter((wheel) => wheel.rear));
         const combined = [...frontAxle, ...rearAxle];
 
-        if (combined.length >= 2) {
+        if (combined.length >= 4) {
             return combined;
         }
-        return wheels.slice(0, 4);
+        return [];
     }
 
     pickAxlePair(candidates: WheelRig[]) {
@@ -774,7 +867,7 @@ export default class RaceVehicle {
         while (
             current.parent &&
             current.parent !== model &&
-            this.isWheelName(current.parent.name.toLowerCase())
+            this.isWheelName((current.parent.name || '').toLowerCase())
         ) {
             current = current.parent;
         }
@@ -796,6 +889,9 @@ export default class RaceVehicle {
     }
 
     isWheelCandidateMesh(mesh: THREE.Mesh, meshName: string) {
+        if (NON_WHEEL_NAME_HINT_REGEX.test(meshName)) {
+            return false;
+        }
         if (this.isWheelName(meshName)) return true;
 
         if (Array.isArray(mesh.material)) {
@@ -808,21 +904,23 @@ export default class RaceVehicle {
     }
 
     isWheelMaterialName(name: string) {
-        const lowered = name.toLowerCase();
+        const lowered = String(name || '').toLowerCase();
         if (!lowered) return false;
+        if (NON_WHEEL_NAME_HINT_REGEX.test(lowered)) return false;
         if (lowered.includes('trim')) return false;
         return WHEEL_MATERIAL_HINT_REGEX.test(lowered);
     }
 
     isWheelName(name: string) {
-        const lowered = name.toLowerCase();
+        const lowered = String(name || '').toLowerCase();
         if (!lowered) return false;
+        if (NON_WHEEL_NAME_HINT_REGEX.test(lowered)) return false;
         if (lowered.includes('trim')) return false;
         return WHEEL_NAME_HINT_REGEX.test(lowered);
     }
 
     matchesAnyHint(name: string, hints: string[]) {
-        const lowered = name.toLowerCase();
+        const lowered = String(name || '').toLowerCase();
         return hints.some((hint) => lowered.includes(hint));
     }
 
@@ -837,7 +935,7 @@ export default class RaceVehicle {
         });
     }
 
-    applyMaterialTweaks(model: THREE.Object3D) {
+    applyMaterialTweaks(model: THREE.Object3D, carId: string) {
         const envMap =
             this.resources.items.cubeTexture.environmentMapTexture || undefined;
         model.traverse((child) => {
@@ -851,6 +949,47 @@ export default class RaceVehicle {
                 material.envMap = envMap;
                 material.envMapIntensity = 0.9;
             }
+            material.needsUpdate = true;
+        });
+        this.applyRaceMaterialStyling(model, carId);
+    }
+
+    applyRaceMaterialStyling(model: THREE.Object3D, carId: string) {
+        if (carId !== AMG_ONE_ID && carId !== TOYOTA_CROWN_ID) return;
+
+        const bodyColor =
+            carId === TOYOTA_CROWN_ID ? TOYOTA_CROWN_SILVER : AMG_ONE_RACE_BLUE;
+        const bodyMatchers =
+            carId === TOYOTA_CROWN_ID
+                ? ['body', 'blue']
+                : [
+                      'body_color',
+                      'piano_black',
+                      'piano_black_0',
+                      'piano_black_1',
+                      'piano_black_2',
+                      'black',
+                      'black_m_nc_black_0',
+                      'black_under_black_0',
+                      'material',
+                      'mizo',
+                  ];
+
+        model.traverse((child) => {
+            if (!(child instanceof THREE.Mesh) || !child.material) return;
+            if (Array.isArray(child.material)) return;
+
+            const material = child.material as THREE.MeshStandardMaterial;
+            const materialName = (material.name || '').toLowerCase();
+            const isBodyMaterial = bodyMatchers.some((matcher) =>
+                materialName.includes(matcher)
+            );
+            if (!isBodyMaterial) return;
+
+            material.color.copy(bodyColor);
+            material.metalness = 1;
+            material.roughness = 0.18;
+            material.envMapIntensity = 1.1;
             material.needsUpdate = true;
         });
     }
@@ -1071,10 +1210,10 @@ export default class RaceVehicle {
         const maxSteerAngle = THREE.MathUtils.degToRad(
             this.currentTuning.maxSteerAngleDeg
         ) * STEERING_SENSITIVITY_SCALE;
-        const steerScale = THREE.MathUtils.lerp(1, 0.38, speedFactor);
+        const steerScale = THREE.MathUtils.lerp(1, 0.5, speedFactor);
         const targetSteerAngle = steer * maxSteerAngle * steerScale;
         const steerLerp = THREE.MathUtils.clamp(
-            deltaSeconds * 10 * STEERING_SENSITIVITY_SCALE,
+            deltaSeconds * 12 * STEERING_SENSITIVITY_SCALE,
             0,
             1
         );
@@ -1103,28 +1242,31 @@ export default class RaceVehicle {
             Math.abs(steer) > 0.18;
 
         if (driftEligible) {
-            this.driftAmount = Math.min(1, this.driftAmount + deltaSeconds * 2.9);
+            this.driftAmount = Math.min(1, this.driftAmount + deltaSeconds * 2.5);
             this.lateralSpeed +=
                 steer *
                 speed *
-                (0.45 + this.driftAmount * 0.94) *
+                (0.78 + this.driftAmount * 1.26) *
                 deltaSeconds;
             yawRate +=
                 steer *
-                (0.48 + this.driftAmount * 1.18);
+                (0.84 + this.driftAmount * 1.32);
         } else {
-            const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.8 : 3.3;
+            const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.2 : 2.4;
             this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * releaseSpeed);
         }
 
         const baseLateralGrip =
             this.currentTuning.drivetrain === 'AWD'
-                ? 7.2
+                ? 6.9
                 : this.currentTuning.drivetrain === 'FWD'
-                ? 7.8
-                : 6.0;
-        const driftGripScale = THREE.MathUtils.lerp(1, 0.22, this.driftAmount);
-        const handbrakeGripScale = THREE.MathUtils.lerp(1, 0.4, handbrake);
+                ? 7.4
+                : 5.6;
+        const driftGripScale = THREE.MathUtils.lerp(1, 0.14, this.driftAmount);
+        const handbrakeGripScale =
+            this.currentTuning.drivetrain === 'RWD'
+                ? THREE.MathUtils.lerp(1, 0.24, handbrake)
+                : THREE.MathUtils.lerp(1, 0.45, handbrake);
         const damping = baseLateralGrip * driftGripScale * handbrakeGripScale;
         this.lateralSpeed = THREE.MathUtils.lerp(
             this.lateralSpeed,

@@ -17,6 +17,7 @@ export type CarPerformanceReference = {
 
 export type CarRaceConfig = {
     visualForwardAxis?: 'positiveZ' | 'negativeZ';
+    groundOffsetMeters?: number;
     wheelNodeMap?: {
         frontLeft?: string[];
         frontRight?: string[];
@@ -53,6 +54,7 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.75,
         race: {
             visualForwardAxis: 'positiveZ',
+            groundOffsetMeters: -0.01,
             wheelNodeMap: {
                 candidates: ['rim', 'rim1', 'tire_f', 'tire_r'],
             },
@@ -245,7 +247,14 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.98,
         race: {
             visualForwardAxis: 'positiveZ',
+            groundOffsetMeters: -0.012,
             drivetrain: 'AWD',
+            wheelNodeMap: {
+                frontLeft: ['316_black_0'],
+                frontRight: ['356_black_0'],
+                rearLeft: ['340_black_0'],
+                rearRight: ['348_black_0'],
+            },
             topSpeedKph: 208,
             zeroToHundredSec: 5.3,
             massKg: 1968,
