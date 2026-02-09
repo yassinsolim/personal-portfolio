@@ -8,6 +8,8 @@ const DEFAULT_SAMPLES = 1200;
 const DEFAULT_WIDTH = 36;
 const ROOT_MARKER = 'nordschleifeTrackRoot';
 const CENTER_DASH_WIDTH = 1.15;
+const START_PAD_EXTRA_WIDTH_SCALE = 0.58;
+const START_PAD_BLEND = 0.085;
 
 type TrackAssetData = {
     name?: string;
@@ -238,6 +240,7 @@ export default class NordschleifeTrack {
 
             curve.getPointAt(t, point);
             curve.getTangentAt(t, tangent).normalize();
+            const widthScale = this.getStartPadWidthScale(t);
 
             side.crossVectors(normal, tangent);
             if (side.lengthSq() < 1e-6) {
@@ -256,11 +259,11 @@ export default class NordschleifeTrack {
 
             outer
                 .copy(point)
-                .addScaledVector(side, halfWidth * outerFactor)
+                .addScaledVector(side, halfWidth * widthScale * outerFactor)
                 .addScaledVector(normal, elevationOffset);
             inner
                 .copy(point)
-                .addScaledVector(side, halfWidth * innerFactor)
+                .addScaledVector(side, halfWidth * widthScale * innerFactor)
                 .addScaledVector(normal, elevationOffset);
 
             vertices.push(outer.x, outer.y, outer.z, inner.x, inner.y, inner.z);
@@ -476,6 +479,7 @@ export default class NordschleifeTrack {
 
             curve.getPointAt(t, point);
             curve.getTangentAt(t, tangent).normalize();
+            const widthScale = this.getStartPadWidthScale(t);
 
             side.crossVectors(normal, tangent);
             if (side.lengthSq() < 1e-6) {
@@ -492,8 +496,8 @@ export default class NordschleifeTrack {
             normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
             side.crossVectors(normal, tangent).normalize();
 
-            left.copy(point).addScaledVector(side, halfWidth);
-            right.copy(point).addScaledVector(side, -halfWidth);
+            left.copy(point).addScaledVector(side, halfWidth * widthScale);
+            right.copy(point).addScaledVector(side, -halfWidth * widthScale);
 
             vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
 
@@ -527,6 +531,16 @@ export default class NordschleifeTrack {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         return geometry;
+    }
+
+    getStartPadWidthScale(t: number) {
+        const wrappedDistance = Math.min(t, 1 - t);
+        const normalized = THREE.MathUtils.clamp(
+            1 - wrappedDistance / START_PAD_BLEND,
+            0,
+            1
+        );
+        return 1 + START_PAD_EXTRA_WIDTH_SCALE * normalized * normalized;
     }
 
     getOffset(offset?: number[]) {
