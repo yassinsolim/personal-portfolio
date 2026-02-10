@@ -420,8 +420,7 @@ export default class RaceVehicle {
             const box = new THREE.Box3().setFromObject(child);
             if (box.isEmpty()) return;
             box.getCenter(center);
-            model.worldToLocal(center);
-            center.applyQuaternion(model.quaternion);
+            this.toScaledModelSpace(center, model);
 
             if (this.matchesAnyHint(name, FRONT_HINTS)) {
                 frontSum += center.z;
@@ -575,8 +574,7 @@ export default class RaceVehicle {
                 if (!this.isWheelRadiusPlausible(radius)) continue;
 
                 box.getCenter(center);
-                model.worldToLocal(center);
-                center.applyQuaternion(model.quaternion);
+                this.toScaledModelSpace(center, model);
 
                 mappedWheels.push({
                     object: node,
@@ -623,8 +621,7 @@ export default class RaceVehicle {
             if (!this.isWheelRadiusPlausible(radius)) continue;
 
             box.getCenter(center);
-            model.worldToLocal(center);
-            center.applyQuaternion(model.quaternion);
+            this.toScaledModelSpace(center, model);
 
             candidateWheels.push({
                 object: node,
@@ -743,8 +740,7 @@ export default class RaceVehicle {
             if (!this.isWheelRadiusPlausible(radius)) return;
 
             box.getCenter(center);
-            model.worldToLocal(center);
-            center.applyQuaternion(model.quaternion);
+            this.toScaledModelSpace(center, model);
             const centerWorld = box.getCenter(new THREE.Vector3());
 
             if (Math.abs(centerWorld.x) < sideThreshold) return;
@@ -882,6 +878,13 @@ export default class RaceVehicle {
             return (sorted[middle - 1] + sorted[middle]) * 0.5;
         }
         return sorted[middle];
+    }
+
+    toScaledModelSpace(center: THREE.Vector3, model: THREE.Object3D) {
+        model.worldToLocal(center);
+        // Keep wheel centers in scaled model units so ride-height math is stable.
+        center.multiplyScalar(model.scale.x || 1);
+        center.applyQuaternion(model.quaternion);
     }
 
     isWheelRadiusPlausible(radius: number) {
