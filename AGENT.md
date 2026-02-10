@@ -87,10 +87,29 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - [x] Apply targeted fixes by subsystem + small commits.
   - [x] Validate with `npm.cmd run build` (pass after current edits).
   - [x] Validate interaction flow in running dev server and ensure no lingering open ports.
- - Notes:
-   - Added explicit wheel corner mappings for E92/F82 to avoid fallback misclassification.
-   - Steering sensitivity now reduced via max-angle + response scaling (removed extra yaw scaling).
-   - Automated browser regression run (Playwright + dev server) showed:
-     - no `pointerlock`/`setPointerCapture` runtime errors
-     - resumed throttle input remains responsive
-     - no lingering dev listener after teardown
+- Notes:
+  - Input + steering:
+    - single-source steering mapping corrected (`A=-1`, `D=+1`) in `DrivingInput`.
+    - steering sensitivity reduced with combined max-angle + response-rate scaling.
+  - Pointer lock + click stability:
+    - fixed `requestPointerLock` call site to avoid illegal invocation.
+    - added pending-request timeout + expected-abort filtering.
+    - added safe `setPointerCapture` guard in `Camera` to suppress invalid-state spam.
+    - input reset dispatched on lock loss/blur/pause/request error.
+  - Vehicle + wheels:
+    - stronger wheel candidate filtering rejects `trim/glass/body` false positives.
+    - explicit Toyota wheel node map added; invalid rigs now hard-disable wheel animation with warning.
+    - wheel-contact bottom used for ride placement with per-car ground offsets.
+  - Visual parity:
+    - race colors aligned for AMG One (`0x050f2f`) and Toyota Crown (`0x8f9296`).
+  - Track:
+    - start segment widened for both visual + collider geometry with blended width scale.
+  - Automated interaction check (`Playwright`, dev server on `127.0.0.1:8120`) produced:
+    - `pointerLockRuntimeIssues: []`
+    - `pageErrors: []`
+    - `pauseOpened: true`
+    - `resumedSpeed: 5 km/h`
+    - `blurRecoverySpeed: 11 km/h`
+    - only wheel warning: AMG One lacks 4 independent wheel nodes, wheel animation disabled by design.
+  - Cleanup:
+    - verified no `node/npm` dev processes and no listeners on port `8120` after test teardown.
