@@ -18,6 +18,7 @@ export type CarPerformanceReference = {
 export type CarRaceConfig = {
     visualForwardAxis?: 'positiveZ' | 'negativeZ';
     groundOffsetMeters?: number;
+    cameraFollowDistanceOffsetMeters?: number;
     wheelNodeMap?: {
         frontLeft?: string[];
         frontRight?: string[];
@@ -171,10 +172,18 @@ export const carOptions: CarOption[] = [
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
-                frontLeft: ['3dwheel front l'],
-                frontRight: ['3dwheel front r'],
-                rearLeft: ['3dwheel rear l'],
-                rearRight: ['3dwheel rear r'],
+                frontLeft: [
+                    'polySurface1_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
+                ],
+                frontRight: [
+                    'polySurface237_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
+                ],
+                rearLeft: [
+                    'polySurface473_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
+                ],
+                rearRight: [
+                    'polySurface671_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
+                ],
             },
             drivetrain: 'RWD',
             topSpeedKph: 290,
@@ -247,12 +256,13 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.98,
         race: {
             visualForwardAxis: 'positiveZ',
-            groundOffsetMeters: -0.012,
+            groundOffsetMeters: 0.4,
+            cameraFollowDistanceOffsetMeters: 3.8,
             drivetrain: 'AWD',
             wheelNodeMap: {
                 frontLeft: ['316_black_0'],
-                frontRight: ['356_black_0'],
-                rearLeft: ['340_black_0'],
+                frontRight: ['340_black_0'],
+                rearLeft: ['356_black_0'],
                 rearRight: ['348_black_0'],
             },
             topSpeedKph: 208,

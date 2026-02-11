@@ -22,7 +22,7 @@ const LONG_AXIS_THRESHOLD = 1.12;
 const DRIFT_ENTRY_SPEED_MPS = 7.5;
 const DRIFT_RELEASE_SPEED_MPS = 4.5;
 const SMOKE_SPAWN_INTERVAL = 0.03;
-const STEERING_SENSITIVITY_SCALE = 0.22;
+const STEERING_SENSITIVITY_SCALE = 0.132;
 const AMG_ONE_ID = 'amg-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
@@ -30,7 +30,7 @@ const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =
-    /(wheel|tire|tyre|rim|rubber|michelin|hub|disk|brake)/i;
+    /(wheel|tire|tyre|rim|rubber|michelin)/i;
 const NON_WHEEL_NAME_HINT_REGEX =
     /(trim|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
@@ -61,7 +61,10 @@ type WheelRig = {
     left: boolean;
     mappedCorner: boolean;
     localCenter: THREE.Vector3;
+    spinCenter: THREE.Vector3;
+    basePosition: THREE.Vector3;
     baseQuaternion: THREE.Quaternion;
+    spinAxis: THREE.Vector3;
     spinSign: number;
     radius: number;
 };
@@ -120,9 +123,12 @@ export default class RaceVehicle {
     tmpVectorA: THREE.Vector3;
     tmpVectorB: THREE.Vector3;
     tmpVectorC: THREE.Vector3;
+    tmpVectorD: THREE.Vector3;
     tmpMatrix: THREE.Matrix4;
     tmpQuatA: THREE.Quaternion;
     tmpQuatB: THREE.Quaternion;
+    tmpQuatC: THREE.Quaternion;
+    tmpQuatD: THREE.Quaternion;
 
     constructor(parent: THREE.Object3D, track: NordschleifeTrack) {
         this.application = new Application();
@@ -186,9 +192,12 @@ export default class RaceVehicle {
         this.tmpVectorA = new THREE.Vector3();
         this.tmpVectorB = new THREE.Vector3();
         this.tmpVectorC = new THREE.Vector3();
+        this.tmpVectorD = new THREE.Vector3();
         this.tmpMatrix = new THREE.Matrix4();
         this.tmpQuatA = new THREE.Quaternion();
         this.tmpQuatB = new THREE.Quaternion();
+        this.tmpQuatC = new THREE.Quaternion();
+        this.tmpQuatD = new THREE.Quaternion();
 
         this.setCarTuning(this.currentCarId);
         this.setupCarSwitcher();
@@ -457,12 +466,24 @@ export default class RaceVehicle {
         const rearAverage =
             mappedRear.reduce((sum, wheel) => sum + wheel.localCenter.z, 0) /
             mappedRear.length;
+        const frontAverageX =
+            mappedFront.reduce((sum, wheel) => sum + wheel.localCenter.x, 0) /
+            mappedFront.length;
+        const rearAverageX =
+            mappedRear.reduce((sum, wheel) => sum + wheel.localCenter.x, 0) /
+            mappedRear.length;
+        const longitudinalDeltaZ = frontAverage - rearAverage;
+        const longitudinalDeltaX = frontAverageX - rearAverageX;
+        const dominantDelta =
+            Math.abs(longitudinalDeltaZ) >= Math.abs(longitudinalDeltaX)
+                ? longitudinalDeltaZ
+                : longitudinalDeltaX;
 
         if (expectedForward === 'positiveZ') {
-            return frontAverage < rearAverage;
+            return dominantDelta < 0;
         }
 
-        return frontAverage > rearAverage;
+        return dominantDelta > 0;
     }
 
     filterValidWheelRig(carId: string, wheels: WheelRig[]) {
@@ -520,6 +541,12 @@ export default class RaceVehicle {
         return minBottom;
     }
 
+    getWheelSpinCenter(node: THREE.Object3D, box: THREE.Box3) {
+        const centerWorld = box.getCenter(new THREE.Vector3());
+        if (!node.parent) return centerWorld;
+        return node.parent.worldToLocal(centerWorld.clone());
+    }
+
     buildMappedWheelRig(
         model: THREE.Object3D,
         wheelNodeMap?: WheelNodeMap
@@ -570,7 +597,9 @@ export default class RaceVehicle {
                 const box = new THREE.Box3().setFromObject(node);
                 if (box.isEmpty()) continue;
                 box.getSize(size);
-                const radius = Math.max(size.x, size.y, size.z) * 0.5;
+                const radius = this.normalizeWheelRadius(
+                    Math.max(size.x, size.y, size.z) * 0.5
+                );
                 if (!this.isWheelRadiusPlausible(radius)) continue;
 
                 box.getCenter(center);
@@ -583,7 +612,10 @@ export default class RaceVehicle {
                     left: corner.left,
                     mappedCorner: true,
                     localCenter: center.clone(),
+                    spinCenter: this.getWheelSpinCenter(node, box),
+                    basePosition: node.position.clone(),
                     baseQuaternion: node.quaternion.clone(),
+                    spinAxis: new THREE.Vector3(1, 0, 0),
                     spinSign: corner.left ? 1 : -1,
                     radius,
                 });
@@ -597,6 +629,7 @@ export default class RaceVehicle {
                     wheel.left = wheel.localCenter.x <= medianX;
                     wheel.spinSign = wheel.left ? 1 : -1;
                 });
+                this.configureWheelSpinAxes(mappedWheels);
                 return mappedWheels;
             }
         }
@@ -617,7 +650,9 @@ export default class RaceVehicle {
             const box = new THREE.Box3().setFromObject(node);
             if (box.isEmpty()) continue;
             box.getSize(size);
-            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            const radius = this.normalizeWheelRadius(
+                Math.max(size.x, size.y, size.z) * 0.5
+            );
             if (!this.isWheelRadiusPlausible(radius)) continue;
 
             box.getCenter(center);
@@ -630,7 +665,10 @@ export default class RaceVehicle {
                 left: false,
                 mappedCorner: false,
                 localCenter: center.clone(),
+                spinCenter: this.getWheelSpinCenter(node, box),
+                basePosition: node.position.clone(),
                 baseQuaternion: node.quaternion.clone(),
+                spinAxis: new THREE.Vector3(1, 0, 0),
                 spinSign: center.x <= 0 ? 1 : -1,
                 radius,
             });
@@ -664,6 +702,7 @@ export default class RaceVehicle {
         if (combined.length < 4) {
             return [];
         }
+        this.configureWheelSpinAxes(combined);
         return combined;
     }
 
@@ -707,6 +746,7 @@ export default class RaceVehicle {
             {
                 object: THREE.Object3D;
                 center: THREE.Vector3;
+                spinCenter: THREE.Vector3;
                 radius: number;
                 frontHint: boolean;
                 rearHint: boolean;
@@ -736,7 +776,9 @@ export default class RaceVehicle {
             if (box.isEmpty()) return;
 
             box.getSize(size);
-            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            const radius = this.normalizeWheelRadius(
+                Math.max(size.x, size.y, size.z) * 0.5
+            );
             if (!this.isWheelRadiusPlausible(radius)) return;
 
             box.getCenter(center);
@@ -753,6 +795,7 @@ export default class RaceVehicle {
             candidates.set(node.uuid, {
                 object: node,
                 center: center.clone(),
+                spinCenter: this.getWheelSpinCenter(node, box),
                 radius,
                 frontHint: this.matchesAnyHint(nodeName, FRONT_HINTS),
                 rearHint: this.matchesAnyHint(nodeName, REAR_HINTS),
@@ -811,7 +854,10 @@ export default class RaceVehicle {
                 left,
                 mappedCorner: false,
                 localCenter: candidate.center.clone(),
+                spinCenter: candidate.spinCenter.clone(),
+                basePosition: candidate.object.position.clone(),
                 baseQuaternion: candidate.object.quaternion.clone(),
+                spinAxis: new THREE.Vector3(1, 0, 0),
                 spinSign: left ? 1 : -1,
                 radius: candidate.radius,
             };
@@ -824,6 +870,7 @@ export default class RaceVehicle {
         const combined = [...frontAxle, ...rearAxle];
 
         if (combined.length >= 4) {
+            this.configureWheelSpinAxes(combined);
             return combined;
         }
         return [];
@@ -851,10 +898,63 @@ export default class RaceVehicle {
             .slice(0, 2);
     }
 
+    configureWheelSpinAxes(wheels: WheelRig[]) {
+        if (!wheels.length) return;
+
+        const modelRight = new THREE.Vector3(1, 0, 0);
+        const modelForward = new THREE.Vector3(0, 0, 1);
+        const bottomDirection = new THREE.Vector3(0, -1, 0);
+        const axisCandidates = [
+            new THREE.Vector3(1, 0, 0),
+            new THREE.Vector3(0, 1, 0),
+            new THREE.Vector3(0, 0, 1),
+        ];
+        const worldAxis = new THREE.Vector3();
+        const bestWorldAxis = new THREE.Vector3();
+        const contactVelocity = new THREE.Vector3();
+
+        wheels.forEach((wheel) => {
+            if (!wheel.spinAxis) {
+                wheel.spinAxis = new THREE.Vector3(1, 0, 0);
+            }
+            let bestAxis = axisCandidates[0];
+            let bestAlignment = -Infinity;
+
+            axisCandidates.forEach((axis) => {
+                worldAxis.copy(axis).applyQuaternion(wheel.baseQuaternion).normalize();
+                const alignment = Math.abs(worldAxis.dot(modelRight));
+                if (alignment > bestAlignment) {
+                    bestAlignment = alignment;
+                    bestAxis = axis;
+                    bestWorldAxis.copy(worldAxis);
+                }
+            });
+
+            wheel.spinAxis.copy(bestAxis).normalize();
+            let spinSign = wheel.left ? 1 : -1;
+
+            if (bestAlignment > 0.2) {
+                contactVelocity
+                    .crossVectors(bestWorldAxis, bottomDirection)
+                    .normalize();
+                if (contactVelocity.lengthSq() > 1e-8) {
+                    spinSign = contactVelocity.dot(modelForward) <= 0 ? 1 : -1;
+                }
+            }
+
+            wheel.spinSign = spinSign;
+        });
+    }
+
     getDetectedWheelRadius(wheels: WheelRig[]) {
         if (!wheels.length) return this.currentTuning.wheelRadiusMeters;
         const average =
             wheels.reduce((sum, wheel) => sum + wheel.radius, 0) / wheels.length;
+        const tunedRadius = this.currentTuning.wheelRadiusMeters;
+        const delta = Math.abs(average - tunedRadius);
+        if (delta > tunedRadius * 0.35) {
+            return tunedRadius;
+        }
         return THREE.MathUtils.clamp(average, 0.24, 0.46);
     }
 
@@ -889,6 +989,17 @@ export default class RaceVehicle {
 
     isWheelRadiusPlausible(radius: number) {
         return radius >= 0.12 && radius <= 0.8;
+    }
+
+    normalizeWheelRadius(radius: number) {
+        const tunedRadius = this.currentTuning.wheelRadiusMeters;
+        if (!Number.isFinite(radius) || radius <= 0) {
+            return tunedRadius;
+        }
+        if (Math.abs(radius - tunedRadius) > tunedRadius * 0.35) {
+            return tunedRadius;
+        }
+        return radius;
     }
 
     isWheelCandidateMesh(mesh: THREE.Mesh, meshName: string) {
@@ -1023,6 +1134,7 @@ export default class RaceVehicle {
         this.wheelRig = wheelRig;
         this.frontWheelRig = wheelRig.filter((wheel) => wheel.front);
         this.rearWheelRig = wheelRig.filter((wheel) => wheel.rear);
+        this.configureWheelSpinAxes(this.wheelRig);
 
         this.wheelRadius =
             Number(model.userData.raceWheelRadius) || this.currentTuning.wheelRadiusMeters;
@@ -1039,6 +1151,7 @@ export default class RaceVehicle {
 
     resetWheelVisuals() {
         this.wheelRig.forEach((wheel) => {
+            wheel.object.position.copy(wheel.basePosition);
             wheel.object.quaternion.copy(wheel.baseQuaternion);
         });
     }
@@ -1356,6 +1469,21 @@ export default class RaceVehicle {
             .projectOnPlane(this.surfaceNormal)
             .normalize();
 
+        if (this.driftAmount > 0.04 && this.velocity.lengthSq() > 9) {
+            this.tmpVectorC
+                .copy(this.velocity)
+                .projectOnPlane(this.surfaceNormal)
+                .normalize();
+            if (this.tmpVectorC.lengthSq() > 0.0001) {
+                const driftAlignment = THREE.MathUtils.clamp(
+                    this.driftAmount * 0.2,
+                    0,
+                    0.2
+                );
+                this.tmpVectorA.lerp(this.tmpVectorC, driftAlignment).normalize();
+            }
+        }
+
         this.tmpVectorB
             .crossVectors(this.surfaceNormal, this.tmpVectorA)
             .normalize();
@@ -1455,16 +1583,29 @@ export default class RaceVehicle {
 
         this.wheelRig.forEach((wheel) => {
             const spinQuaternion = this.tmpQuatB.setFromAxisAngle(
-                new THREE.Vector3(1, 0, 0),
+                wheel.spinAxis,
                 this.wheelSpinAngle * wheel.spinSign
             );
 
+            wheel.object.position.copy(wheel.basePosition);
             wheel.object.quaternion.copy(wheel.baseQuaternion);
             if (wheel.front) {
-                wheel.object.quaternion.multiply(steerQuaternion);
+                this.rotateWheelLocalAroundCenter(wheel, steerQuaternion);
             }
-            wheel.object.quaternion.multiply(spinQuaternion);
+            this.rotateWheelLocalAroundCenter(wheel, spinQuaternion);
         });
+    }
+
+    rotateWheelLocalAroundCenter(wheel: WheelRig, localRotation: THREE.Quaternion) {
+        this.tmpQuatC.copy(wheel.object.quaternion);
+        wheel.object.quaternion.multiply(localRotation);
+        this.tmpQuatD
+            .copy(wheel.object.quaternion)
+            .multiply(this.tmpQuatC.invert());
+        wheel.object.position
+            .sub(wheel.spinCenter)
+            .applyQuaternion(this.tmpQuatD)
+            .add(wheel.spinCenter);
     }
 
     updateDriftSmoke(deltaSeconds: number) {
@@ -1527,6 +1668,10 @@ export default class RaceVehicle {
         const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.carPivot.quaternion);
         const anchorHeight = Math.max(0.8, this.bodySize.y * 0.58);
         return this.position.clone().addScaledVector(up, anchorHeight);
+    }
+
+    getCameraFollowDistanceOffset() {
+        return this.currentTuning.cameraFollowDistanceOffsetMeters || 0;
     }
 
     getCameraBodyRadius() {
