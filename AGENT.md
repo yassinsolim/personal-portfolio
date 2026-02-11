@@ -100,6 +100,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
     - stronger wheel candidate filtering rejects `trim/glass/body` false positives.
     - explicit Toyota wheel node map added; invalid rigs now hard-disable wheel animation with warning.
     - wheel-contact bottom used for ride placement with per-car ground offsets.
+    - fixed scaled-space wheel-center normalization to prevent exaggerated ride offset from very large source model coordinates.
   - Visual parity:
     - race colors aligned for AMG One (`0x050f2f`) and Toyota Crown (`0x8f9296`).
   - Track:
@@ -111,5 +112,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
     - `resumedSpeed: 5 km/h`
     - `blurRecoverySpeed: 11 km/h`
     - only wheel warning: AMG One lacks 4 independent wheel nodes, wheel animation disabled by design.
+  - Toyota regression retest:
+    - repeated Toyota race-mode runs now show visible car mesh in chase camera after switch/drive.
+    - Toyota remains heavy to load in dev due very large GLB (`~67.7 MB`), so first switch can lag.
   - Cleanup:
     - verified no `node/npm` dev processes and no listeners on port `8120` after test teardown.
