@@ -310,11 +310,14 @@ export default class RaceChaseCamera {
         this.tmpForward.applyAxisAngle(this.tmpUp, this.yawOffset).normalize();
 
         this.tmpAnchor.copy(this.vehicle.getCameraAnchor());
+        const followDistanceOffset = this.vehicle.getCameraFollowDistanceOffset();
+        const minDistance = MIN_CAMERA_DISTANCE + followDistanceOffset;
+        const maxDistance = MAX_CAMERA_DISTANCE + followDistanceOffset;
 
         const armDistance = THREE.MathUtils.clamp(
-            9.4 + speed * 0.12,
-            MIN_CAMERA_DISTANCE,
-            MAX_CAMERA_DISTANCE
+            9.4 + speed * 0.12 + followDistanceOffset,
+            minDistance,
+            maxDistance
         );
         const armHeight = THREE.MathUtils.clamp(4 + speed * 0.03, 4, 8);
 
@@ -335,13 +338,13 @@ export default class RaceChaseCamera {
         if (distance > 0.0001) {
             this.tmpToCamera.normalize();
             const safeDistance = Math.max(
-                MIN_CAMERA_DISTANCE,
+                minDistance,
                 this.vehicle.getCameraBodyRadius() + CAMERA_BODY_CLEARANCE
             );
             const clampedDistance = THREE.MathUtils.clamp(
                 distance,
                 safeDistance,
-                MAX_CAMERA_DISTANCE
+                maxDistance
             );
             targetPosition.copy(this.tmpAnchor).addScaledVector(
                 this.tmpToCamera,
@@ -356,7 +359,7 @@ export default class RaceChaseCamera {
         this.tmpToCamera.subVectors(this.smoothPosition, this.tmpAnchor);
         const smoothDistance = this.tmpToCamera.length();
         const minSafeDistance = Math.max(
-            MIN_CAMERA_DISTANCE,
+            minDistance,
             this.vehicle.getCameraBodyRadius() + CAMERA_BODY_CLEARANCE_SMOOTH
         );
         if (smoothDistance > 0.0001 && smoothDistance < minSafeDistance) {
