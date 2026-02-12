@@ -8,8 +8,9 @@ const DEFAULT_SAMPLES = 1200;
 const DEFAULT_WIDTH = 36;
 const ROOT_MARKER = 'nordschleifeTrackRoot';
 const CENTER_DASH_WIDTH = 1.15;
-const START_PAD_EXTRA_WIDTH_SCALE = 0.58;
-const START_PAD_BLEND = 0.085;
+const START_PAD_EXTRA_WIDTH_SCALE = 2.4;
+const START_PAD_BLEND = 0.18;
+const TRACK_LENGTH_SCALE = 0.475;
 
 type TrackAssetData = {
     name?: string;
@@ -105,6 +106,14 @@ export default class NordschleifeTrack {
                     point[2] + offset.z
                 )
         );
+        const center = new THREE.Vector3();
+        points.forEach((point) => center.add(point));
+        center.multiplyScalar(1 / Math.max(1, points.length));
+
+        points.forEach((point) => {
+            point.x = center.x + (point.x - center.x) * TRACK_LENGTH_SCALE;
+            point.z = center.z + (point.z - center.z) * TRACK_LENGTH_SCALE;
+        });
 
         return new THREE.CatmullRomCurve3(
             points,
