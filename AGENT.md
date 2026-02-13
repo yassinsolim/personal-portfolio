@@ -78,42 +78,42 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Full interactive manual driving validation (pointer lock, control feel, drift tuning,
   audio taste) still requires browser-in-the-loop checks.
 
-## Focused Bugfix Pass (Current)
-- Scope: pointer-lock uncaught error, steering direction/sensitivity, wheel rig correctness,
-  chase camera clipping + wobble, and track readability (center dash/asphalt pass).
-- In progress checks:
-  - [x] Root-cause inspection on pointer-lock promise rejection path.
-  - [x] Root-cause inspection on wheel fallback false positives (`rim` matched `trim`).
-  - [x] Apply targeted fixes by subsystem + small commits.
-  - [x] Validate with `npm.cmd run build` (pass after current edits).
-  - [x] Validate interaction flow in running dev server and ensure no lingering open ports.
-- Notes:
-  - Input + steering:
-    - single-source steering mapping corrected (`A=-1`, `D=+1`) in `DrivingInput`.
-    - steering sensitivity reduced with combined max-angle + response-rate scaling.
-  - Pointer lock + click stability:
-    - fixed `requestPointerLock` call site to avoid illegal invocation.
-    - added pending-request timeout + expected-abort filtering.
-    - added safe `setPointerCapture` guard in `Camera` to suppress invalid-state spam.
-    - input reset dispatched on lock loss/blur/pause/request error.
-  - Vehicle + wheels:
-    - stronger wheel candidate filtering rejects `trim/glass/body` false positives.
-    - explicit Toyota wheel node map added; invalid rigs now hard-disable wheel animation with warning.
-    - wheel-contact bottom used for ride placement with per-car ground offsets.
-    - fixed scaled-space wheel-center normalization to prevent exaggerated ride offset from very large source model coordinates.
-  - Visual parity:
-    - race colors aligned for AMG One (`0x050f2f`) and Toyota Crown (`0x8f9296`).
-  - Track:
-    - start segment widened for both visual + collider geometry with blended width scale.
-  - Automated interaction check (`Playwright`, dev server on `127.0.0.1:8120`) produced:
-    - `pointerLockRuntimeIssues: []`
-    - `pageErrors: []`
-    - `pauseOpened: true`
-    - `resumedSpeed: 5 km/h`
-    - `blurRecoverySpeed: 11 km/h`
-    - only wheel warning: AMG One lacks 4 independent wheel nodes, wheel animation disabled by design.
-  - Toyota regression retest:
-    - repeated Toyota race-mode runs now show visible car mesh in chase camera after switch/drive.
-    - Toyota remains heavy to load in dev due very large GLB (`~67.7 MB`), so first switch can lag.
-  - Cleanup:
-    - verified no `node/npm` dev processes and no listeners on port `8120` after test teardown.
+## Focused Bugfix Pass (Verified 2026-02-08)
+- Scope: steering sign/sensitivity, wheel rig/spin safety, Toyota camera/grounding/orientation,
+  drift orientation while preserving smoke+squeal, start area width, lap length scaling, and
+  pointer/click runtime stability.
+- Code status:
+  - Steering source-of-truth preserved (`A=-1`, `D=+1`) with sensitivity scale `0.132`
+    (about 40% down from `0.22`).
+  - Wheel rig now uses explicit car mappings where needed (Toyota + AMG C63s), per-wheel spin
+    axis/sign resolution, and hard fail-safe disable when 4 valid wheels are not resolved.
+  - Toyota-specific tuning: `cameraFollowDistanceOffsetMeters: 3.8`, `groundOffsetMeters: 0.4`,
+    and explicit FL/FR/RL/RR wheel node mapping.
+  - Drift system remains active; smoke/audio retained; visual orientation gets a small
+    velocity-alignment blend during high drift.
+  - Start area widened (`START_PAD_EXTRA_WIDTH_SCALE=2.4`, `START_PAD_BLEND=0.18`) and effective
+    lap length reduced by scaling curve X/Z around center (`TRACK_LENGTH_SCALE=0.475`).
+  - Runtime debug hook exposes `window.Application` only under `?raceDebug=1`.
+- Verified validation:
+  - Build: `npm run build` passed (webpack size warnings only).
+  - Automated runtime check (`Playwright` on `http://127.0.0.1:8120/?raceDebug=1`) reported:
+    - Steering yaw delta: `A=-0.1346`, `D=+0.1377`
+    - Wheel checks: E92/C63 507/C63s/F82/Toyota each resolve 4 wheels, forward/reverse spin
+      directions are opposite
+    - Fail-safe warning only for AMG One (expected): wheel animation disabled due missing
+      4-wheel rig
+    - Toyota camera distance delta vs AMG One: `+3.636m`
+    - Wheel grounding avg delta to track: Toyota `+0.00317m`, E92 `+0.00199m`
+    - Drift telemetry: `maxDriftIntensity=1`, `smokeParticleCount=62`, `tireGain=0.2728`
+    - Track ratio: `effective/raw=0.501675`
+    - Lap flow check: `pausedAfterLap=true`, `pendingLapTimeMs=36000`
+    - Runtime stability: `pageErrors=0`, pointer-lock abort count `0`,
+      `setPointerCapture` error count `0`
+- Evidence artifacts:
+  - `.tmp-validation/steering_A.png`
+  - `.tmp-validation/steering_D.png`
+  - `.tmp-validation/toyota_camera_grounding.png`
+  - `.tmp-validation/start_pad_wide.png`
+  - `.tmp-validation/drift_state.png`
+- Residual non-blocking log noise:
+  - One generic `404` resource load error remains outside race pointer-lock/click flow.
