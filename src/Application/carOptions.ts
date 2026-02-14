@@ -133,10 +133,10 @@ export const carOptions: CarOption[] = [
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
-                frontLeft: ['3dwheel front l'],
-                frontRight: ['3dwheel front r'],
-                rearLeft: ['3dwheel rear l'],
-                rearRight: ['3dwheel rear r'],
+                frontLeft: ['3DWheel_Front_L'],
+                frontRight: ['3DWheel_Front_R'],
+                rearLeft: ['3DWheel_Rear_L'],
+                rearRight: ['3DWheel_Rear_R'],
             },
             drivetrain: 'RWD',
             topSpeedKph: 280,
@@ -261,8 +261,8 @@ export const carOptions: CarOption[] = [
             drivetrain: 'AWD',
             wheelNodeMap: {
                 frontLeft: ['316_black_0'],
-                frontRight: ['340_black_0'],
-                rearLeft: ['356_black_0'],
+                frontRight: ['356_black_0'],
+                rearLeft: ['340_black_0'],
                 rearRight: ['348_black_0'],
             },
             topSpeedKph: 208,
