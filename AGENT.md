@@ -117,3 +117,28 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `.tmp-validation/drift_state.png`
 - Residual non-blocking log noise:
   - One generic `404` resource load error remains outside race pointer-lock/click flow.
+
+## Regression Fixes (Verified 2026-02-09)
+- Steering input source-of-truth is corrected in `src/Application/Racing/Input/DrivingInput.ts`:
+  `A -> -1` (left), `D -> +1` (right).
+- Wheel rig coordinate handling in `src/Application/Racing/Vehicle/RaceVehicle.ts` now keeps
+  wheel centers in model-local scaled space (no extra quaternion re-rotation), preventing
+  left/right and front/rear axis confusion on cars with non-standard wheel-node frames.
+- Wheel spin-axis solving in `src/Application/Racing/Vehicle/RaceVehicle.ts` now infers
+  lateral/longitudinal axes from wheel-rig geometry deltas and then resolves axis/sign in world
+  space; verified for:
+  - `amg-c63-507` (`3DWheel_Front/Rear_L/R`) forward rolling + reverse inversion
+  - `toyota-crown-platinum` (`316/356/340/348_black_0`) forward rolling + reverse inversion
+- Drift visual orientation stays active but is constrained to avoid wrong-way visual yaw:
+  - `DRIFT_VISUAL_MAX_ANGLE_RAD = 42deg`
+  - visual blend cap reduced to `0.45`
+  - smoke + tire squeal remain active during drift.
+- Validation artifacts:
+  - `.tmp-validation/runtime-results.json`
+  - `.tmp-validation/wheel-direction-check.json`
+  - `.tmp-validation/drift-orientation-check.json`
+  - `.tmp-validation/steering_A.png`
+  - `.tmp-validation/steering_D.png`
+  - `.tmp-validation/toyota_camera_grounding.png`
+  - `.tmp-validation/start_pad_wide.png`
+  - `.tmp-validation/drift_state.png`
