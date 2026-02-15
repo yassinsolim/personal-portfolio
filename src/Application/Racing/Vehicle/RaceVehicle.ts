@@ -21,9 +21,16 @@ const RAYCAST_DISTANCE = 1200;
 const LONG_AXIS_THRESHOLD = 1.12;
 const DRIFT_ENTRY_SPEED_MPS = 7.5;
 const DRIFT_RELEASE_SPEED_MPS = 4.5;
-const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(42);
+const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(54);
 const SMOKE_SPAWN_INTERVAL = 0.03;
 const STEERING_SENSITIVITY_SCALE = 0.132;
+const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
+const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
+const LOW_SPEED_GROUNDING_BLEND_SPEED_MPS = 10;
+const LOW_SPEED_GROUNDING_LERP_MIN = 3.5;
+const LOW_SPEED_GROUNDING_LERP_MAX = 30;
+const LOW_SPEED_GROUNDING_MAX_STEP_MIN = 0.006;
+const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
 const AMG_ONE_ID = 'amg-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
@@ -350,12 +357,20 @@ export default class RaceVehicle {
             model.rotation.y += Math.PI;
         }
 
+        this.alignModelLongitudinalAxisFromWheelMap(
+            model,
+            option?.race.wheelNodeMap
+        );
+        model.updateMatrixWorld(true);
         this.alignVisualFrontToPositiveZ(model);
         model.updateMatrixWorld(true);
 
         let wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
-        if (this.shouldFlipModelForwardFromMappedWheels(wheelRig, option?.race.visualForwardAxis || 'positiveZ')) {
-            model.rotation.y += Math.PI;
+        for (let attempt = 0; attempt < 2; attempt++) {
+            const correctionY =
+                this.getModelForwardCorrectionFromMappedWheels(wheelRig);
+            if (Math.abs(correctionY) <= 1e-4) break;
+            model.rotation.y += correctionY;
             model.updateMatrixWorld(true);
             wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
         }
@@ -448,10 +463,91 @@ export default class RaceVehicle {
         }
     }
 
-    shouldFlipModelForwardFromMappedWheels(
-        wheels: WheelRig[],
-        expectedForward: 'positiveZ' | 'negativeZ'
+    alignModelLongitudinalAxisFromWheelMap(
+        model: THREE.Object3D,
+        wheelNodeMap?: WheelNodeMap
     ) {
+        if (!wheelNodeMap) return;
+
+        const explicitCorners: Array<{
+            front: boolean;
+            names?: string[];
+        }> = [
+            {
+                front: true,
+                names: wheelNodeMap.frontLeft,
+            },
+            {
+                front: true,
+                names: wheelNodeMap.frontRight,
+            },
+            {
+                front: false,
+                names: wheelNodeMap.rearLeft,
+            },
+            {
+                front: false,
+                names: wheelNodeMap.rearRight,
+            },
+        ];
+
+        const hasExplicitCorners = explicitCorners.some(
+            (entry) => (entry.names || []).length > 0
+        );
+        if (!hasExplicitCorners) return;
+
+        const mappedCenters: Array<{
+            front: boolean;
+            center: THREE.Vector3;
+        }> = [];
+        const center = new THREE.Vector3();
+        model.updateMatrixWorld(true);
+
+        for (const corner of explicitCorners) {
+            const node = this.findNodeByHints(model, corner.names || []);
+            if (!node) continue;
+
+            const box = new THREE.Box3().setFromObject(node);
+            if (box.isEmpty()) continue;
+
+            box.getCenter(center);
+            this.toScaledModelSpace(center, model);
+            mappedCenters.push({
+                front: corner.front,
+                center: center.clone(),
+            });
+        }
+
+        if (mappedCenters.length < 4) return;
+
+        const frontCenters = mappedCenters.filter((entry) => entry.front);
+        const rearCenters = mappedCenters.filter((entry) => !entry.front);
+        if (frontCenters.length < 2 || rearCenters.length < 2) return;
+
+        const frontAverageX =
+            frontCenters.reduce((sum, entry) => sum + entry.center.x, 0) /
+            frontCenters.length;
+        const rearAverageX =
+            rearCenters.reduce((sum, entry) => sum + entry.center.x, 0) /
+            rearCenters.length;
+        const frontAverageZ =
+            frontCenters.reduce((sum, entry) => sum + entry.center.z, 0) /
+            frontCenters.length;
+        const rearAverageZ =
+            rearCenters.reduce((sum, entry) => sum + entry.center.z, 0) /
+            rearCenters.length;
+        const longitudinalDeltaX = frontAverageX - rearAverageX;
+        const longitudinalDeltaZ = frontAverageZ - rearAverageZ;
+
+        if (Math.abs(longitudinalDeltaX) <= Math.abs(longitudinalDeltaZ) * 1.02) {
+            return;
+        }
+
+        // Rotate X-forward rigs so +Z remains the single steering/yaw frame.
+        model.rotation.y += longitudinalDeltaX >= 0 ? -Math.PI / 2 : Math.PI / 2;
+    }
+
+    getModelForwardCorrectionFromMappedWheels(wheels: WheelRig[]) {
         const mappedFront = wheels.filter(
             (wheel) => wheel.mappedCorner && wheel.front
         );
@@ -459,7 +555,7 @@ export default class RaceVehicle {
             (wheel) => wheel.mappedCorner && wheel.rear
         );
 
-        if (!mappedFront.length || !mappedRear.length) return false;
+        if (!mappedFront.length || !mappedRear.length) return 0;
 
         const frontAverage =
             mappedFront.reduce((sum, wheel) => sum + wheel.localCenter.z, 0) /
@@ -480,11 +576,15 @@ export default class RaceVehicle {
                 ? longitudinalDeltaZ
                 : longitudinalDeltaX;
 
-        if (expectedForward === 'positiveZ') {
-            return dominantDelta < 0;
+        if (Math.abs(longitudinalDeltaX) > Math.abs(longitudinalDeltaZ) * 1.02) {
+            return longitudinalDeltaX >= 0 ? -Math.PI / 2 : Math.PI / 2;
         }
 
-        return dominantDelta > 0;
+        if (dominantDelta < 0) {
+            return Math.PI;
+        }
+
+        return 0;
     }
 
     filterValidWheelRig(carId: string, wheels: WheelRig[]) {
@@ -600,7 +700,6 @@ export default class RaceVehicle {
                 box.getSize(size);
                 const radius = Math.max(size.x, size.y, size.z) * 0.5;
                 if (!this.isWheelRadiusPlausible(radius)) continue;
-                if (!this.isWheelRadiusMatchTuning(radius)) continue;
 
                 box.getCenter(center);
                 this.toScaledModelSpace(center, model);
@@ -622,7 +721,6 @@ export default class RaceVehicle {
             }
 
             if (mappedWheels.length >= 4) {
-                this.reclassifyWheelRigByGeometry(mappedWheels);
                 this.configureWheelSpinAxes(mappedWheels, model);
                 return mappedWheels;
             }
@@ -1195,7 +1293,11 @@ export default class RaceVehicle {
     }
 
     isWheelRadiusPlausible(radius: number) {
-        return radius >= 0.12 && radius <= 0.8;
+        return (
+            Number.isFinite(radius) &&
+            radius >= WHEEL_RADIUS_PLAUSIBLE_MIN &&
+            radius <= WHEEL_RADIUS_PLAUSIBLE_MAX
+        );
     }
 
     isWheelRadiusMatchTuning(radius: number) {
@@ -1570,9 +1672,9 @@ export default class RaceVehicle {
         if (driftEligible) {
             this.driftAmount = Math.min(1, this.driftAmount + deltaSeconds * 2.5);
             const driftSlipTarget =
-                steer * speed * (0.32 + this.driftAmount * 0.58);
+                steer * speed * (0.46 + this.driftAmount * 0.94);
             const driftSlipLerp = THREE.MathUtils.clamp(
-                deltaSeconds * (3.4 + this.driftAmount * 2.8),
+                deltaSeconds * (3.9 + this.driftAmount * 3.4),
                 0,
                 1
             );
@@ -1581,7 +1683,7 @@ export default class RaceVehicle {
                 driftSlipTarget,
                 driftSlipLerp
             );
-            yawRate += steer * (0.62 + this.driftAmount * 0.96);
+            yawRate += steer * (0.78 + this.driftAmount * 1.28);
         } else {
             const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.2 : 2.4;
             this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * releaseSpeed);
@@ -1593,10 +1695,10 @@ export default class RaceVehicle {
                 : this.currentTuning.drivetrain === 'FWD'
                 ? 7.4
                 : 5.6;
-        const driftGripScale = THREE.MathUtils.lerp(1, 0.14, this.driftAmount);
+        const driftGripScale = THREE.MathUtils.lerp(1, 0.09, this.driftAmount);
         const handbrakeGripScale =
             this.currentTuning.drivetrain === 'RWD'
-                ? THREE.MathUtils.lerp(1, 0.24, handbrake)
+                ? THREE.MathUtils.lerp(1, 0.2, handbrake)
                 : THREE.MathUtils.lerp(1, 0.45, handbrake);
         const damping = baseLateralGrip * driftGripScale * handbrakeGripScale;
         this.lateralSpeed = THREE.MathUtils.lerp(
@@ -1606,7 +1708,7 @@ export default class RaceVehicle {
         );
         const maxLateralSpeed = Math.max(
             2.2,
-            speed * THREE.MathUtils.lerp(0.38, 0.9, this.driftAmount)
+            speed * THREE.MathUtils.lerp(0.45, 1.12, this.driftAmount)
         );
         this.lateralSpeed = THREE.MathUtils.clamp(
             this.lateralSpeed,
@@ -1665,8 +1767,54 @@ export default class RaceVehicle {
         const hit = hits[0];
 
         if (hit) {
+            const wasGrounded = this.grounded;
             this.grounded = true;
-            this.position.y = hit.point.y + this.rideHeight;
+            const targetGroundY = hit.point.y + this.rideHeight;
+            if (!wasGrounded || deltaSeconds <= 0) {
+                this.position.y = targetGroundY;
+            } else {
+                const speedFactor = THREE.MathUtils.clamp(
+                    Math.abs(this.speedMps) / LOW_SPEED_GROUNDING_BLEND_SPEED_MPS,
+                    0,
+                    1
+                );
+                const groundLerp = THREE.MathUtils.clamp(
+                    deltaSeconds *
+                        THREE.MathUtils.lerp(
+                            LOW_SPEED_GROUNDING_LERP_MIN,
+                            LOW_SPEED_GROUNDING_LERP_MAX,
+                            speedFactor
+                        ),
+                    0,
+                    1
+                );
+                const smoothedTargetY = THREE.MathUtils.lerp(
+                    this.position.y,
+                    targetGroundY,
+                    groundLerp
+                );
+                const maxStepPerFrame = THREE.MathUtils.lerp(
+                    LOW_SPEED_GROUNDING_MAX_STEP_MIN,
+                    LOW_SPEED_GROUNDING_MAX_STEP_MAX,
+                    speedFactor
+                );
+                const maxStep =
+                    maxStepPerFrame *
+                    THREE.MathUtils.clamp(deltaSeconds * 60, 0.2, 2.5);
+                const nextDeltaY = THREE.MathUtils.clamp(
+                    smoothedTargetY - this.position.y,
+                    -maxStep,
+                    maxStep
+                );
+                this.position.y += nextDeltaY;
+
+                if (
+                    speedFactor >= 0.98 ||
+                    Math.abs(targetGroundY - this.position.y) <= 0.0015
+                ) {
+                    this.position.y = targetGroundY;
+                }
+            }
             this.verticalVelocity = 0;
 
             this.tmpVectorC
@@ -1710,9 +1858,9 @@ export default class RaceVehicle {
                     DRIFT_VISUAL_MAX_ANGLE_RAD
                 );
                 const driftVisualBlend = THREE.MathUtils.clamp(
-                    this.driftAmount * 0.45,
+                    this.driftAmount * 0.62,
                     0,
-                    0.45
+                    0.62
                 );
                 this.tmpVectorA
                     .applyAxisAngle(
