@@ -10,6 +10,8 @@ const ROOT_MARKER = 'nordschleifeTrackRoot';
 const CENTER_DASH_WIDTH = 1.15;
 const START_PAD_EXTRA_WIDTH_SCALE = 2.4;
 const START_PAD_BLEND = 0.18;
+const START_PAD_FLAT_BLEND = 0.03;
+const START_PAD_BANK_BLEND = 0.04;
 const TRACK_LENGTH_SCALE = 0.475;
 
 type TrackAssetData = {
@@ -114,6 +116,7 @@ export default class NordschleifeTrack {
             point.x = center.x + (point.x - center.x) * TRACK_LENGTH_SCALE;
             point.z = center.z + (point.z - center.z) * TRACK_LENGTH_SCALE;
         });
+        this.flattenStartPadElevation(points);
 
         return new THREE.CatmullRomCurve3(
             points,
@@ -121,6 +124,28 @@ export default class NordschleifeTrack {
             'centripetal',
             0.5
         );
+    }
+
+    flattenStartPadElevation(points: THREE.Vector3[]) {
+        if (points.length < 4) return;
+
+        const startSampleCount = Math.min(10, points.length);
+        const startY =
+            points.slice(0, startSampleCount).reduce((sum, point) => sum + point.y, 0) /
+            startSampleCount;
+        const lastIndex = Math.max(1, points.length - 1);
+
+        points.forEach((point, index) => {
+            const t = index / lastIndex;
+            const wrappedDistance = Math.min(t, 1 - t);
+            const normalized = THREE.MathUtils.clamp(
+                1 - wrappedDistance / START_PAD_FLAT_BLEND,
+                0,
+                1
+            );
+            const strength = normalized * normalized * (3 - 2 * normalized);
+            point.y = THREE.MathUtils.lerp(point.y, startY, strength);
+        });
     }
 
     createVisualTrackMesh(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
@@ -262,7 +287,10 @@ export default class NordschleifeTrack {
                 previousSide.copy(side);
             }
 
-            const bankAngle = Math.sin(t * Math.PI * 16) * 0.045;
+            const bankAngle =
+                Math.sin(t * Math.PI * 16) *
+                0.045 *
+                this.getBankStrengthAtDistance(t);
             normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
             side.crossVectors(normal, tangent).normalize();
 
@@ -397,7 +425,10 @@ export default class NordschleifeTrack {
                 previousSide.copy(side);
             }
 
-            const bankAngle = Math.sin(t * Math.PI * 16) * 0.045;
+            const bankAngle =
+                Math.sin(t * Math.PI * 16) *
+                0.045 *
+                this.getBankStrengthAtDistance(t);
             normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
             side.crossVectors(normal, tangent).normalize();
 
@@ -501,7 +532,10 @@ export default class NordschleifeTrack {
                 previousSide.copy(side);
             }
 
-            const bankAngle = Math.sin(t * Math.PI * 16) * 0.045;
+            const bankAngle =
+                Math.sin(t * Math.PI * 16) *
+                0.045 *
+                this.getBankStrengthAtDistance(t);
             normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
             side.crossVectors(normal, tangent).normalize();
 
@@ -550,6 +584,16 @@ export default class NordschleifeTrack {
             1
         );
         return 1 + START_PAD_EXTRA_WIDTH_SCALE * normalized * normalized;
+    }
+
+    getBankStrengthAtDistance(t: number) {
+        const wrappedDistance = Math.min(t, 1 - t);
+        const normalized = THREE.MathUtils.clamp(
+            wrappedDistance / START_PAD_BANK_BLEND,
+            0,
+            1
+        );
+        return normalized * normalized * (3 - 2 * normalized);
     }
 
     getOffset(offset?: number[]) {
