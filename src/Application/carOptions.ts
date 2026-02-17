@@ -176,18 +176,10 @@ export const carOptions: CarOption[] = [
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
-                frontLeft: [
-                    'polySurface1_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
-                ],
-                frontRight: [
-                    'polySurface237_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
-                ],
-                rearLeft: [
-                    'polySurface473_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
-                ],
-                rearRight: [
-                    'polySurface671_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0',
-                ],
+                frontLeft: ['3DWheel_Front_L'],
+                frontRight: ['3DWheel_Front_R'],
+                rearLeft: ['3DWheel_Rear_L'],
+                rearRight: ['3DWheel_Rear_R'],
             },
             drivetrain: 'RWD',
             topSpeedKph: 290,
@@ -264,10 +256,10 @@ export const carOptions: CarOption[] = [
             cameraFollowDistanceOffsetMeters: 3.8,
             drivetrain: 'AWD',
             wheelNodeMap: {
-                frontLeft: ['228_black_0'],
-                frontRight: ['268_black_0'],
-                rearLeft: ['220_black_0'],
-                rearRight: ['252_black_0'],
+                frontLeft: ['316', '316_black_0'],
+                frontRight: ['356', '356_black_0'],
+                rearLeft: ['340', '340_black_0'],
+                rearRight: ['348', '348_black_0'],
             },
             topSpeedKph: 208,
             zeroToHundredSec: 5.3,

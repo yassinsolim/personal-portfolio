@@ -24,6 +24,8 @@ const DRIFT_RELEASE_SPEED_MPS = 4.5;
 const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(54);
 const SMOKE_SPAWN_INTERVAL = 0.03;
 const STEERING_SENSITIVITY_SCALE = 0.132;
+const LOW_SPEED_STEER_BOOST = 1.25;
+const LOW_SPEED_STEER_BOOST_FADE_MPS = 18;
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
 const LOW_SPEED_GROUNDING_BLEND_SPEED_MPS = 10;
@@ -1639,7 +1641,18 @@ export default class RaceVehicle {
             this.currentTuning.maxSteerAngleDeg
         ) * STEERING_SENSITIVITY_SCALE;
         const steerScale = THREE.MathUtils.lerp(1, 0.5, speedFactor);
-        const targetSteerAngle = steer * maxSteerAngle * steerScale;
+        const lowSpeedBoostT = THREE.MathUtils.clamp(
+            speed / LOW_SPEED_STEER_BOOST_FADE_MPS,
+            0,
+            1
+        );
+        const lowSpeedSteerBoost = THREE.MathUtils.lerp(
+            LOW_SPEED_STEER_BOOST,
+            1,
+            lowSpeedBoostT
+        );
+        const targetSteerAngle =
+            steer * maxSteerAngle * steerScale * lowSpeedSteerBoost;
         const steerLerp = THREE.MathUtils.clamp(
             deltaSeconds * 12 * STEERING_SENSITIVITY_SCALE,
             0,
