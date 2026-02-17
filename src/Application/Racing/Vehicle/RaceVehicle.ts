@@ -21,7 +21,7 @@ const RAYCAST_DISTANCE = 1200;
 const LONG_AXIS_THRESHOLD = 1.12;
 const DRIFT_ENTRY_SPEED_MPS = 7.5;
 const DRIFT_RELEASE_SPEED_MPS = 4.5;
-const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(54);
+const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(68);
 const SMOKE_SPAWN_INTERVAL = 0.03;
 const STEERING_SENSITIVITY_SCALE = 0.132;
 const LOW_SPEED_STEER_BOOST = 1.25;
@@ -42,7 +42,8 @@ const WHEEL_NAME_HINT_REGEX =
 const WHEEL_MATERIAL_HINT_REGEX =
     /(wheel|tire|tyre|rim|rubber|michelin)/i;
 const NON_WHEEL_NAME_HINT_REGEX =
-    /(trim|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel)/i;
+    /(trim|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel|steering|brake|disc|disk|rotor|caliper|hub|suspension)/i;
+const BRAKE_WHEEL_PART_HINT_REGEX = /(brake|disc|disk|rotor|caliper|hub)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
 
@@ -506,7 +507,9 @@ export default class RaceVehicle {
         model.updateMatrixWorld(true);
 
         for (const corner of explicitCorners) {
-            const node = this.findNodeByHints(model, corner.names || []);
+            const matchedNode = this.findNodeByHints(model, corner.names || []);
+            if (!matchedNode) continue;
+            const node = this.resolveMappedWheelNode(matchedNode, model);
             if (!node) continue;
 
             const box = new THREE.Box3().setFromObject(node);
@@ -578,8 +581,9 @@ export default class RaceVehicle {
                 ? longitudinalDeltaZ
                 : longitudinalDeltaX;
 
+        // X-dominant rigs are handled before this phase. Keep this pass to front/back only.
         if (Math.abs(longitudinalDeltaX) > Math.abs(longitudinalDeltaZ) * 1.02) {
-            return longitudinalDeltaX >= 0 ? -Math.PI / 2 : Math.PI / 2;
+            return 0;
         }
 
         if (dominantDelta < 0) {
@@ -694,7 +698,9 @@ export default class RaceVehicle {
 
         if (hasExplicitCorners) {
             for (const corner of explicitCorners) {
-                const node = this.findNodeByHints(model, corner.names || []);
+                const matchedNode = this.findNodeByHints(model, corner.names || []);
+                if (!matchedNode) continue;
+                const node = this.resolveMappedWheelNode(matchedNode, model);
                 if (!node) continue;
 
                 const box = new THREE.Box3().setFromObject(node);
@@ -733,7 +739,9 @@ export default class RaceVehicle {
         }
 
         for (const hint of wheelNodeMap.candidates) {
-            const node = this.findNodeByHints(model, [hint]);
+            const matchedNode = this.findNodeByHints(model, [hint]);
+            if (!matchedNode) continue;
+            const node = this.resolveMappedWheelNode(matchedNode, model);
             if (node) {
                 candidates.set(node.uuid, node);
             }
@@ -853,6 +861,90 @@ export default class RaceVehicle {
         return String(value || '')
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '');
+    }
+
+    isBrakeLikeWheelPartName(name: string) {
+        const lowered = String(name || '').toLowerCase();
+        if (!lowered) return false;
+        return BRAKE_WHEEL_PART_HINT_REGEX.test(lowered);
+    }
+
+    isBrakeLikeWheelPartObject(node: THREE.Object3D) {
+        if (this.isBrakeLikeWheelPartName(node.name || '')) {
+            return true;
+        }
+
+        if (!(node instanceof THREE.Mesh) || !node.material) {
+            return false;
+        }
+
+        const materials = Array.isArray(node.material)
+            ? node.material
+            : [node.material];
+        return materials.some((material) =>
+            this.isBrakeLikeWheelPartName(material?.name || '')
+        );
+    }
+
+    resolveMappedWheelNode(
+        mappedNode: THREE.Object3D,
+        model: THREE.Object3D
+    ): THREE.Object3D | null {
+        let bestMesh: THREE.Mesh | null = null;
+        let bestRadius = -Infinity;
+        const size = new THREE.Vector3();
+
+        const considerMesh = (mesh: THREE.Mesh) => {
+            const meshName = (mesh.name || '').toLowerCase();
+            if (this.isBrakeLikeWheelPartObject(mesh)) return;
+            if (NON_WHEEL_NAME_HINT_REGEX.test(meshName)) return;
+
+            const box = new THREE.Box3().setFromObject(mesh);
+            if (box.isEmpty()) return;
+
+            box.getSize(size);
+            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            if (!this.isWheelRadiusPlausible(radius)) return;
+            if (!this.isWheelRadiusMatchTuning(radius)) return;
+
+            if (!bestMesh || radius > bestRadius) {
+                bestMesh = mesh;
+                bestRadius = radius;
+            }
+        };
+
+        if (mappedNode instanceof THREE.Mesh) {
+            considerMesh(mappedNode);
+        }
+
+        mappedNode.traverse((child) => {
+            if (child === mappedNode) return;
+            if (!(child instanceof THREE.Mesh)) return;
+            considerMesh(child);
+        });
+
+        if (bestMesh) {
+            return this.resolveWheelNode(bestMesh, model);
+        }
+
+        if (this.isBrakeLikeWheelPartObject(mappedNode)) {
+            return null;
+        }
+
+        const fallbackBox = new THREE.Box3().setFromObject(mappedNode);
+        if (fallbackBox.isEmpty()) {
+            return null;
+        }
+        fallbackBox.getSize(size);
+        const fallbackRadius = Math.max(size.x, size.y, size.z) * 0.5;
+        if (!this.isWheelRadiusPlausible(fallbackRadius)) {
+            return null;
+        }
+        if (!this.isWheelRadiusMatchTuning(fallbackRadius)) {
+            return null;
+        }
+
+        return this.resolveWheelNode(mappedNode, model);
     }
 
     buildWheelRig(model: THREE.Object3D, wheelNodeMap?: WheelNodeMap) {
@@ -1224,14 +1316,23 @@ export default class RaceVehicle {
                 wheel.spinAxis = new THREE.Vector3(1, 0, 0);
             }
             let bestAxis = axisCandidates[0];
-            let bestAlignment = -Infinity;
+            let bestScore = -Infinity;
 
             wheel.object.getWorldQuaternion(this.tmpQuatB);
             axisCandidates.forEach((axis) => {
                 worldAxis.copy(axis).applyQuaternion(this.tmpQuatB).normalize();
-                const alignment = Math.abs(worldAxis.dot(modelRightWorld));
-                if (alignment > bestAlignment) {
-                    bestAlignment = alignment;
+                const lateralAlignment = Math.abs(worldAxis.dot(modelRightWorld));
+                contactVelocity
+                    .crossVectors(worldAxis, modelDownWorld)
+                    .normalize();
+                const forwardAlignment =
+                    contactVelocity.lengthSq() > 1e-8
+                        ? Math.abs(contactVelocity.dot(modelForwardWorld))
+                        : 0;
+                const score = forwardAlignment * 0.82 + lateralAlignment * 0.18;
+
+                if (score > bestScore) {
+                    bestScore = score;
                     bestAxis = axis;
                     bestWorldAxis.copy(worldAxis);
                 }
@@ -1240,7 +1341,7 @@ export default class RaceVehicle {
             wheel.spinAxis.copy(bestAxis).normalize();
             let spinSign = wheel.left ? 1 : -1;
 
-            if (bestAlignment > 0.2) {
+            if (bestScore > 0.2) {
                 contactVelocity
                     .crossVectors(bestWorldAxis, modelDownWorld)
                     .normalize();
@@ -1871,9 +1972,9 @@ export default class RaceVehicle {
                     DRIFT_VISUAL_MAX_ANGLE_RAD
                 );
                 const driftVisualBlend = THREE.MathUtils.clamp(
-                    this.driftAmount * 0.62,
+                    this.driftAmount * 0.28,
                     0,
-                    0.62
+                    0.28
                 );
                 this.tmpVectorA
                     .applyAxisAngle(

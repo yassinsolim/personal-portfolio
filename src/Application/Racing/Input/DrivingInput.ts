@@ -1,7 +1,8 @@
 import UIEventBus from '../../UI/EventBus';
 
-const STEER_LEFT_VALUE = -1;
-const STEER_RIGHT_VALUE = 1;
+// User-mandated race mapping: D steers left, A steers right.
+const STEER_VALUE_FROM_KEY_D = -1;
+const STEER_VALUE_FROM_KEY_A = 1;
 
 type DrivingInputState = {
     throttle: number;
@@ -105,9 +106,9 @@ export default class DrivingInput {
         const smoothing = Math.min(1, Math.max(0.08, deltaSeconds * 8));
         const targetThrottle = this.keyState.KeyW ? 1 : 0;
         const targetBrake = this.keyState.KeyS ? 1 : 0;
-        const steerLeft = this.keyState.KeyA ? STEER_LEFT_VALUE : 0;
-        const steerRight = this.keyState.KeyD ? STEER_RIGHT_VALUE : 0;
-        const steerTarget = steerLeft + steerRight;
+        const steerFromKeyD = this.keyState.KeyD ? STEER_VALUE_FROM_KEY_D : 0;
+        const steerFromKeyA = this.keyState.KeyA ? STEER_VALUE_FROM_KEY_A : 0;
+        const steerTarget = steerFromKeyD + steerFromKeyA;
         const handbrakeTarget = this.keyState.Space ? 1 : 0;
 
         this.smoothState.throttle +=
