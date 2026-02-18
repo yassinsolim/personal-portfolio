@@ -142,3 +142,61 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `.tmp-validation/toyota_camera_grounding.png`
   - `.tmp-validation/start_pad_wide.png`
   - `.tmp-validation/drift_state.png`
+
+## Regression Fixes (Verified 2026-02-10)
+- Build/runtime:
+  - `npm.cmd run build` passed (webpack size warnings only).
+  - Fresh dev server validation run: `http://127.0.0.1:8137/?raceDebug=1`.
+  - Validation server teardown confirmed: no listener remained on port `8137`.
+- Input mapping verification:
+  - Source-of-truth mapping in `src/Application/Racing/Input/DrivingInput.ts` is explicitly
+    `KeyD -> steer left (-1)`, `KeyA -> steer right (+1)`.
+  - Steering yaw deltas from runtime simulation:
+    - `A: +0.3175103094596037`
+    - `D: -0.31751030945960335`
+- Wheel rig verification:
+  - `amg-c63s-coupe` wheel rig count: `4`
+    - Nodes:
+      - `polySurface1_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface237_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface473_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface671_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+    - Non-brake confirmation: `true`
+    - Front steer delta (rad): `[1.0319129864371845, 1.0319129864371845]`
+  - `toyota-crown-platinum` wheel rig count: `4`
+    - Nodes: `340_black_0`, `348_black_0`, `316_black_0`, `356_black_0`
+    - Non-brake confirmation: `true`
+    - Front steer delta (rad): `[0.4168146928204132, 0.4168146928204132]`
+  - Forward/reverse opposite spin check per wheel: `true` for all checked wheels on both cars.
+- Toyota orientation verification:
+  - `body vs track tangent dot = 0.9997231594407809`
+  - `body vs vehicle forward dot = 1`
+  - `vehicle forward vs track tangent dot = 0.9997231594407809`
+- Lap/leaderboard flow verification:
+  - Forced valid lap completion produced pause + pending lap:
+    - `pendingLapTimeMs = 36016`
+    - `pausedAfterLap = true`
+  - Lap completed event captured:
+    - `race:lapCompleted lapTimeMs=36016, carId=toyota-crown-platinum`
+  - Lap submission event captured:
+    - `race:lapSubmitted name=RegressionBot, lapTimeMs=36016`
+  - Leaderboard update event captured:
+    - `race:leaderboardUpdate count=1, topName=RegressionBot, topLapMs=36016`
+  - UI/local persistence:
+    - HUD leaderboard row: `RegressionBot 00:36.016`
+    - Local leaderboard top entry persisted with matching values.
+- Drift visual verification:
+  - `maxSlipDeg = 48.36212289877388`
+  - `maxVisualDeg = 44.017335737014335`
+  - `maxDriftIntensity = 1`
+  - `wrongFacingFrames = 0`
+  - `smokeParticleCount = 62`
+- Evidence artifacts:
+  - `.tmp-validation/regression-validation-results.json`
+  - `.tmp-validation/steering_A_regression.png`
+  - `.tmp-validation/steering_D_regression.png`
+  - `.tmp-validation/c63s_wheels_regression.png`
+  - `.tmp-validation/toyota_wheels_regression.png`
+  - `.tmp-validation/toyota_orientation_regression.png`
+  - `.tmp-validation/lap_leaderboard_regression.png`
+  - `.tmp-validation/drift_state_regression.png`
