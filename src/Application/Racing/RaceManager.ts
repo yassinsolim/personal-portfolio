@@ -97,13 +97,16 @@ export default class RaceManager {
             if (!name) return;
 
             const telemetry = this.vehicle.getTelemetry();
-            await this.leaderboardService.submitLap(
+            const entry = await this.leaderboardService.submitLap(
                 name,
                 this.pendingLapTimeMs,
                 telemetry.carId
             );
             this.pendingLapTimeMs = 0;
-            this.refreshLeaderboard();
+            await this.refreshLeaderboard();
+            UIEventBus.dispatch('race:lapSubmitted', {
+                entry,
+            });
             this.setPaused(false);
             UIEventBus.dispatch('race:requestPointerLock', { fromLap: true });
         });
@@ -121,11 +124,15 @@ export default class RaceManager {
         this.chaseCamera.setActive(true);
         this.chaseCamera.setPaused(false);
         this.lapTimer.reset();
-        this.currentLapTimeMs = 0;
-        this.lapRunning = false;
-        this.lapProgress = 0;
+        const nowMs = this.application.time.elapsed;
+        const telemetry = this.vehicle.getTelemetry();
+        const lapStart = this.lapTimer.startLap(nowMs, telemetry.position);
+        this.currentLapTimeMs = lapStart.lapTimeMs;
+        this.lapRunning = lapStart.lapRunning;
+        this.lapProgress = lapStart.progress;
         this.pendingLapTimeMs = 0;
         this.ghostReplay.setActive(true);
+        this.ghostReplay.startLap(nowMs);
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);

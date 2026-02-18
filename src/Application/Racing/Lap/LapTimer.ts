@@ -51,6 +51,27 @@ export default class LapTimer {
         this.lastCrossTimestampMs = -Infinity;
     }
 
+    startLap(nowMs: number, position: THREE.Vector3) {
+        const closestIndex = this.getClosestSampleIndex(position);
+        const progress = closestIndex / Math.max(1, this.samplePoints.length - 1);
+        const signedDistance = position
+            .clone()
+            .sub(this.startPoint)
+            .dot(this.startNormal);
+
+        this.lapRunning = true;
+        this.lapStartMs = nowMs;
+        this.maxProgress = progress;
+        this.previousDistance = signedDistance;
+        this.lastCrossTimestampMs = nowMs;
+
+        return {
+            progress,
+            lapRunning: this.lapRunning,
+            lapTimeMs: 0,
+        };
+    }
+
     getClosestSampleIndex(position: THREE.Vector3) {
         let bestDistanceSq = Number.POSITIVE_INFINITY;
         let bestIndex = this.previousClosestIndex;
@@ -151,4 +172,3 @@ export default class LapTimer {
         };
     }
 }
-
