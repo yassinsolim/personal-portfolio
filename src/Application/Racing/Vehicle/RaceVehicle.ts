@@ -351,12 +351,22 @@ export default class RaceVehicle {
         this.applyMaterialTweaks(model, carId);
 
         const option = carOptionsById[carId];
+        const hasMappedWheelCorners = this.hasExplicitWheelNodeCorners(
+            option?.race.wheelNodeMap
+        );
         const rawLength = this.getModelLength(model);
         const scale = option && rawLength > 0 ? option.lengthMeters / rawLength : 1;
         model.scale.setScalar(scale);
-        model.rotation.set(0, this.getVisualForwardOffsetY(model), 0);
+        model.rotation.set(
+            0,
+            hasMappedWheelCorners ? 0 : this.getVisualForwardOffsetY(model),
+            0
+        );
 
-        if (option?.race.visualForwardAxis === 'negativeZ') {
+        if (
+            option?.race.visualForwardAxis === 'negativeZ' &&
+            !hasMappedWheelCorners
+        ) {
             model.rotation.y += Math.PI;
         }
 
@@ -863,6 +873,16 @@ export default class RaceVehicle {
             .replace(/[^a-z0-9]+/g, '');
     }
 
+    hasExplicitWheelNodeCorners(wheelNodeMap?: WheelNodeMap) {
+        if (!wheelNodeMap) return false;
+        return (
+            (wheelNodeMap.frontLeft || []).length > 0 ||
+            (wheelNodeMap.frontRight || []).length > 0 ||
+            (wheelNodeMap.rearLeft || []).length > 0 ||
+            (wheelNodeMap.rearRight || []).length > 0
+        );
+    }
+
     isBrakeLikeWheelPartName(name: string) {
         const lowered = String(name || '').toLowerCase();
         if (!lowered) return false;
@@ -905,7 +925,6 @@ export default class RaceVehicle {
             box.getSize(size);
             const radius = Math.max(size.x, size.y, size.z) * 0.5;
             if (!this.isWheelRadiusPlausible(radius)) return;
-            if (!this.isWheelRadiusMatchTuning(radius)) return;
 
             if (!bestMesh || radius > bestRadius) {
                 bestMesh = mesh;
@@ -924,7 +943,7 @@ export default class RaceVehicle {
         });
 
         if (bestMesh) {
-            return this.resolveWheelNode(bestMesh, model);
+            return bestMesh;
         }
 
         if (this.isBrakeLikeWheelPartObject(mappedNode)) {
@@ -940,11 +959,8 @@ export default class RaceVehicle {
         if (!this.isWheelRadiusPlausible(fallbackRadius)) {
             return null;
         }
-        if (!this.isWheelRadiusMatchTuning(fallbackRadius)) {
-            return null;
-        }
 
-        return this.resolveWheelNode(mappedNode, model);
+        return mappedNode;
     }
 
     buildWheelRig(model: THREE.Object3D, wheelNodeMap?: WheelNodeMap) {
