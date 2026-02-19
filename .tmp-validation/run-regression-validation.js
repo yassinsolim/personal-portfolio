@@ -247,6 +247,11 @@ async function collectWheelMetrics(page, carId, screenshotName) {
                 front: Boolean(wheel.front),
                 left: Boolean(wheel.left),
                 radius: Number(wheel.radius || 0),
+                center: {
+                    x: Number((wheel.localCenter?.x || 0).toFixed(6)),
+                    y: Number((wheel.localCenter?.y || 0).toFixed(6)),
+                    z: Number((wheel.localCenter?.z || 0).toFixed(6)),
+                },
                 brakeLike: brakeRegex.test(combined),
             };
         });
@@ -346,10 +351,14 @@ async function collectToyotaOrientation(page) {
         const vehicle = rm.vehicle;
         vehicle.resetToStart();
 
+        const modelQuaternion = vehicle.carPivot.quaternion.clone();
+        if (vehicle.carModel) {
+            vehicle.carModel.getWorldQuaternion(modelQuaternion);
+        }
         const bodyForward = vehicle.forward
             .clone()
             .set(0, 0, 1)
-            .applyQuaternion(vehicle.carPivot.quaternion)
+            .applyQuaternion(modelQuaternion)
             .setY(0)
             .normalize();
         const vehicleForward = vehicle.forward.clone().setY(0).normalize();
@@ -537,10 +546,14 @@ async function collectDriftMetrics(page) {
                     .clone()
                     .projectOnPlane(vehicle.surfaceNormal)
                     .normalize();
+                const modelQuaternion = vehicle.carPivot.quaternion.clone();
+                if (vehicle.carModel) {
+                    vehicle.carModel.getWorldQuaternion(modelQuaternion);
+                }
                 const bodyForward = vehicle.forward
                     .clone()
                     .set(0, 0, 1)
-                    .applyQuaternion(vehicle.carPivot.quaternion)
+                    .applyQuaternion(modelQuaternion)
                     .projectOnPlane(vehicle.surfaceNormal)
                     .normalize();
 

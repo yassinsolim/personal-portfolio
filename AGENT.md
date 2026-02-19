@@ -164,9 +164,10 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
     - Non-brake confirmation: `true`
     - Front steer delta (rad): `[1.0319129864371845, 1.0319129864371845]`
   - `toyota-crown-platinum` wheel rig count: `4`
-    - Nodes: `340_black_0`, `348_black_0`, `316_black_0`, `356_black_0`
+    - Nodes: `340_black_0`, `316_black_0`, `348_black_0`, `356_black_0`
     - Non-brake confirmation: `true`
-    - Front steer delta (rad): `[0.4168146928204132, 0.4168146928204132]`
+    - Front steer delta (rad): `[1.0357205913665124, 1.0357205913665124]`
+  - `amg-one` mapped wheel rig no longer falls back/disable (no unresolved 4-wheel warning in runtime logs).
   - Forward/reverse opposite spin check per wheel: `true` for all checked wheels on both cars.
 - Toyota orientation verification:
   - `body vs track tangent dot = 0.9997231594407809`
