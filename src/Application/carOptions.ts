@@ -17,6 +17,7 @@ export type CarPerformanceReference = {
 
 export type CarRaceConfig = {
     visualForwardAxis?: 'positiveZ' | 'negativeZ';
+    visualYawOffsetDeg?: number;
     groundOffsetMeters?: number;
     cameraFollowDistanceOffsetMeters?: number;
     wheelNodeMap?: {
@@ -252,14 +253,15 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.98,
         race: {
             visualForwardAxis: 'negativeZ',
+            visualYawOffsetDeg: 90,
             groundOffsetMeters: 0.4,
             cameraFollowDistanceOffsetMeters: 3.8,
             drivetrain: 'AWD',
             wheelNodeMap: {
-                frontLeft: ['340_black_0', '340'],
-                frontRight: ['316_black_0', '316'],
-                rearLeft: ['348_black_0', '348'],
-                rearRight: ['356_black_0', '356'],
+                frontLeft: ['228_black_0', '547_refl_black_0'],
+                frontRight: ['276_black_0', '539_refl_black_0'],
+                rearLeft: ['220_black_0', '531_refl_black_0'],
+                rearRight: ['260_black_0', '523_refl_black_0'],
             },
             topSpeedKph: 208,
             zeroToHundredSec: 5.3,

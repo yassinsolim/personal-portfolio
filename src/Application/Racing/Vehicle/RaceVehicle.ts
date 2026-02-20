@@ -67,6 +67,12 @@ type VehicleTelemetry = {
 
 type WheelRig = {
     object: THREE.Object3D;
+    linkedVisuals: Array<{
+        object: THREE.Object3D;
+        spinCenter: THREE.Vector3;
+        basePosition: THREE.Vector3;
+        baseQuaternion: THREE.Quaternion;
+    }>;
     front: boolean;
     rear: boolean;
     left: boolean;
@@ -376,6 +382,11 @@ export default class RaceVehicle {
         );
         model.updateMatrixWorld(true);
         this.alignVisualFrontToPositiveZ(model);
+        if (option?.race.visualYawOffsetDeg) {
+            model.rotation.y += THREE.MathUtils.degToRad(
+                option.race.visualYawOffsetDeg
+            );
+        }
         model.updateMatrixWorld(true);
 
         let wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
@@ -664,6 +675,67 @@ export default class RaceVehicle {
         return node.parent.worldToLocal(centerWorld.clone());
     }
 
+    collectWheelLinkedVisuals(
+        cornerNode: THREE.Object3D,
+        primaryNode: THREE.Object3D,
+        primaryRadius: number,
+        model: THREE.Object3D
+    ) {
+        const linked = new Map<
+            string,
+            {
+                object: THREE.Object3D;
+                spinCenter: THREE.Vector3;
+                basePosition: THREE.Vector3;
+                baseQuaternion: THREE.Quaternion;
+            }
+        >();
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        const primaryCenter = new THREE.Vector3();
+        const primaryBox = new THREE.Box3().setFromObject(primaryNode);
+        if (primaryBox.isEmpty()) return [] as WheelRig['linkedVisuals'];
+
+        primaryBox.getCenter(primaryCenter);
+        this.toScaledModelSpace(primaryCenter, model);
+        const maxCenterDistance = Math.max(0.22, primaryRadius * 0.86);
+
+        cornerNode.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            if (child.uuid === primaryNode.uuid) return;
+
+            const childName = (child.name || '').toLowerCase();
+            if (
+                NON_WHEEL_NAME_HINT_REGEX.test(childName) &&
+                !this.isWheelHubLikeName(childName)
+            ) {
+                return;
+            }
+            if (this.isBrakeLikeWheelPartObject(child)) return;
+
+            const box = new THREE.Box3().setFromObject(child);
+            if (box.isEmpty()) return;
+
+            box.getSize(size);
+            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            if (!this.isWheelRadiusPlausible(radius)) return;
+            if (radius < primaryRadius * 0.52) return;
+
+            box.getCenter(center);
+            this.toScaledModelSpace(center, model);
+            if (center.distanceTo(primaryCenter) > maxCenterDistance) return;
+
+            linked.set(child.uuid, {
+                object: child,
+                spinCenter: this.getWheelSpinCenter(child, box),
+                basePosition: child.position.clone(),
+                baseQuaternion: child.quaternion.clone(),
+            });
+        });
+
+        return Array.from(linked.values());
+    }
+
     buildMappedWheelRig(
         model: THREE.Object3D,
         wheelNodeMap?: WheelNodeMap
@@ -724,6 +796,12 @@ export default class RaceVehicle {
 
                 mappedWheels.push({
                     object: node,
+                    linkedVisuals: this.collectWheelLinkedVisuals(
+                        matchedNode,
+                        node,
+                        radius,
+                        model
+                    ),
                     front: corner.front,
                     rear: !corner.front,
                     left: corner.left,
@@ -771,6 +849,7 @@ export default class RaceVehicle {
 
             candidateWheels.push({
                 object: node,
+                linkedVisuals: [],
                 front: false,
                 rear: false,
                 left: false,
@@ -886,7 +965,21 @@ export default class RaceVehicle {
     isBrakeLikeWheelPartName(name: string) {
         const lowered = String(name || '').toLowerCase();
         if (!lowered) return false;
+        if (this.isWheelHubLikeName(lowered)) {
+            return false;
+        }
         return BRAKE_WHEEL_PART_HINT_REGEX.test(lowered);
+    }
+
+    isWheelHubLikeName(name: string) {
+        const lowered = String(name || '').toLowerCase();
+        if (!lowered.includes('hub')) return false;
+        return (
+            lowered.includes('tire_hub') ||
+            lowered.includes('wheel_hub') ||
+            lowered.includes('rim_hub') ||
+            lowered.includes('hubcap')
+        );
     }
 
     isBrakeLikeWheelPartObject(node: THREE.Object3D) {
@@ -1076,6 +1169,7 @@ export default class RaceVehicle {
 
             return {
                 object: candidate.object,
+                linkedVisuals: [],
                 front,
                 rear: !front,
                 left,
@@ -1584,6 +1678,10 @@ export default class RaceVehicle {
         this.wheelRig.forEach((wheel) => {
             wheel.object.position.copy(wheel.basePosition);
             wheel.object.quaternion.copy(wheel.baseQuaternion);
+            wheel.linkedVisuals.forEach((linked) => {
+                linked.object.position.copy(linked.basePosition);
+                linked.object.quaternion.copy(linked.baseQuaternion);
+            });
         });
     }
 
@@ -2123,19 +2221,43 @@ export default class RaceVehicle {
                 this.rotateWheelLocalAroundCenter(wheel, steerQuaternion);
             }
             this.rotateWheelLocalAroundCenter(wheel, spinQuaternion);
+
+            wheel.linkedVisuals.forEach((linked) => {
+                linked.object.position.copy(linked.basePosition);
+                linked.object.quaternion.copy(linked.baseQuaternion);
+                if (wheel.front) {
+                    this.rotateObjectLocalAroundCenter(
+                        linked.object,
+                        linked.spinCenter,
+                        steerQuaternion
+                    );
+                }
+                this.rotateObjectLocalAroundCenter(
+                    linked.object,
+                    linked.spinCenter,
+                    spinQuaternion
+                );
+            });
         });
     }
 
     rotateWheelLocalAroundCenter(wheel: WheelRig, localRotation: THREE.Quaternion) {
-        this.tmpQuatC.copy(wheel.object.quaternion);
-        wheel.object.quaternion.multiply(localRotation);
-        this.tmpQuatD
-            .copy(wheel.object.quaternion)
-            .multiply(this.tmpQuatC.invert());
-        wheel.object.position
-            .sub(wheel.spinCenter)
-            .applyQuaternion(this.tmpQuatD)
-            .add(wheel.spinCenter);
+        this.rotateObjectLocalAroundCenter(
+            wheel.object,
+            wheel.spinCenter,
+            localRotation
+        );
+    }
+
+    rotateObjectLocalAroundCenter(
+        object: THREE.Object3D,
+        spinCenter: THREE.Vector3,
+        localRotation: THREE.Quaternion
+    ) {
+        this.tmpQuatC.copy(object.quaternion);
+        object.quaternion.multiply(localRotation);
+        this.tmpQuatD.copy(object.quaternion).multiply(this.tmpQuatC.invert());
+        object.position.sub(spinCenter).applyQuaternion(this.tmpQuatD).add(spinCenter);
     }
 
     updateDriftSmoke(deltaSeconds: number) {
