@@ -201,3 +201,33 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `.tmp-validation/toyota_orientation_regression.png`
   - `.tmp-validation/lap_leaderboard_regression.png`
   - `.tmp-validation/drift_state_regression.png`
+
+## Re-Validation (Verified 2026-02-10, Port 8138)
+- Build/runtime:
+  - `npm.cmd run build` passed.
+  - Fresh dev server run: `http://127.0.0.1:8138/?raceDebug=1`.
+  - Validation process teardown verified no listeners on `8137`, `8138`, or `8140`.
+- Input mapping verification:
+  - `KeyD -> steer left (-1)`, `KeyA -> steer right (+1)`.
+  - Runtime yaw deltas:
+    - `A: +0.3175103094596037`
+    - `D: -0.31751030945960335`
+- Wheel/steer/spin verification:
+  - `amg-c63s-coupe`: 4 wheels, non-brake wheel nodes, front steer changed, forward/reverse spin opposite on all 4 wheels.
+  - `toyota-crown-platinum`: 4 wheels (`340_black_0`, `316_black_0`, `348_black_0`, `356_black_0`), non-brake wheel nodes, front steer changed, forward/reverse spin opposite on all 4 wheels.
+  - `amg-one`: 4 wheels (`rim_wheel_0`, `rim_wheel_d_0`, `rim1_wheel_0`, `rim1_wheel_d_0`), non-brake wheel nodes, forward/reverse spin opposite on all 4 wheels.
+- Toyota orientation verification:
+  - `body vs track tangent dot = 0.9997231594407809`
+  - `body vs vehicle forward dot = 1`
+  - `vehicle forward vs track tangent dot = 0.9997231594407809`
+- Lap/leaderboard verification:
+  - `race:lapCompleted`, `race:lapSubmitted`, and `race:leaderboardUpdate` events all captured in sequence.
+  - Local leaderboard top row updated with `RegressionBot` at `00:36.016`.
+- Drift verification:
+  - `maxSlipDeg = 48.36212289877388`
+  - `maxVisualDeg = 44.01733573701431`
+  - `wrongFacingFrames = 0`
+- Additional evidence artifacts:
+  - `.tmp-validation/runtime-results.json`
+  - `.tmp-validation/wheel-direction-check.json`
+  - `.tmp-validation/amg_wheels.png`
