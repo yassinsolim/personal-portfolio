@@ -56,7 +56,7 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.75,
         race: {
             visualForwardAxis: 'positiveZ',
-            groundOffsetMeters: -0.01,
+            groundOffsetMeters: -0.05,
             wheelNodeMap: {
                 frontLeft: ['rim_wheel_0'],
                 frontRight: ['rim_wheel_d_0'],
@@ -258,10 +258,10 @@ export const carOptions: CarOption[] = [
             cameraFollowDistanceOffsetMeters: 3.8,
             drivetrain: 'AWD',
             wheelNodeMap: {
-                frontLeft: ['228_black_0', '547_refl_black_0'],
-                frontRight: ['276_black_0', '539_refl_black_0'],
-                rearLeft: ['220_black_0', '531_refl_black_0'],
-                rearRight: ['260_black_0', '523_refl_black_0'],
+                frontLeft: ['547_refl_black_0'],
+                frontRight: ['539_refl_black_0'],
+                rearLeft: ['531_refl_black_0'],
+                rearRight: ['523_refl_black_0'],
             },
             topSpeedKph: 208,
             zeroToHundredSec: 5.3,
