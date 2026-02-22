@@ -231,3 +231,129 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `.tmp-validation/runtime-results.json`
   - `.tmp-validation/wheel-direction-check.json`
   - `.tmp-validation/amg_wheels.png`
+
+## Targeted Wheel/Orientation Fixes (Verified 2026-02-10, Port 8160)
+- Build/runtime:
+  - `npm.cmd run build` passed (webpack size warnings only).
+  - Fresh dev server runtime validated at `http://127.0.0.1:8160/?raceDebug=1`.
+  - Teardown recheck: no listeners on validation ports `8137`, `8138`, `8140`,
+    `8150`, `8151`, `8152`, `8153`, `8160`.
+- `amg-c63s-coupe`:
+  - Wheel rig count: `4`.
+  - Wheel nodes are non-brake wheel meshes:
+    - `polySurface1_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+    - `polySurface237_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+    - `polySurface473_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+    - `polySurface671_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+  - Primary wheel spin delta: `2.019812` (all 4).
+  - Linked wheel-layer counts per corner: `1,1,1,1` with linked spin delta
+    `2.019812` (all linked nodes).
+  - Front steer delta: `0.14`, `0.14`.
+  - Precise forward/reverse spin check (small-step): opposite direction `true` on all 4 wheels.
+- `bmw-f82-m4`:
+  - Wheel rig count: `4`.
+  - Wheel nodes are non-brake wheel meshes:
+    - `ARm4_vt_wheel002_michelin_diff_0`
+    - `ARm4_vt_wheel_michelin_diff_0`
+    - `ARm4_vt_wheel003_michelin_diff_0`
+    - `ARm4_vt_wheel001_michelin_diff_0`
+  - Primary wheel spin delta: `0.277459` (all 4).
+  - Linked wheel-layer counts per corner: `2,2,2,2` with linked spin delta
+    `0.277459` for both linked layers each corner.
+  - Front steer delta: `0.14`, `0.14`.
+  - Precise forward/reverse spin check: opposite direction `true` on all 4 wheels.
+- `toyota-crown-platinum`:
+  - Wheel rig count: `4`.
+  - Wheel nodes (non-brake): `547_refl_black_0`, `539_refl_black_0`,
+    `531_refl_black_0`, `523_refl_black_0`.
+  - Primary wheel spin delta: `2.475172` (all 4).
+  - Front steer delta: `0.14`, `0.14`.
+  - Toyota orientation:
+    - `bodyVsVehicleDot = 1`
+    - `bodyVsTrackDot = 0.999692087`
+    - `vehicleVsTrackDot = 0.999692087`
+  - Precise forward/reverse spin check: opposite direction `true` on all 4 wheels.
+  - Prior tiny disc nodes explicitly static and excluded:
+    - `340_black_0`, `316_black_0`, `348_black_0`, `356_black_0`
+    - each `inWheelRig=false`, `angleDelta=0`.
+- Do-not-touch car sanity checks remained good in same run:
+  - `amg-one` primary wheel spin delta: `0.31241` (all 4).
+  - `bmw-e92-m3` primary wheel spin delta: `0.592643` (all 4).
+  - `amg-c63-507` primary wheel spin delta: `0.752452` (all 4).
+- Evidence artifacts:
+  - `.tmp-validation/targeted-fix-validation.json`
+  - `.tmp-validation/targeted-fix-direction-precise.json`
+  - `.tmp-validation/amg-c63s-coupe-targeted-fix.png`
+  - `.tmp-validation/bmw-f82-m4-targeted-fix.png`
+  - `.tmp-validation/toyota-crown-platinum-targeted-fix.png`
+  - `.tmp-validation/amg-one-targeted-fix.png`
+  - `.tmp-validation/bmw-e92-m3-targeted-fix.png`
+  - `.tmp-validation/amg-c63-507-targeted-fix.png`
+
+## Latest Canonical Validation (Verified 2026-02-10, Port 8164)
+- Build/runtime:
+  - `npm.cmd run build` passed (webpack size warnings only).
+  - Fresh dev server validation: `http://127.0.0.1:8164/?raceDebug=1`.
+  - Teardown confirmed no lingering listeners on validation ports (including `8164`).
+- Input mapping:
+  - Source-of-truth remains `KeyD -> steer left (-1)`, `KeyA -> steer right (+1)`.
+  - Runtime steering yaw deltas:
+    - `A: +0.3175103094596037`
+    - `D: -0.31751030945960335`
+- Wheel rig and spin:
+  - `amg-c63s-coupe`
+    - Wheel rig count: `4`
+    - Nodes:
+      - `polySurface1_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface237_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface473_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+      - `polySurface671_wheeMercedesAMG_S63CoupeRewardRecycled_2020_Wheel1A_3D_3DWh_c96cb19_0`
+    - Non-brake wheel-node check: `true`
+    - Forward/reverse opposite-direction spin on all wheels: `true`
+    - Front steer delta: `0.159642`, `0.159642`
+  - `toyota-crown-platinum`
+    - Wheel rig count: `4`
+    - Nodes: `547_refl_black_0`, `539_refl_black_0`, `531_refl_black_0`, `523_refl_black_0`
+    - Non-brake wheel-node check: `true`
+    - Forward/reverse opposite-direction spin on all wheels: `true`
+    - Front steer delta: `0.156938`, `0.156938`
+- Toyota orientation:
+  - `body vs track tangent dot = 1`
+  - `body vs vehicle forward dot = 1`
+  - `vehicle forward vs track tangent dot = 1`
+- Lap/leaderboard flow:
+  - Forced valid lap completion produced:
+    - `pendingLapTimeMs = 36016`
+    - `pausedAfterLap = true`
+  - Captured events:
+    - `race:lapCompleted` with `lapTimeMs=36016`, `carId=amg-one`
+    - `race:lapSubmitted` with `name=RegressionBot`, `lapTimeMs=36016`, `carId=amg-one`
+    - `race:leaderboardUpdate` with `count=1`, `topName=RegressionBot`, `topLapMs=36016`
+  - UI/local persistence:
+    - HUD leaderboard row: `RegressionBot 00:36.016`
+    - Local leaderboard top entry matches submitted values.
+- Drift metrics:
+  - `maxSlipDeg = 48.241434`
+  - `maxVisualDeg = 21.235505`
+  - `maxDriftIntensity = 1`
+  - `wrongFacingFrames = 0`
+  - `rearKickLeftRatio = 0.79402`
+- Additional measured geometry checks:
+  - Center dashed line offset to collider:
+    - `sampleCount = 91`
+    - `meanOffset = 0.003671`
+    - `maxOffset = 0.09314`
+    - `minOffset = -0.100986`
+  - AMG One wheel-to-track gap estimate:
+    - `meanGapMeters = -0.371476` (negative indicates wheels are not floating above collider in this measurement).
+- Evidence artifacts:
+  - `.tmp-validation/final-request-validation.json`
+  - `.tmp-validation/steering_A_final.png`
+  - `.tmp-validation/steering_D_final.png`
+  - `.tmp-validation/c63s_wheels_final.png`
+  - `.tmp-validation/toyota_wheels_final.png`
+  - `.tmp-validation/toyota_orientation_final.png`
+  - `.tmp-validation/centerline_final.png`
+  - `.tmp-validation/amg_one_height_final.png`
+  - `.tmp-validation/lap_leaderboard_final.png`
+  - `.tmp-validation/drift_state_final.png`
