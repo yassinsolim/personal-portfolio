@@ -33,6 +33,7 @@ const LOW_SPEED_GROUNDING_LERP_MIN = 3.5;
 const LOW_SPEED_GROUNDING_LERP_MAX = 30;
 const LOW_SPEED_GROUNDING_MAX_STEP_MIN = 0.006;
 const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
+const FRONT_WHEEL_VISUAL_STEER_MULTIPLIER = 1.45;
 const AMG_ONE_ID = 'amg-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
@@ -1900,7 +1901,7 @@ export default class RaceVehicle {
         if (driftEligible) {
             this.driftAmount = Math.min(1, this.driftAmount + deltaSeconds * 2.5);
             const driftSlipTarget =
-                steer * speed * (0.46 + this.driftAmount * 0.94);
+                -steer * speed * (0.6 + this.driftAmount * 1.2);
             const driftSlipLerp = THREE.MathUtils.clamp(
                 deltaSeconds * (3.9 + this.driftAmount * 3.4),
                 0,
@@ -1911,7 +1912,7 @@ export default class RaceVehicle {
                 driftSlipTarget,
                 driftSlipLerp
             );
-            yawRate += steer * (0.78 + this.driftAmount * 1.28);
+            yawRate += steer * (1 + this.driftAmount * 1.55);
         } else {
             const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.2 : 2.4;
             this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * releaseSpeed);
@@ -1943,6 +1944,13 @@ export default class RaceVehicle {
             -maxLateralSpeed,
             maxLateralSpeed
         );
+
+        // During drift, bias yaw from rear slip so the car rotates around the front axle.
+        const rearSlipYaw =
+            (-this.lateralSpeed /
+                Math.max(1.2, wheelBase * 0.78)) *
+            THREE.MathUtils.lerp(0.06, 0.24, this.driftAmount);
+        yawRate += rearSlipYaw;
 
         const counterSteer =
             -Math.sign(this.lateralSpeed) *
@@ -2086,9 +2094,9 @@ export default class RaceVehicle {
                     DRIFT_VISUAL_MAX_ANGLE_RAD
                 );
                 const driftVisualBlend = THREE.MathUtils.clamp(
-                    this.driftAmount * 0.28,
+                    this.driftAmount * 0.42,
                     0,
-                    0.28
+                    0.42
                 );
                 this.tmpVectorA
                     .applyAxisAngle(
@@ -2198,9 +2206,18 @@ export default class RaceVehicle {
 
         this.wheelSpinAngle +=
             (this.speedMps / Math.max(0.1, this.wheelRadius)) * deltaSeconds;
+        const maxVisualSteerAngle =
+            THREE.MathUtils.degToRad(this.currentTuning.maxSteerAngleDeg) *
+            STEERING_SENSITIVITY_SCALE *
+            FRONT_WHEEL_VISUAL_STEER_MULTIPLIER;
+        const targetVisualSteerAngle = THREE.MathUtils.clamp(
+            this.steerAngle * FRONT_WHEEL_VISUAL_STEER_MULTIPLIER,
+            -maxVisualSteerAngle,
+            maxVisualSteerAngle
+        );
         this.steerVisualAngle = THREE.MathUtils.lerp(
             this.steerVisualAngle,
-            this.steerAngle,
+            targetVisualSteerAngle,
             THREE.MathUtils.clamp(deltaSeconds * 14, 0, 1)
         );
 
