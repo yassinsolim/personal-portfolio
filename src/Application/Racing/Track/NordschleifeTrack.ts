@@ -250,7 +250,7 @@ export default class NordschleifeTrack {
         const width = data.width ?? DEFAULT_WIDTH;
         const halfWidth = width * 0.5;
         const uvScale = data.uvScale ?? DEFAULT_UV_SCALE;
-        const elevationOffset = 0.12;
+        const elevationOffset = 0.0015;
 
         const tangent = new THREE.Vector3();
         const point = new THREE.Vector3();
@@ -389,7 +389,7 @@ export default class NordschleifeTrack {
     createCenterStripGeometry(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
         const samples = Math.max(64, data.samples ?? DEFAULT_SAMPLES);
         const halfWidth = CENTER_DASH_WIDTH * 0.5;
-        const elevationOffset = 0.14;
+        const elevationOffset = 0.0018;
 
         const tangent = new THREE.Vector3();
         const point = new THREE.Vector3();
