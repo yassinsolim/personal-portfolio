@@ -20,6 +20,7 @@ export type CarRaceConfig = {
     visualYawOffsetDeg?: number;
     groundOffsetMeters?: number;
     cameraFollowDistanceOffsetMeters?: number;
+    wheelSpinDirectionMultiplier?: 1 | -1;
     wheelNodeMap?: {
         frontLeft?: string[];
         frontRight?: string[];
@@ -182,6 +183,7 @@ export const carOptions: CarOption[] = [
                 rearLeft: ['3DWheel_Rear_L', 'polySurface473_whee'],
                 rearRight: ['3DWheel_Rear_R', 'polySurface671_whee'],
             },
+            wheelSpinDirectionMultiplier: -1,
             drivetrain: 'RWD',
             topSpeedKph: 290,
             zeroToHundredSec: 3.9,

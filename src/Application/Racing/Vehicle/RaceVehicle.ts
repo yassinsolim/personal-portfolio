@@ -1281,6 +1281,8 @@ export default class RaceVehicle {
 
     configureWheelSpinAxes(wheels: WheelRig[], model?: THREE.Object3D) {
         if (!wheels.length) return;
+        const spinDirectionMultiplier =
+            this.currentTuning.wheelSpinDirectionMultiplier === -1 ? -1 : 1;
 
         const modelObject = model || this.carModel;
         const modelQuaternion = this.tmpQuatA.identity();
@@ -1462,7 +1464,7 @@ export default class RaceVehicle {
                 }
             }
 
-            wheel.spinSign = spinSign;
+            wheel.spinSign = spinSign * spinDirectionMultiplier;
         });
     }
 
