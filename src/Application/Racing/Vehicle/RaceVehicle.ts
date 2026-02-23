@@ -400,6 +400,9 @@ export default class RaceVehicle {
             wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
         }
         wheelRig = this.filterValidWheelRig(carId, wheelRig);
+        if (carId === TOYOTA_CROWN_ID) {
+            wheelRig = [];
+        }
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
