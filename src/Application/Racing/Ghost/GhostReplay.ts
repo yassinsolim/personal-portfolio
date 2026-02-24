@@ -1,7 +1,10 @@
 import * as THREE from 'three';
+import { carOptionsById, defaultCarId } from '../../carOptions';
+import Application from '../../Application';
 
 const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v1';
 const SAMPLE_INTERVAL_MS = 45;
+const GHOST_OPACITY = 0.38;
 
 type GhostSample = {
     t: number;
@@ -28,7 +31,11 @@ type GhostTelemetry = {
 
 export default class GhostReplay {
     root: THREE.Group;
-    ghostMesh: THREE.Mesh;
+    ghostMesh: THREE.Object3D;
+    ghostMaterialOverrides: THREE.Material[];
+    resources: Application['resources'];
+    fallbackGeometry: THREE.BoxGeometry;
+    fallbackMaterial: THREE.MeshBasicMaterial;
     playbackSamples: GhostSample[];
     recordingSamples: GhostSample[];
     recording: boolean;
@@ -41,23 +48,23 @@ export default class GhostReplay {
     lastSampleAtMs: number;
 
     constructor(parent: THREE.Object3D) {
+        const app = new Application();
+        this.resources = app.resources;
+
         this.root = new THREE.Group();
         this.root.name = 'race-ghost-root';
         this.root.visible = false;
 
-        this.ghostMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(2.1, 1.2, 4.4),
-            new THREE.MeshBasicMaterial({
-                color: 0x6fe7ff,
-                transparent: true,
-                opacity: 0.35,
-                wireframe: true,
-                depthWrite: false,
-            })
-        );
-        this.ghostMesh.name = 'race-ghost-car';
+        this.fallbackGeometry = new THREE.BoxGeometry(2.1, 1.2, 4.4);
+        this.fallbackMaterial = new THREE.MeshBasicMaterial({
+            color: 0x6fe7ff,
+            transparent: true,
+            opacity: 0.3,
+            depthWrite: false,
+        });
+        this.ghostMesh = this.buildFallbackGhostMesh();
+        this.ghostMaterialOverrides = [];
         this.root.add(this.ghostMesh);
-
         parent.add(this.root);
 
         this.playbackSamples = [];
@@ -99,6 +106,10 @@ export default class GhostReplay {
         if (!this.recording) return;
         if (nowMs - this.lastSampleAtMs < SAMPLE_INTERVAL_MS) return;
 
+        if (telemetry.carId && telemetry.carId !== this.carId) {
+            this.setGhostCar(telemetry.carId);
+        }
+
         this.lastSampleAtMs = nowMs;
         const t = nowMs - this.lapStartMs;
         const sample: GhostSample = {
@@ -137,6 +148,7 @@ export default class GhostReplay {
         this.playbackTimeMs = 0;
         this.recordingSamples = [];
         this.root.visible = this.active;
+        this.setGhostCar(this.carId);
         this.save();
     }
 
@@ -166,6 +178,7 @@ export default class GhostReplay {
             this.playbackDurationMs =
                 this.playbackSamples[this.playbackSamples.length - 1]?.t || 0;
             this.carId = parsed.carId || 'unknown';
+            this.setGhostCar(this.carId);
         } catch (error) {
             return;
         }
@@ -183,6 +196,79 @@ export default class GhostReplay {
 
         this.ghostMesh.position.set(sample.x, sample.y, sample.z);
         this.ghostMesh.quaternion.set(sample.qx, sample.qy, sample.qz, sample.qw);
+    }
+
+    buildFallbackGhostMesh() {
+        const mesh = new THREE.Mesh(this.fallbackGeometry, this.fallbackMaterial);
+        mesh.name = 'race-ghost-car';
+        return mesh;
+    }
+
+    disposeGhostOverrides(overrides?: THREE.Material[]) {
+        const target = overrides || this.ghostMaterialOverrides;
+        target.forEach((material) => material.dispose());
+        if (!overrides) {
+            this.ghostMaterialOverrides = [];
+        }
+    }
+
+    makeGhostMaterial(material: THREE.Material) {
+        const cloned = material.clone();
+        if ('transparent' in cloned) cloned.transparent = true;
+        if ('opacity' in cloned) cloned.opacity = GHOST_OPACITY;
+        if ('depthWrite' in cloned) cloned.depthWrite = false;
+        if ('colorWrite' in cloned) cloned.colorWrite = true;
+        if ('fog' in cloned) cloned.fog = false;
+        cloned.needsUpdate = true;
+        this.ghostMaterialOverrides.push(cloned);
+        return cloned;
+    }
+
+    setGhostCar(carId: string) {
+        const previousOverrides = this.ghostMaterialOverrides;
+        this.ghostMaterialOverrides = [];
+
+        const option = carOptionsById[carId] || carOptionsById[defaultCarId];
+        const gltf = option
+            ? this.resources.items.gltfModel[option.resourceName]
+            : null;
+        const scene = gltf?.scene;
+
+        let nextGhost: THREE.Object3D = this.buildFallbackGhostMesh();
+        if (scene) {
+            const clone = scene.clone(true);
+            clone.name = 'race-ghost-car';
+
+            const box = new THREE.Box3().setFromObject(clone);
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const rawLength = Math.max(size.x, size.y, size.z);
+            if (rawLength > 0 && option?.lengthMeters) {
+                clone.scale.setScalar(option.lengthMeters / rawLength);
+            }
+
+            clone.traverse((child) => {
+                if (!(child instanceof THREE.Mesh)) return;
+                child.castShadow = false;
+                child.receiveShadow = false;
+                if (Array.isArray(child.material)) {
+                    child.material = child.material.map((mat) =>
+                        this.makeGhostMaterial(mat)
+                    );
+                } else if (child.material) {
+                    child.material = this.makeGhostMaterial(child.material);
+                }
+            });
+            nextGhost = clone;
+        }
+
+        const previousGhost = this.ghostMesh;
+        this.root.add(nextGhost);
+        nextGhost.position.copy(previousGhost.position);
+        nextGhost.quaternion.copy(previousGhost.quaternion);
+        this.ghostMesh = nextGhost;
+        this.root.remove(previousGhost);
+        this.disposeGhostOverrides(previousOverrides);
     }
 
     sampleAt(timeMs: number) {
@@ -220,4 +306,3 @@ export default class GhostReplay {
         return this.bestLapTimeMs;
     }
 }
-
