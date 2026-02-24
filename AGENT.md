@@ -357,3 +357,35 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `.tmp-validation/amg_one_height_final.png`
   - `.tmp-validation/lap_leaderboard_final.png`
   - `.tmp-validation/drift_state_final.png`
+
+## Toyota + Ghost Follow-up (Verified 2026-02-10, Port 8174)
+- Scope constrained to user request:
+  - Keep all non-Toyota race cars untouched.
+  - Keep `amg-c63s-coupe` behavior untouched.
+  - Fix Toyota Crown Platinum forward orientation consistency.
+  - Prevent Toyota detached wheel/brake artifact behavior caused by invalid wheel rig nodes.
+  - Replace ghost wireframe box with translucent car model ghost.
+- Toyota runtime results:
+  - Orientation alignment:
+    - `bodyVsVehicleDot = 1.0000000000000002`
+    - `bodyVsTrackDot = 0.9999999999634729`
+    - `vehicleVsTrackDot = 0.9999999999634729`
+  - Wheel rig handling:
+    - Toyota wheel rig is explicitly suppressed at runtime (`wheelRigCount = 0`)
+      to avoid detached/orbiting wheel artifacts from this model's invalid corner nodes.
+  - Visual screenshots:
+    - `.tmp-validation/toyota-only-main.png`
+    - `.tmp-validation/toyota-only-side.png`
+    - `.tmp-validation/toyota-only-top.png`
+- Ghost runtime results:
+  - Ghost now renders as translucent cloned car mesh, not wireframe box.
+  - Metrics from validation:
+    - `meshCount = 93`
+    - `transparentMeshCount = 93`
+  - Evidence screenshot:
+    - `.tmp-validation/toyota-only-ghost.png`
+- Build/runtime lifecycle:
+  - `npm.cmd run build` passed after changes.
+  - Fresh isolated dev server used for validation: `http://127.0.0.1:8174/?raceDebug=1`.
+  - Validation run writes `.tmp-validation/toyota-only-validation.json`.
+  - Dev server process terminated at end of run.
