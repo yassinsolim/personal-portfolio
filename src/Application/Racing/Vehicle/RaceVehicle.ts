@@ -36,6 +36,13 @@ const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
 const FRONT_WHEEL_VISUAL_STEER_MULTIPLIER = 1.45;
 const AMG_ONE_ID = 'amg-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
+const TOYOTA_SPLIT_GROUP_FRONT_LEFT = 'toyota_split_wheel_front_left';
+const TOYOTA_SPLIT_GROUP_FRONT_RIGHT = 'toyota_split_wheel_front_right';
+const TOYOTA_SPLIT_GROUP_REAR_LEFT = 'toyota_split_wheel_rear_left';
+const TOYOTA_SPLIT_GROUP_REAR_RIGHT = 'toyota_split_wheel_rear_right';
+// Toyota GLB exports axle-pair wheel meshes. Split each axle by lateral axis.
+const TOYOTA_SPLIT_FRONT_SOURCE_HINTS = ['228_black_0', '276_black_0'];
+const TOYOTA_SPLIT_REAR_SOURCE_HINTS = ['220_black_0', '260_black_0'];
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
@@ -391,14 +398,21 @@ export default class RaceVehicle {
         }
         model.updateMatrixWorld(true);
 
-        let wheelRig = this.buildWheelRig(model, mappedWheelNodeMap);
+        let wheelNodeMapForRig = mappedWheelNodeMap;
+        if (carId === TOYOTA_CROWN_ID) {
+            wheelNodeMapForRig =
+                this.ensureToyotaSplitWheelNodeMap(model, mappedWheelNodeMap) ||
+                mappedWheelNodeMap;
+        }
+
+        let wheelRig = this.buildWheelRig(model, wheelNodeMapForRig);
         for (let attempt = 0; attempt < 2; attempt++) {
             const correctionY =
                 this.getModelForwardCorrectionFromMappedWheels(wheelRig);
             if (Math.abs(correctionY) <= 1e-4) break;
             model.rotation.y += correctionY;
             model.updateMatrixWorld(true);
-            wheelRig = this.buildWheelRig(model, mappedWheelNodeMap);
+            wheelRig = this.buildWheelRig(model, wheelNodeMapForRig);
         }
         wheelRig = this.filterValidWheelRig(carId, wheelRig);
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
@@ -683,6 +697,10 @@ export default class RaceVehicle {
         primaryRadius: number,
         model: THREE.Object3D
     ) {
+        if (this.isToyotaSplitWheelObject(cornerNode, primaryNode)) {
+            return [] as WheelRig['linkedVisuals'];
+        }
+
         const linked = new Map<
             string,
             {
@@ -736,6 +754,381 @@ export default class RaceVehicle {
         });
 
         return Array.from(linked.values());
+    }
+
+    isToyotaSplitWheelObject(cornerNode: THREE.Object3D, primaryNode: THREE.Object3D) {
+        const names = [
+            cornerNode?.name || '',
+            primaryNode?.name || '',
+            primaryNode?.parent?.name || '',
+        ]
+            .map((name) => String(name || '').toLowerCase())
+            .filter(Boolean);
+
+        return names.some(
+            (name) => name.includes('__toyota_') || name.startsWith('toyota_split_wheel_')
+        );
+    }
+
+    ensureToyotaSplitWheelNodeMap(
+        model: THREE.Object3D,
+        fallbackWheelNodeMap?: WheelNodeMap
+    ): WheelNodeMap | undefined {
+        const existingGroups = [
+            TOYOTA_SPLIT_GROUP_FRONT_LEFT,
+            TOYOTA_SPLIT_GROUP_FRONT_RIGHT,
+            TOYOTA_SPLIT_GROUP_REAR_LEFT,
+            TOYOTA_SPLIT_GROUP_REAR_RIGHT,
+        ].every((name) => Boolean(model.getObjectByName(name)));
+
+        if (!existingGroups) {
+            const created = this.createToyotaSplitWheelGroups(
+                model,
+                fallbackWheelNodeMap
+            );
+            if (!created) {
+                return fallbackWheelNodeMap;
+            }
+        }
+
+        return {
+            frontLeft: [TOYOTA_SPLIT_GROUP_FRONT_LEFT],
+            frontRight: [TOYOTA_SPLIT_GROUP_FRONT_RIGHT],
+            rearLeft: [TOYOTA_SPLIT_GROUP_REAR_LEFT],
+            rearRight: [TOYOTA_SPLIT_GROUP_REAR_RIGHT],
+            candidates: [
+                TOYOTA_SPLIT_GROUP_FRONT_LEFT,
+                TOYOTA_SPLIT_GROUP_FRONT_RIGHT,
+                TOYOTA_SPLIT_GROUP_REAR_LEFT,
+                TOYOTA_SPLIT_GROUP_REAR_RIGHT,
+            ],
+        };
+    }
+
+    createToyotaSplitWheelGroups(
+        model: THREE.Object3D,
+        fallbackWheelNodeMap?: WheelNodeMap
+    ) {
+        const cornerCenters = this.getMappedWheelCornerCenters(
+            model,
+            fallbackWheelNodeMap
+        );
+        if (!cornerCenters) {
+            return false;
+        }
+
+        const frontAverage = new THREE.Vector3()
+            .copy(cornerCenters.frontLeft)
+            .add(cornerCenters.frontRight)
+            .multiplyScalar(0.5);
+        const rearAverage = new THREE.Vector3()
+            .copy(cornerCenters.rearLeft)
+            .add(cornerCenters.rearRight)
+            .multiplyScalar(0.5);
+        const leftAverage = new THREE.Vector3()
+            .copy(cornerCenters.frontLeft)
+            .add(cornerCenters.rearLeft)
+            .multiplyScalar(0.5);
+        const rightAverage = new THREE.Vector3()
+            .copy(cornerCenters.frontRight)
+            .add(cornerCenters.rearRight)
+            .multiplyScalar(0.5);
+
+        const frontRearDeltaX = frontAverage.x - rearAverage.x;
+        const frontRearDeltaZ = frontAverage.z - rearAverage.z;
+        const leftRightDeltaX = leftAverage.x - rightAverage.x;
+        const leftRightDeltaZ = leftAverage.z - rightAverage.z;
+        const longitudinalAxis: 'x' | 'z' =
+            Math.abs(frontRearDeltaX) >= Math.abs(frontRearDeltaZ) ? 'x' : 'z';
+        const lateralAxis: 'x' | 'z' = longitudinalAxis === 'x' ? 'z' : 'x';
+        const leftPositiveDirection =
+            lateralAxis === 'x' ? leftRightDeltaX >= 0 : leftRightDeltaZ >= 0;
+
+        const frontSourceMatch = this.findFirstNodeByHintPriority(
+            model,
+            TOYOTA_SPLIT_FRONT_SOURCE_HINTS
+        );
+        const rearSourceMatch = this.findFirstNodeByHintPriority(
+            model,
+            TOYOTA_SPLIT_REAR_SOURCE_HINTS
+        );
+        if (!frontSourceMatch || !rearSourceMatch) {
+            return false;
+        }
+
+        const frontSourceNode = this.resolveMappedWheelNode(frontSourceMatch, model);
+        const rearSourceNode = this.resolveMappedWheelNode(rearSourceMatch, model);
+        if (
+            !(frontSourceNode instanceof THREE.Mesh) ||
+            !(rearSourceNode instanceof THREE.Mesh)
+        ) {
+            return false;
+        }
+
+        const frontAxleSplit = this.splitToyotaWheelMeshByAxis(
+            frontSourceNode,
+            model,
+            lateralAxis,
+            leftPositiveDirection
+        );
+        const rearAxleSplit = this.splitToyotaWheelMeshByAxis(
+            rearSourceNode,
+            model,
+            lateralAxis,
+            leftPositiveDirection
+        );
+        if (!frontAxleSplit || !rearAxleSplit) {
+            return false;
+        }
+
+        const frontLeftGroup = new THREE.Group();
+        frontLeftGroup.name = TOYOTA_SPLIT_GROUP_FRONT_LEFT;
+        const frontRightGroup = new THREE.Group();
+        frontRightGroup.name = TOYOTA_SPLIT_GROUP_FRONT_RIGHT;
+        const rearLeftGroup = new THREE.Group();
+        rearLeftGroup.name = TOYOTA_SPLIT_GROUP_REAR_LEFT;
+        const rearRightGroup = new THREE.Group();
+        rearRightGroup.name = TOYOTA_SPLIT_GROUP_REAR_RIGHT;
+
+        frontAxleSplit.frontMesh.name = `${frontSourceNode.name}__toyota_front_left`;
+        frontAxleSplit.rearMesh.name = `${frontSourceNode.name}__toyota_front_right`;
+        rearAxleSplit.frontMesh.name = `${rearSourceNode.name}__toyota_rear_left`;
+        rearAxleSplit.rearMesh.name = `${rearSourceNode.name}__toyota_rear_right`;
+
+        frontLeftGroup.add(frontAxleSplit.frontMesh);
+        frontRightGroup.add(frontAxleSplit.rearMesh);
+        rearLeftGroup.add(rearAxleSplit.frontMesh);
+        rearRightGroup.add(rearAxleSplit.rearMesh);
+        model.add(frontLeftGroup, frontRightGroup, rearLeftGroup, rearRightGroup);
+
+        frontSourceNode.visible = false;
+        rearSourceNode.visible = false;
+        model.updateMatrixWorld(true);
+        return true;
+    }
+
+    findFirstNodeByHintPriority(model: THREE.Object3D, hints: string[]) {
+        for (const hint of hints) {
+            const matched = this.findNodeByHints(model, [hint]);
+            if (matched) {
+                return matched;
+            }
+        }
+        return null;
+    }
+
+    getMappedWheelCornerCenters(
+        model: THREE.Object3D,
+        wheelNodeMap?: WheelNodeMap
+    ) {
+        if (!wheelNodeMap) return null;
+
+        const box = new THREE.Box3();
+        const center = new THREE.Vector3();
+        const readCenter = (hints?: string[]) => {
+            const matchedNode = this.findNodeByHints(model, hints || []);
+            if (!matchedNode) return null;
+            const node = this.resolveMappedWheelNode(matchedNode, model);
+            if (!node) return null;
+            box.setFromObject(node);
+            if (box.isEmpty()) return null;
+            box.getCenter(center);
+            this.toScaledModelSpace(center, model);
+            return center.clone();
+        };
+
+        const frontLeft = readCenter(wheelNodeMap.frontLeft);
+        const frontRight = readCenter(wheelNodeMap.frontRight);
+        const rearLeft = readCenter(wheelNodeMap.rearLeft);
+        const rearRight = readCenter(wheelNodeMap.rearRight);
+        if (!frontLeft || !frontRight || !rearLeft || !rearRight) {
+            return null;
+        }
+
+        return {
+            frontLeft,
+            frontRight,
+            rearLeft,
+            rearRight,
+        };
+    }
+
+    splitToyotaWheelMeshByAxis(
+        mesh: THREE.Mesh,
+        model: THREE.Object3D,
+        preferredAxis: 'x' | 'z',
+        frontPositiveDirection: boolean
+    ) {
+        const geometry = mesh.geometry as THREE.BufferGeometry;
+        const nonIndexedGeometry = geometry.index
+            ? geometry.toNonIndexed()
+            : geometry.clone();
+        const position = nonIndexedGeometry.getAttribute('position');
+        if (!(position instanceof THREE.BufferAttribute)) {
+            return null;
+        }
+
+        const triangleCount = Math.floor(position.count / 3);
+        if (triangleCount < 2) return null;
+
+        mesh.updateMatrixWorld(true);
+        model.updateMatrixWorld(true);
+        const sourceToModel = new THREE.Matrix4()
+            .copy(model.matrixWorld)
+            .invert()
+            .multiply(mesh.matrixWorld);
+        const sourceBox = new THREE.Box3().setFromObject(mesh);
+        if (sourceBox.isEmpty()) return null;
+        const sourceCenterModel = sourceBox.getCenter(new THREE.Vector3());
+        model.worldToLocal(sourceCenterModel);
+
+        const triA = new THREE.Vector3();
+        const triB = new THREE.Vector3();
+        const triC = new THREE.Vector3();
+        const splitByAxis = (axis: 'x' | 'z') => {
+            const splitValue =
+                axis === 'x' ? sourceCenterModel.x : sourceCenterModel.z;
+            const frontTriangleStarts: number[] = [];
+            const rearTriangleStarts: number[] = [];
+
+            for (let triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++) {
+                const i0 = triangleIndex * 3;
+                const i1 = i0 + 1;
+                const i2 = i0 + 2;
+
+                triA
+                    .set(position.getX(i0), position.getY(i0), position.getZ(i0))
+                    .applyMatrix4(sourceToModel);
+                triB
+                    .set(position.getX(i1), position.getY(i1), position.getZ(i1))
+                    .applyMatrix4(sourceToModel);
+                triC
+                    .set(position.getX(i2), position.getY(i2), position.getZ(i2))
+                    .applyMatrix4(sourceToModel);
+                const centroid =
+                    axis === 'x'
+                        ? (triA.x + triB.x + triC.x) / 3
+                        : (triA.z + triB.z + triC.z) / 3;
+
+                if (centroid >= splitValue) {
+                    frontTriangleStarts.push(i0);
+                } else {
+                    rearTriangleStarts.push(i0);
+                }
+            }
+
+            return {
+                axis,
+                frontTriangleStarts,
+                rearTriangleStarts,
+            };
+        };
+
+        const fallbackAxis = preferredAxis === 'x' ? 'z' : 'x';
+        const preferredSplit = splitByAxis(preferredAxis);
+        const fallbackSplit = splitByAxis(fallbackAxis);
+        let split =
+            preferredSplit.frontTriangleStarts.length >= 4 &&
+            preferredSplit.rearTriangleStarts.length >= 4
+                ? preferredSplit
+                : fallbackSplit;
+
+        if (
+            split.frontTriangleStarts.length < 4 ||
+            split.rearTriangleStarts.length < 4
+        ) {
+            return null;
+        }
+
+        const sourceAttributes = Object.entries(nonIndexedGeometry.attributes).filter(
+            ([, attribute]) => attribute instanceof THREE.BufferAttribute
+        ) as Array<[string, THREE.BufferAttribute]>;
+        if (!sourceAttributes.length) {
+            return null;
+        }
+
+        const buildSplitGeometry = (triangleStarts: number[]) => {
+            const splitGeometry = new THREE.BufferGeometry();
+            for (const [attributeName, attribute] of sourceAttributes) {
+                const itemSize = attribute.itemSize;
+                const valueCount = triangleStarts.length * 3 * itemSize;
+                const ArrayType = (attribute.array as any).constructor as {
+                    new (length: number): ArrayLike<number>;
+                };
+                const values = new ArrayType(valueCount) as any;
+                let writeOffset = 0;
+
+                for (const triangleStart of triangleStarts) {
+                    for (let vertexOffset = 0; vertexOffset < 3; vertexOffset++) {
+                        const vertexIndex = triangleStart + vertexOffset;
+                        const sourceOffset = vertexIndex * itemSize;
+                        for (let component = 0; component < itemSize; component++) {
+                            values[writeOffset++] =
+                                (attribute.array as any)[sourceOffset + component];
+                        }
+                    }
+                }
+
+                splitGeometry.setAttribute(
+                    attributeName,
+                    new THREE.BufferAttribute(
+                        values,
+                        itemSize,
+                        attribute.normalized
+                    )
+                );
+            }
+            splitGeometry.computeBoundingBox();
+            splitGeometry.computeBoundingSphere();
+            return splitGeometry;
+        };
+
+        let frontGeometry = buildSplitGeometry(split.frontTriangleStarts);
+        let rearGeometry = buildSplitGeometry(split.rearTriangleStarts);
+        const splitPosition = new THREE.Vector3();
+        const splitQuaternion = new THREE.Quaternion();
+        const splitScale = new THREE.Vector3();
+        sourceToModel.decompose(splitPosition, splitQuaternion, splitScale);
+        const toModelCenter = (splitGeometry: THREE.BufferGeometry) => {
+            const center = splitGeometry.boundingBox
+                ? splitGeometry.boundingBox.getCenter(new THREE.Vector3())
+                : new THREE.Vector3();
+            return center.applyMatrix4(sourceToModel);
+        };
+
+        const frontCenterModel = toModelCenter(frontGeometry);
+        const rearCenterModel = toModelCenter(rearGeometry);
+        const frontCoord =
+            split.axis === 'x' ? frontCenterModel.x : frontCenterModel.z;
+        const rearCoord =
+            split.axis === 'x' ? rearCenterModel.x : rearCenterModel.z;
+        const frontIsPositive = frontCoord >= rearCoord;
+        if (frontIsPositive !== frontPositiveDirection) {
+            const temp = frontGeometry;
+            frontGeometry = rearGeometry;
+            rearGeometry = temp;
+        }
+
+        const frontMesh = new THREE.Mesh(frontGeometry, mesh.material);
+        frontMesh.castShadow = mesh.castShadow;
+        frontMesh.receiveShadow = mesh.receiveShadow;
+        frontMesh.position.copy(splitPosition);
+        frontMesh.quaternion.copy(splitQuaternion);
+        frontMesh.scale.copy(splitScale);
+        frontMesh.updateMatrixWorld(true);
+
+        const rearMesh = new THREE.Mesh(rearGeometry, mesh.material);
+        rearMesh.castShadow = mesh.castShadow;
+        rearMesh.receiveShadow = mesh.receiveShadow;
+        rearMesh.position.copy(splitPosition);
+        rearMesh.quaternion.copy(splitQuaternion);
+        rearMesh.scale.copy(splitScale);
+        rearMesh.updateMatrixWorld(true);
+
+        return {
+            frontMesh,
+            rearMesh,
+        };
     }
 
     buildMappedWheelRig(
