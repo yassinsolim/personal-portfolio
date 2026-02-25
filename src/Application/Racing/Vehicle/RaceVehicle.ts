@@ -43,7 +43,7 @@ const WHEEL_NAME_HINT_REGEX =
 const WHEEL_MATERIAL_HINT_REGEX =
     /(wheel|tire|tyre|rim|rubber|michelin)/i;
 const NON_WHEEL_NAME_HINT_REGEX =
-    /(trim|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel|steering|brake|disc|disk|rotor|caliper|hub|suspension)/i;
+    /(trim|decal|dirt|dust|mud|grime|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel|steering|brake|disc|disk|rotor|caliper|hub|suspension)/i;
 const BRAKE_WHEEL_PART_HINT_REGEX = /(brake|disc|disk|rotor|caliper|hub)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
@@ -358,8 +358,9 @@ export default class RaceVehicle {
         this.applyMaterialTweaks(model, carId);
 
         const option = carOptionsById[carId];
+        const mappedWheelNodeMap = option?.race.wheelNodeMap;
         const hasMappedWheelCorners = this.hasExplicitWheelNodeCorners(
-            option?.race.wheelNodeMap
+            mappedWheelNodeMap
         );
         const rawLength = this.getModelLength(model);
         const scale = option && rawLength > 0 ? option.lengthMeters / rawLength : 1;
@@ -379,7 +380,7 @@ export default class RaceVehicle {
 
         this.alignModelLongitudinalAxisFromWheelMap(
             model,
-            option?.race.wheelNodeMap
+            mappedWheelNodeMap
         );
         model.updateMatrixWorld(true);
         this.alignVisualFrontToPositiveZ(model);
@@ -390,19 +391,16 @@ export default class RaceVehicle {
         }
         model.updateMatrixWorld(true);
 
-        let wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
+        let wheelRig = this.buildWheelRig(model, mappedWheelNodeMap);
         for (let attempt = 0; attempt < 2; attempt++) {
             const correctionY =
                 this.getModelForwardCorrectionFromMappedWheels(wheelRig);
             if (Math.abs(correctionY) <= 1e-4) break;
             model.rotation.y += correctionY;
             model.updateMatrixWorld(true);
-            wheelRig = this.buildWheelRig(model, option?.race.wheelNodeMap);
+            wheelRig = this.buildWheelRig(model, mappedWheelNodeMap);
         }
         wheelRig = this.filterValidWheelRig(carId, wheelRig);
-        if (carId === TOYOTA_CROWN_ID) {
-            wheelRig = [];
-        }
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
