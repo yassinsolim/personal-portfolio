@@ -1,5 +1,6 @@
-import { SupabaseClient, createClient } from '@supabase/supabase-js';
+import { RealtimeChannel, SupabaseClient, createClient } from '@supabase/supabase-js';
 import LocalLeaderboard, { LeaderboardEntry } from './LocalLeaderboard';
+import { carOptionsById, defaultCarId } from '../../carOptions';
 
 type SupabaseConfig = {
     supabaseUrl: string;
@@ -25,6 +26,8 @@ export default class LeaderboardService {
     initialized: boolean;
     initPromise: Promise<void> | null;
     missingConfigLogged: boolean;
+    listeners: Set<() => void>;
+    tableChangesChannel: RealtimeChannel | null;
 
     constructor(local: LocalLeaderboard) {
         this.local = local;
@@ -33,6 +36,8 @@ export default class LeaderboardService {
         this.initialized = false;
         this.initPromise = null;
         this.missingConfigLogged = false;
+        this.listeners = new Set();
+        this.tableChangesChannel = null;
     }
 
     async initialize() {
@@ -76,6 +81,7 @@ export default class LeaderboardService {
                     },
                 }
             );
+            this.subscribeToTableChanges();
         } catch (error) {
             this.logConfigFallback();
         }
@@ -124,10 +130,14 @@ export default class LeaderboardService {
     }
 
     async submitLap(name: string, lapTimeMs: number, carId: string) {
+        const safeName = this.sanitizeName(name);
+        const safeLapTimeMs = this.sanitizeLapTime(lapTimeMs);
+        const safeCarId = this.sanitizeCarId(carId);
+
         const localEntry = this.local.add({
-            name,
-            lapTimeMs,
-            carId,
+            name: safeName,
+            lapTimeMs: safeLapTimeMs,
+            carId: safeCarId,
         });
 
         await this.initialize();
@@ -139,9 +149,9 @@ export default class LeaderboardService {
             const { data, error } = await this.supabase
                 .from(this.tableName)
                 .insert({
-                    name,
-                    lap_time_ms: lapTimeMs,
-                    car_id: carId,
+                    name: safeName,
+                    lap_time_ms: safeLapTimeMs,
+                    car_id: safeCarId,
                 })
                 .select('id,name,lap_time_ms,car_id,created_at')
                 .single();
@@ -155,13 +165,77 @@ export default class LeaderboardService {
                 id: String(row.id),
                 name: row.name,
                 lapTimeMs: row.lap_time_ms,
-                carId: row.car_id || carId,
+                carId: row.car_id || safeCarId,
                 createdAt: row.created_at || new Date().toISOString(),
                 source: 'remote' as const,
             };
         } catch (error) {
             return localEntry;
         }
+    }
+
+    onLeaderboardChanged(listener: () => void) {
+        this.listeners.add(listener);
+        return () => {
+            this.listeners.delete(listener);
+        };
+    }
+
+    notifyLeaderboardChanged() {
+        this.listeners.forEach((listener) => {
+            try {
+                listener();
+            } catch {
+                // no-op
+            }
+        });
+    }
+
+    subscribeToTableChanges() {
+        if (!this.supabase) return;
+        if (this.tableChangesChannel) return;
+
+        const channel = this.supabase.channel(
+            `leaderboard-changes:${this.tableName}`
+        );
+
+        channel.on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: this.tableName,
+            },
+            () => {
+                this.notifyLeaderboardChanged();
+            }
+        );
+
+        channel.subscribe((status) => {
+            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                this.tableChangesChannel = null;
+            }
+        });
+
+        this.tableChangesChannel = channel;
+    }
+
+    sanitizeName(name: string) {
+        const normalized = String(name || '')
+            .replace(/[^a-zA-Z0-9 _-]/g, '')
+            .trim()
+            .slice(0, 16);
+        return normalized || 'Driver';
+    }
+
+    sanitizeLapTime(value: number) {
+        const numeric = Math.floor(Number(value));
+        if (!Number.isFinite(numeric)) return 60000;
+        return Math.min(7_200_000, Math.max(1_000, numeric));
+    }
+
+    sanitizeCarId(carId: string) {
+        return carOptionsById[carId] ? carId : defaultCarId;
     }
 
     mergeEntries(remote: LeaderboardEntry[], local: LeaderboardEntry[]) {
@@ -181,4 +255,3 @@ export default class LeaderboardService {
         return merged;
     }
 }
-

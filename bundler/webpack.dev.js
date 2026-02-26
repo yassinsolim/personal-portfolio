@@ -1,8 +1,8 @@
 const path = require('path')
 const fs = require('fs')
+const os = require('os')
 const { merge } = require('webpack-merge')
 const commonConfiguration = require('./webpack.common.js')
-const ip = require('ip')
 const portFinderSync = require('portfinder-sync')
 
 const shouldExportScene = process.env.EXPORT_SCENE === '1'
@@ -11,6 +11,27 @@ const MAX_EXPORT_BYTES = 100 * 1024 * 1024
 const infoColor = (_message) =>
 {
     return `\u001b[1m\u001b[34m${_message}\u001b[39m\u001b[22m`
+}
+
+const getLocalIpAddress = () =>
+{
+    const interfaces = os.networkInterfaces()
+    for (const entries of Object.values(interfaces))
+    {
+        if (!entries)
+        {
+            continue
+        }
+        for (const entry of entries)
+        {
+            if (entry && entry.family === 'IPv4' && !entry.internal)
+            {
+                return entry.address
+            }
+        }
+    }
+
+    return '127.0.0.1'
 }
 
 module.exports = merge(
@@ -25,11 +46,11 @@ module.exports = merge(
         },
         devServer:
         {
-            host: 'localhost',
+            host: '127.0.0.1',
             port: portFinderSync.getPort(8080),
             open: shouldExportScene ? '/?export=1&save=1' : true,
             https: false,
-            allowedHosts: 'auto',
+            allowedHosts: ['127.0.0.1', 'localhost'],
             hot: false,
             watchFiles: ['src/**', 'static/**'],
             static:
@@ -135,7 +156,7 @@ module.exports = merge(
             {
                 const port = devServer.options.port
                 const https = devServer.options.https ? 's' : ''
-                const localIp = ip.address()
+                const localIp = getLocalIpAddress()
                 const domain1 = `http${https}://${localIp}:${port}`
                 const domain2 = `http${https}://localhost:${port}`
                 
