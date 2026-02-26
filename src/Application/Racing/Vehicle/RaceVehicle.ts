@@ -41,8 +41,8 @@ const TOYOTA_SPLIT_GROUP_FRONT_RIGHT = 'toyota_split_wheel_front_right';
 const TOYOTA_SPLIT_GROUP_REAR_LEFT = 'toyota_split_wheel_rear_left';
 const TOYOTA_SPLIT_GROUP_REAR_RIGHT = 'toyota_split_wheel_rear_right';
 // Toyota GLB exports axle-pair wheel meshes. Split each axle by lateral axis.
-const TOYOTA_SPLIT_FRONT_SOURCE_HINTS = ['228_black_0', '276_black_0'];
-const TOYOTA_SPLIT_REAR_SOURCE_HINTS = ['220_black_0', '260_black_0'];
+const TOYOTA_SPLIT_FRONT_SOURCE_HINTS = ['220_black_0', '260_black_0'];
+const TOYOTA_SPLIT_REAR_SOURCE_HINTS = ['228_black_0', '276_black_0'];
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
@@ -698,7 +698,11 @@ export default class RaceVehicle {
         model: THREE.Object3D
     ) {
         if (this.isToyotaSplitWheelObject(cornerNode, primaryNode)) {
-            return [] as WheelRig['linkedVisuals'];
+            return this.collectToyotaSplitLinkedVisuals(
+                primaryNode,
+                primaryRadius,
+                model
+            );
         }
 
         const linked = new Map<
@@ -740,6 +744,85 @@ export default class RaceVehicle {
             const radius = Math.max(size.x, size.y, size.z) * 0.5;
             if (!this.isWheelRadiusPlausible(radius)) return;
             if (radius < primaryRadius * 0.52) return;
+
+            box.getCenter(center);
+            this.toScaledModelSpace(center, model);
+            if (center.distanceTo(primaryCenter) > maxCenterDistance) return;
+
+            linked.set(child.uuid, {
+                object: child,
+                spinCenter: this.getWheelSpinCenter(child, box),
+                basePosition: child.position.clone(),
+                baseQuaternion: child.quaternion.clone(),
+            });
+        });
+
+        return Array.from(linked.values());
+    }
+
+    collectToyotaSplitLinkedVisuals(
+        primaryNode: THREE.Object3D,
+        primaryRadius: number,
+        model: THREE.Object3D
+    ) {
+        const linked = new Map<
+            string,
+            {
+                object: THREE.Object3D;
+                spinCenter: THREE.Vector3;
+                basePosition: THREE.Vector3;
+                baseQuaternion: THREE.Quaternion;
+            }
+        >();
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        const primaryCenter = new THREE.Vector3();
+        const primaryBox = new THREE.Box3().setFromObject(primaryNode);
+        if (primaryBox.isEmpty()) return [] as WheelRig['linkedVisuals'];
+
+        primaryBox.getCenter(primaryCenter);
+        this.toScaledModelSpace(primaryCenter, model);
+
+        const minRadius = primaryRadius * 0.45;
+        const maxRadius = primaryRadius * 0.78;
+        const maxCenterDistance = Math.max(0.12, primaryRadius * 0.7);
+
+        const hasWheelLikeMaterial = (node: THREE.Mesh) => {
+            if (!node.material) return false;
+            const materials = Array.isArray(node.material)
+                ? node.material
+                : [node.material];
+            return materials.some((material) =>
+                this.isWheelMaterialName(material?.name || '')
+            );
+        };
+
+        model.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            if (child.uuid === primaryNode.uuid) return;
+
+            const childName = (child.name || '').toLowerCase();
+            if (
+                childName.includes('__toyota_') ||
+                childName.startsWith('toyota_split_wheel_')
+            ) {
+                return;
+            }
+            if (this.isBrakeLikeWheelPartObject(child)) return;
+            if (
+                NON_WHEEL_NAME_HINT_REGEX.test(childName) &&
+                !hasWheelLikeMaterial(child)
+            ) {
+                return;
+            }
+
+            const box = new THREE.Box3().setFromObject(child);
+            if (box.isEmpty()) return;
+
+            box.getSize(size);
+            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            if (!this.isWheelRadiusPlausible(radius)) return;
+            if (radius < minRadius || radius > maxRadius) return;
 
             box.getCenter(center);
             this.toScaledModelSpace(center, model);
