@@ -261,6 +261,126 @@ br {
     color: rgba(255, 255, 255, 0.7);
 }
 
+.lobby-code-banner {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.62);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    pointer-events: auto;
+}
+
+.lobby-code-banner button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .race-error {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: rgba(255, 170, 170, 0.95);
+}
+
+.look-hint .multiplayer-menu {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.look-hint .multiplayer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-row label {
+    min-width: 42px;
+    color: inherit;
+    font-size: 11px;
+}
+
+.look-hint .multiplayer-row input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+.look-hint .multiplayer-row button,
+.look-hint .multiplayer-actions button,
+.look-hint .multiplayer-status button,
+.look-hint .multiplayer-secondary-actions button,
+.look-hint .race-error button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .multiplayer-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-secondary-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.look-hint .multiplayer-row button:disabled,
+.look-hint .multiplayer-actions button:disabled,
+.look-hint .multiplayer-status button:disabled,
+.look-hint .multiplayer-secondary-actions button:disabled,
+.look-hint .race-error button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .race-menu-overlay {
     position: fixed;
     inset: 0;
@@ -385,6 +505,10 @@ br {
     margin: 0 0 6px;
     font-size: 12px;
     font-weight: 700;
+}
+
+.race-hud-board h4.race-hud-subtitle {
+    margin-top: 10px;
 }
 
 .race-hud-board p {

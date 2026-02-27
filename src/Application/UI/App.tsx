@@ -4,11 +4,14 @@ import LoadingScreen from './components/LoadingScreen';
 import InterfaceUI from './components/InterfaceUI';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
+import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
 import './style.css';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const VOLUME_KEY = 'yassinverse:masterVolume';
 const MUTE_KEY = 'yassinverse:muted';
+const MULTIPLAYER_NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
+const LAST_LOBBY_CODE_KEY = 'yassinverse:nordschleife:multiplayer:lastLobbyCode:v1';
 
 type QualityMode = 'quality' | 'performance';
 
@@ -29,6 +32,21 @@ type LeaderboardEntry = {
     carId: string;
     createdAt: string;
     source: 'local' | 'remote';
+};
+
+const defaultMultiplayerState: MultiplayerState = {
+    mode: 'solo',
+    supported: false,
+    connecting: false,
+    connected: false,
+    lobbyCode: null,
+    localSessionId: '',
+    localPlayerName: 'Driver',
+    localCarId: getStoredCarId(),
+    isHost: false,
+    error: null,
+    players: [],
+    laps: [],
 };
 
 const getStoredQualityMode = (): QualityMode => {
@@ -58,6 +76,35 @@ const getStoredMuted = () => {
         return window.localStorage.getItem(MUTE_KEY) === '1';
     } catch {
         return false;
+    }
+};
+
+const getStoredMultiplayerName = () => {
+    try {
+        const value = window.localStorage.getItem(MULTIPLAYER_NAME_KEY);
+        const clean = String(value || '')
+            .replace(/[^a-zA-Z0-9 _-]/g, '')
+            .trim()
+            .slice(0, 16);
+        return clean || 'Driver';
+    } catch {
+        return 'Driver';
+    }
+};
+
+const sanitizeLobbyCode = (value: string) =>
+    String(value || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 8);
+
+const getStoredLobbyCode = () => {
+    try {
+        return sanitizeLobbyCode(
+            window.localStorage.getItem(LAST_LOBBY_CODE_KEY) || ''
+        );
+    } catch {
+        return '';
     }
 };
 
@@ -94,9 +141,12 @@ const App = () => {
         ghostBestLapMs: 0,
     });
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-    const [lapPromptOpen, setLapPromptOpen] = useState(false);
-    const [pendingLapTimeMs, setPendingLapTimeMs] = useState(0);
-    const [lapName, setLapName] = useState('Driver');
+    const [playerName, setPlayerName] = useState(() => getStoredMultiplayerName());
+    const [lobbyCodeInput, setLobbyCodeInput] = useState(() => getStoredLobbyCode());
+    const [multiplayer, setMultiplayer] = useState<MultiplayerState>(
+        defaultMultiplayerState
+    );
+    const [lobbyCodeCopyState, setLobbyCodeCopyState] = useState('');
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -114,8 +164,6 @@ const App = () => {
                 }
                 if (!active) {
                     setPointerLocked(false);
-                    setLapPromptOpen(false);
-                    setPendingLapTimeMs(0);
                 }
             }
         );
@@ -145,13 +193,17 @@ const App = () => {
             }
         );
 
-        eventBus.on('race:lapCompleted', (payload: { lapTimeMs?: number }) => {
-            setPendingLapTimeMs(payload?.lapTimeMs || 0);
-            setLapPromptOpen(true);
-            setLapName('Driver');
-        });
+        eventBus.on(
+            'race:multiplayerState',
+            (state: MultiplayerState | undefined) => {
+                if (!state) return;
+                setMultiplayer(state);
+            }
+        );
 
         eventBus.dispatch('race:requestLeaderboard', {});
+        eventBus.dispatch('race:multiplayerSetName', { playerName });
+        eventBus.dispatch('race:multiplayerRequestState', {});
     }, []);
 
     useEffect(() => {
@@ -181,6 +233,18 @@ const App = () => {
         }
     }, [muted]);
 
+    useEffect(() => {
+        if (!multiplayer.lobbyCode) return;
+        try {
+            window.localStorage.setItem(
+                LAST_LOBBY_CODE_KEY,
+                sanitizeLobbyCode(multiplayer.lobbyCode)
+            );
+        } catch {
+            // no-op
+        }
+    }, [multiplayer.lobbyCode]);
+
     const handleCarChange = (
         event: React.ChangeEvent<HTMLSelectElement>
     ) => {
@@ -198,8 +262,23 @@ const App = () => {
     };
 
     const handleRaceToggle = () => {
-        eventBus.dispatch(raceModeActive ? 'raceMode:exit' : 'raceMode:start', {
-            fromUI: true,
+        if (raceModeActive) {
+            eventBus.dispatch('raceMode:exit', {
+                fromUI: true,
+            });
+            return;
+        }
+
+        if (multiplayer.mode === 'lobby' && multiplayer.connected) {
+            eventBus.dispatch('raceMode:start', {
+                fromUI: true,
+            });
+            return;
+        }
+
+        eventBus.dispatch('race:multiplayerPlaySolo', {
+            playerName,
+            startRace: true,
         });
     };
 
@@ -224,22 +303,103 @@ const App = () => {
         setQualityMode(mode);
     };
 
-    const handleLapSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        const name = lapName.trim() || 'Driver';
-        eventBus.dispatch('race:submitLapName', { name });
-        setLapPromptOpen(false);
-        setPendingLapTimeMs(0);
+    const handlePlayerNameChange = (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
+        const nextName = event.target.value.slice(0, 16);
+        setPlayerName(nextName);
+        eventBus.dispatch('race:multiplayerSetName', {
+            playerName: nextName,
+        });
+        try {
+            window.localStorage.setItem(MULTIPLAYER_NAME_KEY, nextName);
+        } catch {
+            // no-op
+        }
     };
 
-    const handleLapSkip = () => {
-        setLapPromptOpen(false);
-        setPendingLapTimeMs(0);
-        eventBus.dispatch('race:setPaused', { paused: false });
-        eventBus.dispatch('race:requestPointerLock', { fromUI: true });
+    const handlePlaySolo = () => {
+        eventBus.dispatch('race:multiplayerPlaySolo', {
+            playerName,
+            startRace: true,
+        });
+    };
+
+    const handleCreateLobby = () => {
+        eventBus.dispatch('race:multiplayerCreateLobby', {
+            playerName,
+            startRace: true,
+        });
+    };
+
+    const handleJoinLobby = () => {
+        const lobbyCode = sanitizeLobbyCode(lobbyCodeInput);
+        setLobbyCodeInput(lobbyCode);
+        if (!lobbyCode) return;
+        try {
+            window.localStorage.setItem(LAST_LOBBY_CODE_KEY, lobbyCode);
+        } catch {
+            // no-op
+        }
+        eventBus.dispatch('race:multiplayerJoinLobby', {
+            playerName,
+            lobbyCode,
+            startRace: true,
+        });
+    };
+
+    const handleLeaveLobby = () => {
+        const rememberedCode = sanitizeLobbyCode(multiplayer.lobbyCode || lobbyCodeInput);
+        if (rememberedCode) {
+            setLobbyCodeInput(rememberedCode);
+            try {
+                window.localStorage.setItem(LAST_LOBBY_CODE_KEY, rememberedCode);
+            } catch {
+                // no-op
+            }
+        }
+        eventBus.dispatch('race:multiplayerLeaveLobby', {});
+    };
+
+    const handleRejoinLastLobby = () => {
+        const code = sanitizeLobbyCode(multiplayer.lobbyCode || lobbyCodeInput);
+        if (!code) return;
+        setLobbyCodeInput(code);
+        eventBus.dispatch('race:multiplayerJoinLobby', {
+            playerName,
+            lobbyCode: code,
+            startRace: true,
+        });
+    };
+
+    const handleCopyLobbyCode = async () => {
+        const code = multiplayer.lobbyCode || '';
+        if (!code) return;
+
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(code);
+            } else {
+                const input = document.createElement('input');
+                input.value = code;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+            }
+            setLobbyCodeCopyState('Copied');
+        } catch {
+            setLobbyCodeCopyState('Copy failed');
+        }
+
+        window.setTimeout(() => {
+            setLobbyCodeCopyState('');
+        }, 1200);
     };
 
     const displayedGear = hud.gear < 0 ? 'R' : String(hud.gear);
+    const multiplayerBusy = multiplayer.connecting;
+    const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
 
     return (
         <div id="ui-app">
@@ -282,13 +442,111 @@ const App = () => {
                             </button>
                         </div>
                     )}
-                    <div className="race-toggle" data-prevent-click>
-                        <button type="button" onClick={handleRaceToggle}>
-                            {raceModeActive
-                                ? 'Exit race mode'
-                                : 'Start Nordschleife race'}
-                        </button>
-                    </div>
+                    {!raceModeActive && (
+                        <div className="multiplayer-menu" data-prevent-click>
+                            <div className="multiplayer-row">
+                                <label htmlFor="multiplayer-name">Driver</label>
+                                <input
+                                    id="multiplayer-name"
+                                    value={playerName}
+                                    onChange={handlePlayerNameChange}
+                                    maxLength={16}
+                                    placeholder="Driver"
+                                />
+                            </div>
+                            <div className="multiplayer-actions">
+                                <button
+                                    type="button"
+                                    onClick={handlePlaySolo}
+                                    disabled={multiplayerBusy}
+                                >
+                                    Play Solo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleCreateLobby}
+                                    disabled={multiplayerBusy}
+                                >
+                                    Create Lobby
+                                </button>
+                            </div>
+                            <div className="multiplayer-row">
+                                <label htmlFor="multiplayer-code">Lobby</label>
+                                <input
+                                    id="multiplayer-code"
+                                    value={lobbyCodeInput}
+                                    onChange={(event) =>
+                                        setLobbyCodeInput(
+                                            sanitizeLobbyCode(event.target.value)
+                                        )
+                                    }
+                                    placeholder="CODE"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleJoinLobby}
+                                    disabled={multiplayerBusy || !hasJoinCode}
+                                >
+                                    Join
+                                </button>
+                            </div>
+                            <div className="multiplayer-secondary-actions">
+                                <button
+                                    type="button"
+                                    onClick={handleRejoinLastLobby}
+                                    disabled={multiplayerBusy || !hasJoinCode}
+                                >
+                                    Rejoin Last Lobby
+                                </button>
+                            </div>
+                            {multiplayer.connecting && (
+                                <div className="race-lock-hint">
+                                    Connecting to lobby...
+                                </div>
+                            )}
+                            {multiplayer.error && (
+                                <div className="race-error">
+                                    {multiplayer.error}
+                                    <button
+                                        type="button"
+                                        onClick={handleRejoinLastLobby}
+                                        disabled={multiplayerBusy || !hasJoinCode}
+                                    >
+                                        Retry
+                                    </button>
+                                </div>
+                            )}
+                            {multiplayer.connected && multiplayer.lobbyCode && (
+                                <div className="multiplayer-status">
+                                    <span>
+                                        Lobby {multiplayer.lobbyCode} |{' '}
+                                        {multiplayer.players.length} players
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopyLobbyCode}
+                                        disabled={multiplayerBusy}
+                                    >
+                                        {lobbyCodeCopyState || 'Copy Code'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleLeaveLobby}
+                                        disabled={multiplayerBusy}
+                                    >
+                                        Leave
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {raceModeActive && (
+                        <div className="race-toggle" data-prevent-click>
+                            <button type="button" onClick={handleRaceToggle}>
+                                Exit race mode
+                            </button>
+                        </div>
+                    )}
                     {raceModeActive && !racePaused && (
                         <div className="race-pause-toggle" data-prevent-click>
                             <button type="button" onClick={handlePauseMenu}>
@@ -301,6 +559,14 @@ const App = () => {
                             Click the scene to lock mouse. Press Esc to pause.
                         </div>
                     )}
+                </div>
+            )}
+            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && (
+                <div className="lobby-code-banner" data-prevent-click>
+                    <span>Lobby Code: {multiplayer.lobbyCode}</span>
+                    <button type="button" onClick={handleCopyLobbyCode}>
+                        {lobbyCodeCopyState || 'Copy'}
+                    </button>
                 </div>
             )}
             {raceModeActive && (
@@ -346,6 +612,44 @@ const App = () => {
                             </ol>
                         )}
                     </div>
+                    {multiplayer.connected && multiplayer.mode === 'lobby' && (
+                        <div className="race-hud-board">
+                            <h4>Lobby {multiplayer.lobbyCode}</h4>
+                            {multiplayer.players.length === 0 ? (
+                                <p>No players connected.</p>
+                            ) : (
+                                <ol>
+                                    {multiplayer.players.slice(0, 5).map((player) => (
+                                        <li key={player.sessionId}>
+                                            <span>
+                                                {player.name}
+                                                {player.sessionId ===
+                                                    multiplayer.localSessionId
+                                                    ? ' (you)'
+                                                    : ''}
+                                            </span>
+                                            <span>
+                                                {Math.round(player.lapProgress * 100)}%
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                            <h4 className="race-hud-subtitle">Lobby Lap Times</h4>
+                            {multiplayer.laps.length === 0 ? (
+                                <p>No submitted laps yet.</p>
+                            ) : (
+                                <ol>
+                                    {multiplayer.laps.slice(0, 5).map((lap) => (
+                                        <li key={lap.id}>
+                                            <span>{lap.name}</span>
+                                            <span>{formatLapTime(lap.lapTimeMs)}</span>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                        </div>
+                    )}
                 </div>
             )}
             {raceModeActive && racePaused && (
@@ -368,6 +672,21 @@ const App = () => {
                                 ))}
                             </select>
                         </div>
+                        {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && (
+                            <div className="race-menu-row">
+                                <span>Lobby Code {multiplayer.lobbyCode}</span>
+                                <button type="button" onClick={handleCopyLobbyCode}>
+                                    {lobbyCodeCopyState || 'Copy Code'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleLeaveLobby}
+                                    disabled={multiplayerBusy}
+                                >
+                                    Leave Lobby
+                                </button>
+                            </div>
+                        )}
 
                         <div className="race-menu-row">
                             <label htmlFor="race-volume-range">
@@ -434,31 +753,6 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && lapPromptOpen && (
-                <div className="lap-name-overlay" data-prevent-click>
-                    <form
-                        className="lap-name-panel"
-                        onSubmit={handleLapSubmit}
-                        data-prevent-click
-                    >
-                        <h3>Valid Lap Completed</h3>
-                        <p>{formatLapTime(pendingLapTimeMs)}</p>
-                        <input
-                            value={lapName}
-                            onChange={(event) => setLapName(event.target.value)}
-                            maxLength={16}
-                            placeholder="Driver name"
-                            autoFocus
-                        />
-                        <div className="lap-name-actions">
-                            <button type="submit">Save Lap</button>
-                            <button type="button" onClick={handleLapSkip}>
-                                Skip
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            )}
         </div>
     );
 };
@@ -475,3 +769,4 @@ const createVolumeUI = () => {
 };
 
 export { createUI, createVolumeUI };
+
