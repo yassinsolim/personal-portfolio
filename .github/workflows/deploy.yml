@@ -12,6 +12,7 @@ jobs:
     steps:
       - name: Deploy outer site on webvm
         run: |
+          git config --global --add safe.directory /opt/sites/personal-portfolio
           cd /opt/sites/personal-portfolio
           git fetch origin
           git reset --hard origin/main

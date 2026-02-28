@@ -1,5 +1,6 @@
 import { RealtimeChannel, SupabaseClient, createClient } from '@supabase/supabase-js';
 import { carOptionsById, defaultCarId } from '../../carOptions';
+import { randomInt } from '../../Utils/Random';
 import type { LeaderboardEntry } from '../Leaderboard/LocalLeaderboard';
 
 type SupabaseConfig = {
@@ -1021,7 +1022,7 @@ export default class MultiplayerService {
         const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let code = '';
         for (let i = 0; i < LOBBY_CODE_LENGTH; i++) {
-            const next = Math.floor(Math.random() * alphabet.length);
+            const next = randomInt(alphabet.length);
             code += alphabet[next];
         }
         return code;
@@ -1032,7 +1033,7 @@ export default class MultiplayerService {
             'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let out = '';
         for (let i = 0; i < length; i++) {
-            const index = Math.floor(Math.random() * alphabet.length);
+            const index = randomInt(alphabet.length);
             out += alphabet[index];
         }
         return out;

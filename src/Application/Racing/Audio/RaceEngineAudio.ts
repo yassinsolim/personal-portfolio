@@ -1,4 +1,5 @@
 import UIEventBus from '../../UI/EventBus';
+import { randomRange } from '../../Utils/Random';
 
 type EngineTelemetry = {
     rpm: number;
@@ -233,7 +234,7 @@ export default class RaceEngineAudio {
         const buffer = this.context.createBuffer(1, this.context.sampleRate * 2, this.context.sampleRate);
         const channel = buffer.getChannelData(0);
         for (let i = 0; i < channel.length; i++) {
-            channel[i] = (Math.random() * 2 - 1) * 0.7;
+            channel[i] = randomRange(-0.7, 0.7);
         }
 
         const source = this.context.createBufferSource();

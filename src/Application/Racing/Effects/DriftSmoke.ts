@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import UIEventBus from '../../UI/EventBus';
+import { randomRange } from '../../Utils/Random';
 
 type SmokeParticle = {
     sprite: THREE.Sprite;
@@ -111,9 +112,9 @@ export default class DriftSmoke {
         this.root.add(sprite);
 
         const velocity = new THREE.Vector3(
-            (Math.random() - 0.5) * 0.9,
+            randomRange(-0.45, 0.45),
             THREE.MathUtils.lerp(0.5, 2.2, intensity),
-            (Math.random() - 0.5) * 0.9
+            randomRange(-0.45, 0.45)
         );
 
         this.particles.push({
@@ -151,4 +152,3 @@ export default class DriftSmoke {
         }
     }
 }
-
