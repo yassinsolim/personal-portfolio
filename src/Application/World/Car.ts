@@ -10,7 +10,10 @@ const CAR_POSITION = new THREE.Vector3(-2400, 0, -7600);
 const CAR_ROTATION = new THREE.Euler(0, -Math.PI / 2, 0);
 const CAR_ENV_INTENSITY = 0.95;
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
+const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
+const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const BODY_BLUE = new THREE.Color(0x050f2f);
+const BMW_F90_M5_TANZANITE_BLUE = new THREE.Color(0x0c2c84);
 const TOYOTA_CROWN_GRAY = new THREE.Color(0x8f9296);
 const TOYOTA_CROWN_SCALE = 0.95;
 const TOYOTA_CROWN_ROTATION_OFFSET = Math.PI / 2;
@@ -21,6 +24,16 @@ const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
 const MOBILE_MAX_WIDTH = 768;
 const MOBILE_CAR_BACK_SHIFT = 0.12;
 const WHEEL_SILVER = new THREE.Color(0xcfd3da);
+const GT63_DECAL_HINTS = [
+    'stripe',
+    'decal',
+    'livery',
+    'edition',
+    'mizo',
+    'satin metallic blue',
+    'satin metallic red',
+    'satin metallic dark',
+];
 
 export default class Car {
     application: Application;
@@ -155,8 +168,12 @@ export default class Car {
         );
         car.scale.setScalar(scale);
         car.rotation.copy(this.getCarRotation(carOption));
-        this.applyEnvironment(car);
+        if (carOption.id !== MERCEDES_GT63S_EDITION_ONE_ID) {
+            this.applyEnvironment(car);
+        }
+        this.applyTextureQuality(car);
         this.applyMaterialStyling(car, carOption);
+        this.applyGt63DecalDepthFix(car, carOption);
 
         car.updateMatrixWorld(true);
 
@@ -346,7 +363,78 @@ export default class Car {
         });
     }
 
+    applyTextureQuality(car: THREE.Object3D) {
+        const renderer = this.application.renderer?.instance;
+        const maxAnisotropy = renderer?.capabilities?.getMaxAnisotropy
+            ? renderer.capabilities.getMaxAnisotropy()
+            : 1;
+        const anisotropy = Math.min(8, maxAnisotropy);
+
+        car.traverse((child) => {
+            if (
+                !(child instanceof THREE.Mesh) ||
+                !child.material ||
+                Array.isArray(child.material)
+            ) {
+                return;
+            }
+            const material = child.material as THREE.MeshStandardMaterial;
+            const maps = [
+                material.map,
+                material.normalMap,
+                material.roughnessMap,
+                material.metalnessMap,
+                material.alphaMap,
+                material.emissiveMap,
+                material.aoMap,
+            ];
+            maps.forEach((map) => {
+                if (!map) return;
+                map.anisotropy = anisotropy;
+                map.needsUpdate = true;
+            });
+        });
+    }
+
+    applyGt63DecalDepthFix(car: THREE.Object3D, carOption: CarOption) {
+        if (carOption.id !== MERCEDES_GT63S_EDITION_ONE_ID) {
+            return;
+        }
+
+        car.traverse((child) => {
+            if (
+                !(child instanceof THREE.Mesh) ||
+                !child.material ||
+                Array.isArray(child.material)
+            ) {
+                return;
+            }
+
+            const material = child.material as THREE.MeshStandardMaterial;
+            const materialName = (material.name || '').toLowerCase();
+            const meshName = (child.name || '').toLowerCase();
+            const isDecalLike = GT63_DECAL_HINTS.some(
+                (hint) =>
+                    materialName.includes(hint) || meshName.includes(hint)
+            );
+            if (!isDecalLike) {
+                return;
+            }
+
+            material.polygonOffset = true;
+            material.polygonOffsetFactor = -4;
+            material.polygonOffsetUnits = -8;
+            material.depthWrite = false;
+            material.needsUpdate = true;
+            child.renderOrder = 4;
+        });
+    }
+
     applyMaterialStyling(car: THREE.Object3D, carOption: CarOption) {
+        if (carOption.id === MERCEDES_GT63S_EDITION_ONE_ID) {
+            return;
+        }
+
         const defaultBodyNames = new Set([
             'body_color',
             'piano_black',
@@ -360,9 +448,19 @@ export default class Car {
             'mizo',
         ]);
         const toyotaBodyNames = new Set(['body']);
+        const bmwM5BodyNames = new Set([...defaultBodyNames, 'bmat_m5_metallic1']);
         const isToyotaCrown = carOption.id === TOYOTA_CROWN_ID;
-        const bodyNames = isToyotaCrown ? toyotaBodyNames : defaultBodyNames;
-        const bodyColor = isToyotaCrown ? TOYOTA_CROWN_GRAY : BODY_BLUE;
+        const isBmwM5 = carOption.id === BMW_F90_M5_COMPETITION_ID;
+        const bodyNames = isToyotaCrown
+            ? toyotaBodyNames
+            : isBmwM5
+            ? bmwM5BodyNames
+            : defaultBodyNames;
+        const bodyColor = isToyotaCrown
+            ? TOYOTA_CROWN_GRAY
+            : isBmwM5
+            ? BMW_F90_M5_TANZANITE_BLUE
+            : BODY_BLUE;
 
         const carbonNames = ['carbon', 'carbon_0', 'parts', 'side_wing_carbon_0'];
         const windowNames = [
@@ -426,6 +524,7 @@ export default class Car {
                     material.roughness = 0.12;
                     material.envMapIntensity = 1.4;
                 }
+                material.needsUpdate = true;
             }
         });
     }

@@ -41,6 +41,11 @@ Run the dev server:
 npm run dev
 ```
 
+## Racing Leaderboard (Optional Supabase)
+
+Online leaderboard setup is documented in `docs/RACING_SUPABASE.md`.
+If Supabase config is not provided, leaderboard automatically falls back to localStorage.
+
 ## Exporting the Scene (GLB/GLTF)
 
 Auto-export the scene to GLB (Windows):

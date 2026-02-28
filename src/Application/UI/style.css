@@ -217,6 +217,380 @@ br {
     cursor: pointer;
 }
 
+.look-hint .race-toggle {
+    margin-top: 6px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.look-hint .race-toggle button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.look-hint .race-pause-toggle {
+    margin-top: 6px;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: auto;
+}
+
+.look-hint .race-pause-toggle button {
+    background: rgba(0, 0, 0, 0.66);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.94);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .race-lock-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.lobby-code-banner {
+    position: fixed;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.62);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    pointer-events: auto;
+}
+
+.lobby-code-banner button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .race-error {
+    margin-top: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+    color: rgba(255, 170, 170, 0.95);
+}
+
+.look-hint .multiplayer-menu {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.look-hint .multiplayer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-row label {
+    min-width: 42px;
+    color: inherit;
+    font-size: 11px;
+}
+
+.look-hint .multiplayer-row input {
+    flex: 1;
+    min-width: 0;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 6px;
+}
+
+.look-hint .multiplayer-row button,
+.look-hint .multiplayer-actions button,
+.look-hint .multiplayer-status button,
+.look-hint .multiplayer-secondary-actions button,
+.look-hint .race-error button {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    color: rgba(0, 0, 0, 0.92);
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .multiplayer-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-secondary-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.look-hint .multiplayer-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.look-hint .multiplayer-row button:disabled,
+.look-hint .multiplayer-actions button:disabled,
+.look-hint .multiplayer-status button:disabled,
+.look-hint .multiplayer-secondary-actions button:disabled,
+.look-hint .race-error button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.race-menu-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(6px);
+    pointer-events: auto;
+}
+
+.race-menu-panel {
+    width: min(460px, calc(100vw - 32px));
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(13, 14, 18, 0.92);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: monospace;
+    box-sizing: border-box;
+}
+
+.race-menu-panel h3 {
+    margin: 0;
+    font-size: 15px;
+    letter-spacing: 0.3px;
+}
+
+.race-menu-panel p {
+    margin-top: 8px;
+    margin-bottom: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+}
+
+.race-menu-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.race-menu-row input[type='range'] {
+    flex: 1;
+}
+
+.race-menu-row select,
+.race-menu-row button,
+.race-menu-actions button {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.9);
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.race-quality-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.race-quality-buttons button.active {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.race-menu-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.race-hud {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 22;
+    pointer-events: none;
+}
+
+.race-hud-main,
+.race-hud-board {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 230px;
+    backdrop-filter: blur(3px);
+    font-family: monospace;
+}
+
+.race-hud-speed {
+    color: rgba(255, 255, 255, 0.95);
+    font-size: 24px;
+    line-height: 1;
+}
+
+.race-hud-speed span {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.race-hud-meta {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px 10px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+}
+
+.race-hud-board h4 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.race-hud-board h4.race-hud-subtitle {
+    margin-top: 10px;
+}
+
+.race-hud-board p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 11px;
+}
+
+.race-hud-board ol {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.race-hud-board li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.84);
+}
+
+.lap-name-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.7);
+    pointer-events: auto;
+}
+
+.lap-name-panel {
+    width: min(400px, calc(100vw - 24px));
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 8px;
+    background: rgba(12, 13, 18, 0.94);
+    color: rgba(255, 255, 255, 0.92);
+    padding: 16px;
+    font-family: monospace;
+}
+
+.lap-name-panel h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.lap-name-panel p {
+    margin-top: 6px;
+    margin-bottom: 10px;
+    font-size: 13px;
+}
+
+.lap-name-panel input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.44);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.92);
+    padding: 8px;
+    font-family: monospace;
+    margin-bottom: 10px;
+}
+
+.lap-name-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.lap-name-actions button {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
 /* if on mobile make all loading screen elements have a padding of 16 */
 @media only screen and (max-width: 768px) {
     .loading-screen-header {

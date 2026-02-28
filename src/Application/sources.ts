@@ -67,6 +67,16 @@ const sources: Resource[] = [
             'textures/environmentMap/nz.jpg',
         ],
     },
+    {
+        name: 'nordschleifeVisualData',
+        type: 'json',
+        path: 'models/Tracks/Nordschleife/nordschleife_visual.json',
+    },
+    {
+        name: 'nordschleifeColliderData',
+        type: 'json',
+        path: 'models/Tracks/Nordschleife/nordschleife_collider.json',
+    },
     ...carModelSources,
     {
         name: 'flipperModel',

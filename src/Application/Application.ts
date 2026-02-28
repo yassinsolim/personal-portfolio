@@ -47,8 +47,13 @@ export default class Application {
         instance = this;
 
         // Global access
-        //@ts-ignore
-        // window.Application = this;
+        if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('raceDebug')) {
+                // @ts-ignore
+                window.Application = this;
+            }
+        }
 
         // Setup
         this.debug = new Debug();

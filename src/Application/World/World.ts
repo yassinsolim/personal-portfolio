@@ -9,6 +9,7 @@ import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
 import Car from './Car';
 import Flipper from './Flipper';
+import RaceManager from '../Racing/RaceManager';
 export default class World {
     application: Application;
     scene: THREE.Scene;
@@ -23,6 +24,7 @@ export default class World {
     cursor: Cursor;
     car: Car;
     flipper: Flipper;
+    raceManager: RaceManager;
 
     constructor() {
         this.application = new Application();
@@ -38,6 +40,7 @@ export default class World {
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
             this.flipper = new Flipper();
+            this.raceManager = new RaceManager();
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
         });
@@ -47,5 +50,6 @@ export default class World {
         if (this.monitorScreen) this.monitorScreen.update();
         if (this.environment) this.environment.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
+        if (this.raceManager) this.raceManager.update();
     }
 }

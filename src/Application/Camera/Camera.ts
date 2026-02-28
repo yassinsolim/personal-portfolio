@@ -40,6 +40,8 @@ export default class Camera extends EventEmitter {
     freeCam: boolean;
     orbitControls: OrbitControls;
     freeCamLocked: boolean;
+    raceModeActive: boolean;
+    freeCamTransitionToken: number;
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -59,6 +61,8 @@ export default class Camera extends EventEmitter {
 
         this.freeCam = false;
         this.freeCamLocked = false;
+        this.raceModeActive = false;
+        this.freeCamTransitionToken = 0;
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -76,7 +80,8 @@ export default class Camera extends EventEmitter {
             ) {
                 return;
             }
-            if (event.button === 2 || this.freeCam) return;
+            if (event.button === 2 || this.freeCam || this.raceModeActive)
+                return;
             event.preventDefault();
             this.toggleIdleDesk();
         });
@@ -88,6 +93,7 @@ export default class Camera extends EventEmitter {
     }
 
     toggleIdleDesk() {
+        if (this.raceModeActive) return;
         if (
             this.currentKeyframe === CameraKey.IDLE ||
             this.targetKeyframe === CameraKey.IDLE
@@ -162,10 +168,28 @@ export default class Camera extends EventEmitter {
 
     setFreeCamListeners() {
         UIEventBus.on('freeCamToggle', (toggle: boolean) => {
+            if (this.raceModeActive) return;
             this.freeCamLocked = toggle;
             if (toggle) this.enableFreeCam();
             else this.disableFreeCam();
+            this.syncOrbitControlsState();
         });
+
+        UIEventBus.on(
+            'raceMode:changed',
+            (state: { active?: boolean } | undefined) => {
+                this.raceModeActive = Boolean(state?.active);
+                if (this.raceModeActive && this.freeCam) {
+                    this.disableFreeCam();
+                }
+                if (this.raceModeActive) {
+                    this.freeCamLocked = false;
+                    this.freeCam = false;
+                    this.freeCamTransitionToken++;
+                }
+                this.syncOrbitControlsState();
+            }
+        );
     }
 
     setPostLoadTransition() {
@@ -176,11 +200,14 @@ export default class Camera extends EventEmitter {
 
     enableFreeCam(duration: number = 750) {
         if (this.freeCam) return;
+        const transitionToken = ++this.freeCamTransitionToken;
         this.transition(
             CameraKey.ORBIT_CONTROLS_START,
             duration,
             BezierEasing(0.13, 0.99, 0, 1),
             () => {
+                if (transitionToken !== this.freeCamTransitionToken) return;
+                if (!this.freeCamLocked || this.raceModeActive) return;
                 this.instance.position.copy(
                     this.keyframes.orbitControlsStart.position
                 );
@@ -189,6 +216,7 @@ export default class Camera extends EventEmitter {
                 );
                 this.orbitControls.update();
                 this.freeCam = true;
+                this.syncOrbitControlsState();
             }
         );
         // @ts-ignore
@@ -199,14 +227,21 @@ export default class Camera extends EventEmitter {
     }
 
     disableFreeCam() {
+        this.freeCamTransitionToken++;
         if (!this.freeCam) return;
         this.freeCam = false;
+        this.syncOrbitControlsState();
         this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
         // @ts-ignore
         document.getElementById('webgl').style.pointerEvents = 'none';
         if (this.renderer.cssInstance?.domElement) {
             this.renderer.cssInstance.domElement.style.pointerEvents = 'auto';
         }
+    }
+
+    syncOrbitControlsState() {
+        if (!this.orbitControls) return;
+        this.orbitControls.enabled = this.freeCam && !this.raceModeActive;
     }
 
     resize() {
@@ -216,6 +251,7 @@ export default class Camera extends EventEmitter {
 
     createControls() {
         this.renderer = this.application.renderer;
+        this.patchSafePointerCapture(this.renderer.instance.domElement);
         this.orbitControls = new OrbitControls(
             this.instance,
             this.renderer.instance.domElement
@@ -235,10 +271,46 @@ export default class Camera extends EventEmitter {
         this.orbitControls.maxDistance = 29000;
 
         this.orbitControls.update();
+        this.syncOrbitControlsState();
+    }
+
+    patchSafePointerCapture(canvas: HTMLCanvasElement) {
+        const patchedFlag = '__raceSafePointerCapturePatched';
+        const anyCanvas = canvas as HTMLCanvasElement & {
+            [patchedFlag]?: boolean;
+        };
+        if (anyCanvas[patchedFlag]) return;
+        anyCanvas[patchedFlag] = true;
+
+        const originalSetPointerCapture =
+            canvas.setPointerCapture?.bind(canvas);
+        if (!originalSetPointerCapture) return;
+
+        canvas.setPointerCapture = ((pointerId: number) => {
+            try {
+                originalSetPointerCapture(pointerId);
+            } catch (error) {
+                const message = String(
+                    (error as { message?: string })?.message || error
+                ).toLowerCase();
+                if (
+                    message.includes('invalidstateerror') ||
+                    message.includes('not active') ||
+                    message.includes('failed to execute')
+                ) {
+                    return;
+                }
+                throw error;
+            }
+        }) as unknown as (pointerId: number) => void;
     }
 
     update() {
         TWEEN.update();
+
+        if (this.raceModeActive) {
+            return;
+        }
 
         if (this.freeCam && this.orbitControls) {
             this.position.copy(this.orbitControls.object.position);

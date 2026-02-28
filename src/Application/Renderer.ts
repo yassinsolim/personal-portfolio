@@ -23,6 +23,7 @@ export default class Renderer {
     instance: THREE.WebGLRenderer;
     cssInstance: CSS3DRenderer;
     raiseExposure: boolean;
+    qualityMode: 'quality' | 'performance';
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -35,8 +36,10 @@ export default class Renderer {
         this.cssScene = this.application.cssScene;
         this.overlayScene = this.application.overlayScene;
         this.camera = this.application.camera;
+        this.qualityMode = 'quality';
 
         this.setInstance();
+        this.setupQualityListeners();
     }
 
     setInstance() {
@@ -51,7 +54,9 @@ export default class Renderer {
         // this.instance.toneMapping = THREE.ACESFilmicToneMapping;
         // this.instance.toneMappingExposure = 0.9;
         this.instance.setSize(this.sizes.width, this.sizes.height);
-        this.instance.setPixelRatio(Math.min(this.sizes.pixelRatio, 2));
+        this.instance.setPixelRatio(
+            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
+        );
         this.instance.setClearColor(0x000000, 0.0);
 
         // Style
@@ -102,16 +107,44 @@ export default class Renderer {
         );
 
         this.overlayScene.add(this.overlay);
+        this.applyQualityMode();
+    }
+
+    setupQualityListeners() {
+        UIEventBus.on(
+            'race:qualityChange',
+            (state: { mode?: 'quality' | 'performance' } | undefined) => {
+                const nextMode =
+                    state?.mode === 'performance' ? 'performance' : 'quality';
+                if (this.qualityMode === nextMode) return;
+                this.qualityMode = nextMode;
+                this.applyQualityMode();
+                this.resize();
+            }
+        );
+    }
+
+    getPixelRatioCap() {
+        return this.qualityMode === 'performance' ? 1 : 2;
+    }
+
+    applyQualityMode() {
+        this.overlayInstance.domElement.style.opacity =
+            this.qualityMode === 'performance' ? '0.06' : '0.12';
     }
 
     resize() {
         this.instance.setSize(this.sizes.width, this.sizes.height);
-        this.instance.setPixelRatio(Math.min(this.sizes.pixelRatio, 2));
+        this.instance.setPixelRatio(
+            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
+        );
 
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
 
         this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
-        this.overlayInstance.setPixelRatio(Math.min(this.sizes.pixelRatio, 2));
+        this.overlayInstance.setPixelRatio(
+            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
+        );
     }
 
     update() {
