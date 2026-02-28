@@ -31,17 +31,13 @@ export default class Decor {
     createRaycaster() {
         window.addEventListener('mousedown', (event) => {
             event.preventDefault();
-            // TODO: replace with proper logger // console.log(this.camera.instance.position);
 
-            // TODO: replace with proper logger // console.log(this.mouse);
             const ray = new THREE.Raycaster();
             ray.setFromCamera(
                 { x: this.mouse.x, y: this.mouse.y },
                 this.camera.instance
             );
-            // TODO: replace with proper logger // console.log(ray);
             const intersects = ray.intersectObjects(this.scene.children);
-            // TODO: replace with proper logger // console.log(intersects);
             // this.raycaster.setFromCamera(this.mouse, this.camera.instance);
             // const intersects = this.raycaster.intersectObjects(
             //     this.scene.children
