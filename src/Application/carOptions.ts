@@ -20,6 +20,8 @@ export type CarRaceConfig = {
     visualYawOffsetDeg?: number;
     groundOffsetMeters?: number;
     cameraFollowDistanceOffsetMeters?: number;
+    startForwardOffsetMeters?: number;
+    allowRwdDrift?: boolean;
     wheelSpinDirectionMultiplier?: 1 | -1;
     wheelNodeMap?: {
         frontLeft?: string[];
@@ -247,6 +249,104 @@ export const carOptions: CarOption[] = [
         },
     },
     {
+        id: 'bmw-f90-m5-competition',
+        label: 'BMW F90 M5 Competition',
+        resourceName: 'carModelBmwF90M5Competition',
+        modelPath:
+            'models/Cars/bmw_f90_m5_competition/source/2021_bmw_m5_competition.glb',
+        lengthMeters: 4.983,
+        race: {
+            visualForwardAxis: 'positiveZ',
+            allowRwdDrift: true,
+            wheelNodeMap: {
+                frontLeft: ['polySurface213'],
+                frontRight: ['polySurface455'],
+                rearLeft: ['polySurface697'],
+                rearRight: ['polySurface939'],
+                candidates: [
+                    'polySurface213',
+                    'polySurface455',
+                    'polySurface697',
+                    'polySurface939',
+                ],
+            },
+            wheelSpinDirectionMultiplier: -1,
+            drivetrain: 'AWD',
+            topSpeedKph: 305,
+            zeroToHundredSec: 3.3,
+            massKg: 1935,
+            wheelRadiusMeters: 0.35,
+            idleRpm: 850,
+            redlineRpm: 7200,
+            shiftUpRpm: 7000,
+            shiftDownRpm: 2200,
+            finalDrive: 3.15,
+            gearRatios: [5, 3.2, 2.14, 1.72, 1.31, 1, 0.82, 0.64],
+            reverseRatio: 4.87,
+            steerRateLow: 0.72,
+            steerRateHigh: 1.55,
+            maxSteerAngleDeg: 34,
+            brakeDecel: 43,
+            references: [
+                {
+                    label: 'BMW M5 Competition Technical Data',
+                    url: 'https://www.bmw-m.com/en/topics/magazine-article-pool/bmw-m5-competition-f90-technical-data.html',
+                },
+            ],
+        },
+    },
+    {
+        id: 'mercedes-gt63s-edition-one',
+        label: 'Mercedes-AMG GT63s Edition One',
+        resourceName: 'carModelMercedesGt63sEditionOne',
+        modelPath:
+            'models/Cars/mercedes_benz_gt63s_edition_one/source/gt63s_edition1.glb',
+        lengthMeters: 5.054,
+        race: {
+            visualForwardAxis: 'positiveZ',
+            allowRwdDrift: true,
+            wheelNodeMap: {
+                frontLeft: ['Mesh038', 'Mesh.038'],
+                frontRight: ['Mesh020', 'Mesh.020'],
+                rearLeft: ['Mesh023', 'Mesh.023'],
+                rearRight: ['Mesh010', 'Mesh.010'],
+                candidates: [
+                    'Mesh038',
+                    'Mesh020',
+                    'Mesh023',
+                    'Mesh010',
+                    'Mesh.038',
+                    'Mesh.020',
+                    'Mesh.023',
+                    'Mesh.010',
+                ],
+            },
+            wheelSpinDirectionMultiplier: -1,
+            drivetrain: 'AWD',
+            topSpeedKph: 315,
+            zeroToHundredSec: 3.2,
+            massKg: 2120,
+            wheelRadiusMeters: 0.355,
+            idleRpm: 850,
+            redlineRpm: 6900,
+            shiftUpRpm: 6700,
+            shiftDownRpm: 2200,
+            finalDrive: 3.27,
+            gearRatios: [5.35, 3.24, 2.25, 1.64, 1.21, 1, 0.86, 0.72, 0.6],
+            reverseRatio: 4.8,
+            steerRateLow: 0.69,
+            steerRateHigh: 1.46,
+            maxSteerAngleDeg: 32,
+            brakeDecel: 44,
+            references: [
+                {
+                    label: 'Car and Driver 2020 AMG GT63 S Specs',
+                    url: 'https://www.caranddriver.com/mercedes-amg/gt63',
+                },
+            ],
+        },
+    },
+    {
         id: 'toyota-crown-platinum',
         label: 'Toyota Crown Platinum',
         resourceName: 'carModelToyotaCrownPlatinum',
@@ -258,6 +358,8 @@ export const carOptions: CarOption[] = [
             visualYawOffsetDeg: 0,
             groundOffsetMeters: 0.4,
             cameraFollowDistanceOffsetMeters: 3.8,
+            startForwardOffsetMeters: 0,
+            wheelSpinDirectionMultiplier: -1,
             drivetrain: 'AWD',
             wheelNodeMap: {
                 frontLeft: ['316_black_0'],

@@ -24,8 +24,10 @@ const DRIFT_RELEASE_SPEED_MPS = 4.5;
 const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(68);
 const SMOKE_SPAWN_INTERVAL = 0.03;
 const STEERING_SENSITIVITY_SCALE = 0.132;
-const LOW_SPEED_STEER_BOOST = 1.25;
-const LOW_SPEED_STEER_BOOST_FADE_MPS = 18;
+const LOW_SPEED_STEER_BOOST = 2.05;
+const LOW_SPEED_STEER_BOOST_FADE_MPS = 24;
+const LOW_SPEED_STEER_RESPONSE_BOOST = 1.9;
+const DRIFT_FULL_SPEED_MPS = 23;
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
 const LOW_SPEED_GROUNDING_BLEND_SPEED_MPS = 10;
@@ -33,8 +35,20 @@ const LOW_SPEED_GROUNDING_LERP_MIN = 3.5;
 const LOW_SPEED_GROUNDING_LERP_MAX = 30;
 const LOW_SPEED_GROUNDING_MAX_STEP_MIN = 0.006;
 const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
+const SURFACE_NORMAL_BLEND_SPEED_MPS = 16;
+const SURFACE_NORMAL_LERP_MIN = 2.2;
+const SURFACE_NORMAL_LERP_MAX = 9;
 const FRONT_WHEEL_VISUAL_STEER_MULTIPLIER = 1.45;
+const LOW_SPEED_VISUAL_STEER_BOOST = 1.65;
+const SHARED_TOP_SPEED_KPH = 300;
+const SHARED_ZERO_TO_HUNDRED_SEC = 3.55;
+const SHARED_BRAKE_DECEL = 42;
+const SHARED_AERO_DRAG = 0.00014;
+const SHARED_ROLLING_RESISTANCE = 0.34;
+const SHARED_MAX_STEER_ANGLE_DEG = 34;
 const AMG_ONE_ID = 'amg-one';
+const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
+const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const TOYOTA_SPLIT_GROUP_FRONT_LEFT = 'toyota_split_wheel_front_left';
 const TOYOTA_SPLIT_GROUP_FRONT_RIGHT = 'toyota_split_wheel_front_right';
@@ -43,8 +57,45 @@ const TOYOTA_SPLIT_GROUP_REAR_RIGHT = 'toyota_split_wheel_rear_right';
 // Toyota GLB exports axle-pair wheel meshes. Split each axle by lateral axis.
 const TOYOTA_SPLIT_FRONT_SOURCE_HINTS = ['220_black_0', '260_black_0'];
 const TOYOTA_SPLIT_REAR_SOURCE_HINTS = ['228_black_0', '276_black_0'];
+const TOYOTA_SPLIT_FRONT_ATTACHMENT_SOURCE_HINTS = [
+    '523_refl_black_0',
+    '531_refl_black_0',
+];
+const TOYOTA_SPLIT_REAR_ATTACHMENT_SOURCE_HINTS = [
+    '539_refl_black_0',
+    '547_refl_black_0',
+];
+const TOYOTA_CORNER_FRONT_LEFT_ATTACHMENT_HINTS = ['316_black_0'];
+const TOYOTA_CORNER_FRONT_RIGHT_ATTACHMENT_HINTS = [
+    '356_black_0',
+    '523_refl_black_0_1',
+];
+const TOYOTA_CORNER_REAR_LEFT_ATTACHMENT_HINTS = ['340_black_0'];
+const TOYOTA_CORNER_REAR_RIGHT_ATTACHMENT_HINTS = [
+    '348_black_0',
+    '539_refl_black_0_1',
+];
+const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
+    '316_black_0',
+    '356_black_0',
+    '340_black_0',
+    '348_black_0',
+    '523_refl_black_0_1',
+    '539_refl_black_0_1',
+];
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
+const BMW_F90_M5_TANZANITE_BLUE = new THREE.Color(0x0c2c84);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
+const GT63_DECAL_HINTS = [
+    'stripe',
+    'decal',
+    'livery',
+    'edition',
+    'mizo',
+    'satin metallic blue',
+    'satin metallic red',
+    'satin metallic dark',
+];
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =
@@ -52,6 +103,8 @@ const WHEEL_MATERIAL_HINT_REGEX =
 const NON_WHEEL_NAME_HINT_REGEX =
     /(trim|decal|dirt|dust|mud|grime|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel|steering|brake|disc|disk|rotor|caliper|hub|suspension)/i;
 const BRAKE_WHEEL_PART_HINT_REGEX = /(brake|disc|disk|rotor|caliper|hub)/i;
+const FIXED_BRAKE_PART_HINT_REGEX = /(brake|caliper)/i;
+const WHEEL_LINKED_ATTACHMENT_HINT_REGEX = /(hub|disc|disk|rotor|rim|spoke)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
 
@@ -92,6 +145,24 @@ type WheelRig = {
     spinAxis: THREE.Vector3;
     spinSign: number;
     radius: number;
+};
+
+export type LinkedWheelVisualMeta = {
+    objectName: string;
+    spinCenter: [number, number, number];
+    basePosition: [number, number, number];
+    baseQuaternion: [number, number, number, number];
+};
+
+export type WheelVisualMeta = {
+    objectName: string;
+    front: boolean;
+    spinCenter: [number, number, number];
+    basePosition: [number, number, number];
+    baseQuaternion: [number, number, number, number];
+    spinAxis: [number, number, number];
+    spinSign: number;
+    linkedVisuals: LinkedWheelVisualMeta[];
 };
 
 type WheelNodeMap = NonNullable<CarRaceConfig['wheelNodeMap']>;
@@ -149,11 +220,15 @@ export default class RaceVehicle {
     tmpVectorB: THREE.Vector3;
     tmpVectorC: THREE.Vector3;
     tmpVectorD: THREE.Vector3;
+    tmpVectorE: THREE.Vector3;
+    tmpVectorF: THREE.Vector3;
     tmpMatrix: THREE.Matrix4;
     tmpQuatA: THREE.Quaternion;
     tmpQuatB: THREE.Quaternion;
     tmpQuatC: THREE.Quaternion;
     tmpQuatD: THREE.Quaternion;
+    tmpQuatE: THREE.Quaternion;
+    tmpQuatG: THREE.Quaternion;
 
     constructor(parent: THREE.Object3D, track: NordschleifeTrack) {
         this.application = new Application();
@@ -196,13 +271,13 @@ export default class RaceVehicle {
         this.wheelSpinAngle = 0;
         this.rideHeight = this.currentTuning.wheelRadiusMeters + 0.02;
         this.wheelRadius = this.currentTuning.wheelRadiusMeters;
-        this.maxForwardSpeedMps = this.currentTuning.topSpeedKph / 3.6;
+        this.maxForwardSpeedMps = SHARED_TOP_SPEED_KPH / 3.6;
         this.maxReverseSpeedMps = MAX_REVERSE_SPEED_KPH / 3.6;
         this.engineAccelBase = 8;
         this.reverseAccel = 5.5;
         this.engineBrakeDecel = 2.2;
-        this.aeroDrag = 0.00012;
-        this.rollingResistance = 0.32;
+        this.aeroDrag = SHARED_AERO_DRAG;
+        this.rollingResistance = SHARED_ROLLING_RESISTANCE;
         this.bodyRadius = 2.4;
         this.bodySize = new THREE.Vector3(4.7, 1.4, 2.1);
         this.position = new THREE.Vector3();
@@ -218,11 +293,15 @@ export default class RaceVehicle {
         this.tmpVectorB = new THREE.Vector3();
         this.tmpVectorC = new THREE.Vector3();
         this.tmpVectorD = new THREE.Vector3();
+        this.tmpVectorE = new THREE.Vector3();
+        this.tmpVectorF = new THREE.Vector3();
         this.tmpMatrix = new THREE.Matrix4();
         this.tmpQuatA = new THREE.Quaternion();
         this.tmpQuatB = new THREE.Quaternion();
         this.tmpQuatC = new THREE.Quaternion();
         this.tmpQuatD = new THREE.Quaternion();
+        this.tmpQuatE = new THREE.Quaternion();
+        this.tmpQuatG = new THREE.Quaternion();
 
         this.setCarTuning(this.currentCarId);
         this.setupCarSwitcher();
@@ -243,44 +322,18 @@ export default class RaceVehicle {
     setCarTuning(carId: string) {
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
         this.currentTuning = option.race;
-        this.maxForwardSpeedMps = this.currentTuning.topSpeedKph / 3.6;
-        this.maxReverseSpeedMps = Math.max(
-            6,
-            Math.min(
-                13.5,
-                MAX_REVERSE_SPEED_KPH / 3.6 + this.currentTuning.topSpeedKph * 0.005
-            )
-        );
+        this.maxForwardSpeedMps = SHARED_TOP_SPEED_KPH / 3.6;
+        this.maxReverseSpeedMps = MAX_REVERSE_SPEED_KPH / 3.6;
 
         this.wheelRadius = this.currentTuning.wheelRadiusMeters;
         this.rideHeight = THREE.MathUtils.clamp(this.wheelRadius * 0.98, 0.16, 0.52);
 
-        const zeroToHundred = Math.max(2.3, this.currentTuning.zeroToHundredSec);
+        const zeroToHundred = SHARED_ZERO_TO_HUNDRED_SEC;
         this.engineAccelBase = 27.7778 / zeroToHundred;
         this.reverseAccel = this.engineAccelBase * 0.56;
         this.engineBrakeDecel = THREE.MathUtils.lerp(1.8, 3.1, this.engineAccelBase / 10);
-
-        const firstGear = this.currentTuning.gearRatios[0] || 1;
-        const topGear =
-            this.currentTuning.gearRatios[this.currentTuning.gearRatios.length - 1] ||
-            firstGear;
-        const topGearPull = THREE.MathUtils.clamp(topGear / firstGear, 0.15, 0.5);
-        const engineAtTop =
-            this.engineAccelBase * (0.52 + topGearPull * 0.52) * 0.7;
-        this.aeroDrag = THREE.MathUtils.clamp(
-            engineAtTop / Math.max(1, this.maxForwardSpeedMps * this.maxForwardSpeedMps),
-            0.000065,
-            0.00032
-        );
-        this.rollingResistance = THREE.MathUtils.lerp(
-            0.26,
-            0.42,
-            THREE.MathUtils.clamp(
-                (this.currentTuning.massKg - 1500) / 700,
-                0,
-                1
-            )
-        );
+        this.aeroDrag = SHARED_AERO_DRAG;
+        this.rollingResistance = SHARED_ROLLING_RESISTANCE;
 
         this.rpm = THREE.MathUtils.clamp(
             this.rpm,
@@ -297,20 +350,24 @@ export default class RaceVehicle {
             return;
         }
 
+        this.ensurePreparedModel(carId).then((model) => {
+            if (!model) return;
+            this.swapModelIfCurrent(carId, model);
+        });
+    }
+
+    ensurePreparedModel(carId: string): Promise<THREE.Group | null> {
+        const prepared = this.getPreparedModel(carId);
+        if (prepared) return Promise.resolve(prepared);
+
         const option = carOptionsById[carId];
-        if (!option) return;
+        if (!option) return Promise.resolve(null);
 
         const existingPromise = this.loadingPromises.get(carId);
         if (existingPromise) {
-            existingPromise
-                .then((model) => this.swapModelIfCurrent(carId, model))
-                .catch((error) => {
-                    console.warn(
-                        `[RaceVehicle] Failed to load car model for ${carId}`,
-                        error
-                    );
-                });
-            return;
+            return existingPromise
+                .then((model) => model)
+                .catch(() => null);
         }
 
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
@@ -318,8 +375,8 @@ export default class RaceVehicle {
                 option.modelPath,
                 (gltf) => {
                     this.resources.items.gltfModel[option.resourceName] = gltf;
-                    const prepared = this.prepareModel(gltf.scene.clone(true), carId);
-                    resolve(prepared);
+                    const loadedModel = this.prepareModel(gltf.scene.clone(true), carId);
+                    resolve(loadedModel);
                 },
                 undefined,
                 (error) => {
@@ -330,9 +387,8 @@ export default class RaceVehicle {
 
         this.loadingPromises.set(carId, loadPromise);
         loadPromise
-            .then((model) => {
-                this.cachedModels.set(carId, model);
-                this.swapModelIfCurrent(carId, model);
+            .then((loadedModel) => {
+                this.cachedModels.set(carId, loadedModel);
             })
             .catch((error) => {
                 console.warn(
@@ -343,6 +399,10 @@ export default class RaceVehicle {
             .finally(() => {
                 this.loadingPromises.delete(carId);
             });
+
+        return loadPromise
+            .then((loadedModel) => loadedModel)
+            .catch(() => null);
     }
 
     getPreparedModel(carId: string) {
@@ -439,6 +499,7 @@ export default class RaceVehicle {
         );
 
         model.userData.raceWheelRig = wheelRig;
+        model.userData.raceWheelMeta = this.buildWheelVisualMetadata(wheelRig);
         model.userData.raceWheelRadius = wheelRadius;
         model.userData.raceRideHeight = rideHeight;
         model.userData.raceBodyRadius = bodyRadius;
@@ -449,6 +510,50 @@ export default class RaceVehicle {
         ];
 
         return model;
+    }
+
+    buildWheelVisualMetadata(wheels: WheelRig[]): WheelVisualMeta[] {
+        return wheels.map((wheel) => ({
+            objectName: wheel.object.name || '',
+            front: wheel.front,
+            spinCenter: [
+                wheel.spinCenter.x,
+                wheel.spinCenter.y,
+                wheel.spinCenter.z,
+            ],
+            basePosition: [
+                wheel.basePosition.x,
+                wheel.basePosition.y,
+                wheel.basePosition.z,
+            ],
+            baseQuaternion: [
+                wheel.baseQuaternion.x,
+                wheel.baseQuaternion.y,
+                wheel.baseQuaternion.z,
+                wheel.baseQuaternion.w,
+            ],
+            spinAxis: [wheel.spinAxis.x, wheel.spinAxis.y, wheel.spinAxis.z],
+            spinSign: wheel.spinSign,
+            linkedVisuals: wheel.linkedVisuals.map((linked) => ({
+                objectName: linked.object.name || '',
+                spinCenter: [
+                    linked.spinCenter.x,
+                    linked.spinCenter.y,
+                    linked.spinCenter.z,
+                ],
+                basePosition: [
+                    linked.basePosition.x,
+                    linked.basePosition.y,
+                    linked.basePosition.z,
+                ],
+                baseQuaternion: [
+                    linked.baseQuaternion.x,
+                    linked.baseQuaternion.y,
+                    linked.baseQuaternion.z,
+                    linked.baseQuaternion.w,
+                ],
+            })),
+        }));
     }
 
     getVisualForwardOffsetY(model: THREE.Object3D) {
@@ -691,17 +796,31 @@ export default class RaceVehicle {
         return node.parent.worldToLocal(centerWorld.clone());
     }
 
+    getWheelLinkedSpinCenter(
+        linkedNode: THREE.Object3D,
+        wheelCenterWorld: THREE.Vector3
+    ) {
+        if (!linkedNode.parent) return wheelCenterWorld.clone();
+        return linkedNode.parent.worldToLocal(wheelCenterWorld.clone());
+    }
+
     collectWheelLinkedVisuals(
         cornerNode: THREE.Object3D,
         primaryNode: THREE.Object3D,
         primaryRadius: number,
         model: THREE.Object3D
     ) {
+        const primaryBox = new THREE.Box3().setFromObject(primaryNode);
+        if (primaryBox.isEmpty()) return [] as WheelRig['linkedVisuals'];
+        const primaryCenterWorld = primaryBox.getCenter(new THREE.Vector3());
+
         if (this.isToyotaSplitWheelObject(cornerNode, primaryNode)) {
             return this.collectToyotaSplitLinkedVisuals(
+                cornerNode,
                 primaryNode,
                 primaryRadius,
-                model
+                model,
+                primaryCenterWorld
             );
         }
 
@@ -716,11 +835,7 @@ export default class RaceVehicle {
         >();
         const size = new THREE.Vector3();
         const center = new THREE.Vector3();
-        const primaryCenter = new THREE.Vector3();
-        const primaryBox = new THREE.Box3().setFromObject(primaryNode);
-        if (primaryBox.isEmpty()) return [] as WheelRig['linkedVisuals'];
-
-        primaryBox.getCenter(primaryCenter);
+        const primaryCenter = primaryCenterWorld.clone();
         this.toScaledModelSpace(primaryCenter, model);
         const maxCenterDistance = Math.max(0.22, primaryRadius * 0.86);
 
@@ -729,13 +844,31 @@ export default class RaceVehicle {
             if (child.uuid === primaryNode.uuid) return;
 
             const childName = (child.name || '').toLowerCase();
+            const wheelLikeMaterial = this.meshHasWheelLikeMaterial(child);
+            const wheelLinkedAttachmentMaterial =
+                this.meshHasWheelLinkedAttachmentMaterial(child);
+            const wheelLinkedAttachmentName =
+                this.isWheelLinkedAttachmentName(childName);
+            const wheelLikeName =
+                this.isWheelName(childName) ||
+                this.isWheelHubLikeName(childName) ||
+                wheelLinkedAttachmentName;
             if (
                 NON_WHEEL_NAME_HINT_REGEX.test(childName) &&
-                !this.isWheelHubLikeName(childName)
+                !this.isWheelHubLikeName(childName) &&
+                !wheelLinkedAttachmentName &&
+                !wheelLinkedAttachmentMaterial
             ) {
                 return;
             }
-            if (this.isBrakeLikeWheelPartObject(child)) return;
+            if (this.isFixedBrakePartObject(child)) return;
+            if (
+                !wheelLikeMaterial &&
+                !wheelLikeName &&
+                !wheelLinkedAttachmentMaterial
+            ) {
+                return;
+            }
 
             const box = new THREE.Box3().setFromObject(child);
             if (box.isEmpty()) return;
@@ -743,7 +876,12 @@ export default class RaceVehicle {
             box.getSize(size);
             const radius = Math.max(size.x, size.y, size.z) * 0.5;
             if (!this.isWheelRadiusPlausible(radius)) return;
-            if (radius < primaryRadius * 0.52) return;
+            const minLinkedRadius = wheelLikeMaterial
+                ? primaryRadius * 0.2
+                : wheelLinkedAttachmentName || wheelLinkedAttachmentMaterial
+                ? primaryRadius * 0.09
+                : primaryRadius * 0.34;
+            if (radius < minLinkedRadius) return;
 
             box.getCenter(center);
             this.toScaledModelSpace(center, model);
@@ -751,19 +889,121 @@ export default class RaceVehicle {
 
             linked.set(child.uuid, {
                 object: child,
-                spinCenter: this.getWheelSpinCenter(child, box),
+                spinCenter: this.getWheelLinkedSpinCenter(
+                    child,
+                    primaryCenterWorld
+                ),
                 basePosition: child.position.clone(),
                 baseQuaternion: child.quaternion.clone(),
             });
         });
 
+        if (linked.size < 3) {
+            const fallbackPoolRoot =
+                cornerNode.parent || primaryNode.parent || model;
+            this.collectWheelLinkedVisualsFromPool(
+                fallbackPoolRoot,
+                primaryNode,
+                primaryRadius,
+                primaryCenter,
+                primaryCenterWorld,
+                model,
+                linked
+            );
+        }
+
         return Array.from(linked.values());
     }
 
-    collectToyotaSplitLinkedVisuals(
+    collectWheelLinkedVisualsFromPool(
+        poolRoot: THREE.Object3D,
         primaryNode: THREE.Object3D,
         primaryRadius: number,
-        model: THREE.Object3D
+        primaryCenter: THREE.Vector3,
+        primaryCenterWorld: THREE.Vector3,
+        model: THREE.Object3D,
+        linked: Map<
+            string,
+            {
+                object: THREE.Object3D;
+                spinCenter: THREE.Vector3;
+                basePosition: THREE.Vector3;
+                baseQuaternion: THREE.Quaternion;
+            }
+        >
+    ) {
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        const minRadius = primaryRadius * 0.32;
+        const maxRadius = primaryRadius * 2.4;
+        const maxCenterDistance = Math.max(0.34, primaryRadius * 1.8);
+        const maxVerticalDelta = Math.max(0.24, primaryRadius * 1.1);
+
+        poolRoot.traverse((child) => {
+            if (!(child instanceof THREE.Mesh)) return;
+            if (child.uuid === primaryNode.uuid) return;
+            if (this.isFixedBrakePartObject(child)) return;
+
+            const childName = (child.name || '').toLowerCase();
+            const wheelLikeMaterial = this.meshHasWheelLikeMaterial(child);
+            const wheelLinkedAttachmentMaterial =
+                this.meshHasWheelLinkedAttachmentMaterial(child);
+            const wheelLinkedAttachmentName =
+                this.isWheelLinkedAttachmentName(childName);
+            const wheelLikeName =
+                this.isWheelName(childName) || wheelLinkedAttachmentName;
+            if (
+                NON_WHEEL_NAME_HINT_REGEX.test(childName) &&
+                !wheelLikeMaterial &&
+                !this.isWheelHubLikeName(childName) &&
+                !wheelLinkedAttachmentName &&
+                !wheelLinkedAttachmentMaterial
+            ) {
+                return;
+            }
+            if (
+                !wheelLikeMaterial &&
+                !wheelLikeName &&
+                !wheelLinkedAttachmentMaterial
+            ) {
+                return;
+            }
+
+            const box = new THREE.Box3().setFromObject(child);
+            if (box.isEmpty()) return;
+            box.getSize(size);
+
+            const radius = Math.max(size.x, size.y, size.z) * 0.5;
+            if (!this.isWheelRadiusPlausible(radius)) return;
+            const linkedMinRadius =
+                wheelLikeMaterial || wheelLikeName
+                    ? minRadius
+                    : primaryRadius * 0.09;
+            if (radius < linkedMinRadius || radius > maxRadius) return;
+
+            box.getCenter(center);
+            this.toScaledModelSpace(center, model);
+            if (center.distanceTo(primaryCenter) > maxCenterDistance) return;
+            if (Math.abs(center.y - primaryCenter.y) > maxVerticalDelta) return;
+
+            linked.set(child.uuid, {
+                object: child,
+                spinCenter: this.getWheelLinkedSpinCenter(
+                    child,
+                    primaryCenterWorld
+                ),
+                basePosition: child.position.clone(),
+                baseQuaternion: child.quaternion.clone(),
+            });
+        });
+    }
+
+    collectToyotaSplitLinkedVisuals(
+        cornerNode: THREE.Object3D,
+        primaryNode: THREE.Object3D,
+        primaryRadius: number,
+        model: THREE.Object3D,
+        primaryCenterWorld: THREE.Vector3
     ) {
         const linked = new Map<
             string,
@@ -783,38 +1023,14 @@ export default class RaceVehicle {
         primaryBox.getCenter(primaryCenter);
         this.toScaledModelSpace(primaryCenter, model);
 
-        const minRadius = primaryRadius * 0.45;
-        const maxRadius = primaryRadius * 0.78;
-        const maxCenterDistance = Math.max(0.12, primaryRadius * 0.7);
 
-        const hasWheelLikeMaterial = (node: THREE.Mesh) => {
-            if (!node.material) return false;
-            const materials = Array.isArray(node.material)
-                ? node.material
-                : [node.material];
-            return materials.some((material) =>
-                this.isWheelMaterialName(material?.name || '')
-            );
-        };
-
-        model.traverse((child) => {
+        cornerNode.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
             if (child.uuid === primaryNode.uuid) return;
 
             const childName = (child.name || '').toLowerCase();
-            if (
-                childName.includes('__toyota_') ||
-                childName.startsWith('toyota_split_wheel_')
-            ) {
-                return;
-            }
-            if (this.isBrakeLikeWheelPartObject(child)) return;
-            if (
-                NON_WHEEL_NAME_HINT_REGEX.test(childName) &&
-                !hasWheelLikeMaterial(child)
-            ) {
-                return;
-            }
+            if (childName.startsWith('toyota_split_wheel_')) return;
+            if (this.isFixedBrakePartObject(child)) return;
 
             const box = new THREE.Box3().setFromObject(child);
             if (box.isEmpty()) return;
@@ -822,15 +1038,18 @@ export default class RaceVehicle {
             box.getSize(size);
             const radius = Math.max(size.x, size.y, size.z) * 0.5;
             if (!this.isWheelRadiusPlausible(radius)) return;
-            if (radius < minRadius || radius > maxRadius) return;
+            const minLinkedRadius = primaryRadius * 0.04;
+            if (radius < minLinkedRadius) return;
 
             box.getCenter(center);
             this.toScaledModelSpace(center, model);
-            if (center.distanceTo(primaryCenter) > maxCenterDistance) return;
 
             linked.set(child.uuid, {
                 object: child,
-                spinCenter: this.getWheelSpinCenter(child, box),
+                spinCenter: this.getWheelLinkedSpinCenter(
+                    child,
+                    primaryCenterWorld
+                ),
                 basePosition: child.position.clone(),
                 baseQuaternion: child.quaternion.clone(),
             });
@@ -972,6 +1191,10 @@ export default class RaceVehicle {
         rearLeftGroup.name = TOYOTA_SPLIT_GROUP_REAR_LEFT;
         const rearRightGroup = new THREE.Group();
         rearRightGroup.name = TOYOTA_SPLIT_GROUP_REAR_RIGHT;
+        const consumedSplitSourceNodes = new Set<string>([
+            frontSourceNode.uuid,
+            rearSourceNode.uuid,
+        ]);
 
         frontAxleSplit.frontMesh.name = `${frontSourceNode.name}__toyota_front_left`;
         frontAxleSplit.rearMesh.name = `${frontSourceNode.name}__toyota_front_right`;
@@ -982,12 +1205,130 @@ export default class RaceVehicle {
         frontRightGroup.add(frontAxleSplit.rearMesh);
         rearLeftGroup.add(rearAxleSplit.frontMesh);
         rearRightGroup.add(rearAxleSplit.rearMesh);
+        this.addToyotaSplitAttachmentMeshes(
+            model,
+            TOYOTA_SPLIT_FRONT_ATTACHMENT_SOURCE_HINTS,
+            'front',
+            lateralAxis,
+            leftPositiveDirection,
+            frontLeftGroup,
+            frontRightGroup,
+            consumedSplitSourceNodes
+        );
+        this.addToyotaSplitAttachmentMeshes(
+            model,
+            TOYOTA_SPLIT_REAR_ATTACHMENT_SOURCE_HINTS,
+            'rear',
+            lateralAxis,
+            leftPositiveDirection,
+            rearLeftGroup,
+            rearRightGroup,
+            consumedSplitSourceNodes
+        );
+        this.attachToyotaCornerAttachmentNodes(
+            model,
+            TOYOTA_CORNER_FRONT_LEFT_ATTACHMENT_HINTS,
+            frontLeftGroup,
+            consumedSplitSourceNodes
+        );
+        this.attachToyotaCornerAttachmentNodes(
+            model,
+            TOYOTA_CORNER_FRONT_RIGHT_ATTACHMENT_HINTS,
+            frontRightGroup,
+            consumedSplitSourceNodes
+        );
+        this.attachToyotaCornerAttachmentNodes(
+            model,
+            TOYOTA_CORNER_REAR_LEFT_ATTACHMENT_HINTS,
+            rearLeftGroup,
+            consumedSplitSourceNodes
+        );
+        this.attachToyotaCornerAttachmentNodes(
+            model,
+            TOYOTA_CORNER_REAR_RIGHT_ATTACHMENT_HINTS,
+            rearRightGroup,
+            consumedSplitSourceNodes
+        );
+        this.hideToyotaSuppressedStaticWheelNodes(
+            model,
+            TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS
+        );
         model.add(frontLeftGroup, frontRightGroup, rearLeftGroup, rearRightGroup);
 
         frontSourceNode.visible = false;
         rearSourceNode.visible = false;
         model.updateMatrixWorld(true);
         return true;
+    }
+
+    addToyotaSplitAttachmentMeshes(
+        model: THREE.Object3D,
+        sourceHints: string[],
+        axleLabel: 'front' | 'rear',
+        lateralAxis: 'x' | 'z',
+        leftPositiveDirection: boolean,
+        leftGroup: THREE.Group,
+        rightGroup: THREE.Group,
+        consumedSplitSourceNodes: Set<string>
+    ) {
+        sourceHints.forEach((hint, index) => {
+            const sourceMatch = this.findNodeByHints(model, [hint]);
+            if (!sourceMatch) return;
+            const sourceNode = this.resolveMappedWheelNode(sourceMatch, model);
+            if (!(sourceNode instanceof THREE.Mesh)) return;
+            if (consumedSplitSourceNodes.has(sourceNode.uuid)) return;
+
+            const split = this.splitToyotaWheelMeshByAxis(
+                sourceNode,
+                model,
+                lateralAxis,
+                leftPositiveDirection
+            );
+            if (!split) return;
+
+            consumedSplitSourceNodes.add(sourceNode.uuid);
+            split.frontMesh.name = `${sourceNode.name}__toyota_${axleLabel}_left_${index}`;
+            split.rearMesh.name = `${sourceNode.name}__toyota_${axleLabel}_right_${index}`;
+            leftGroup.add(split.frontMesh);
+            rightGroup.add(split.rearMesh);
+            sourceNode.visible = false;
+        });
+    }
+
+    attachToyotaCornerAttachmentNodes(
+        model: THREE.Object3D,
+        sourceHints: string[],
+        targetGroup: THREE.Group,
+        consumedSplitSourceNodes: Set<string>
+    ) {
+        sourceHints.forEach((hint) => {
+            const sourceMatch = this.findNodeByHints(model, [hint]);
+            if (!sourceMatch) return;
+            const sourceNode = this.resolveMappedWheelNode(sourceMatch, model);
+            if (!(sourceNode instanceof THREE.Mesh)) return;
+            if (consumedSplitSourceNodes.has(sourceNode.uuid)) return;
+            if (!sourceNode.parent) return;
+
+            consumedSplitSourceNodes.add(sourceNode.uuid);
+            targetGroup.attach(sourceNode);
+        });
+    }
+
+    hideToyotaSuppressedStaticWheelNodes(model: THREE.Object3D, sourceHints: string[]) {
+        const normalizedHints = sourceHints.map((hint) =>
+            this.normalizeNameToken(hint)
+        );
+        model.traverse((child) => {
+            const childName = this.normalizeNameToken(child.name || '');
+            if (!childName) return;
+            if (
+                normalizedHints.some(
+                    (hint) => childName === hint || childName.includes(hint)
+                )
+            ) {
+                child.visible = false;
+            }
+        });
     }
 
     findFirstNodeByHintPriority(model: THREE.Object3D, hints: string[]) {
@@ -1449,6 +1790,12 @@ export default class RaceVehicle {
         return BRAKE_WHEEL_PART_HINT_REGEX.test(lowered);
     }
 
+    isFixedBrakePartName(name: string) {
+        const lowered = String(name || '').toLowerCase();
+        if (!lowered) return false;
+        return FIXED_BRAKE_PART_HINT_REGEX.test(lowered);
+    }
+
     isWheelHubLikeName(name: string) {
         const lowered = String(name || '').toLowerCase();
         if (!lowered.includes('hub')) return false;
@@ -1475,6 +1822,29 @@ export default class RaceVehicle {
         return materials.some((material) =>
             this.isBrakeLikeWheelPartName(material?.name || '')
         );
+    }
+
+    isFixedBrakePartObject(node: THREE.Object3D) {
+        if (this.isFixedBrakePartName(node.name || '')) {
+            return true;
+        }
+
+        if (!(node instanceof THREE.Mesh) || !node.material) {
+            return false;
+        }
+
+        const materials = Array.isArray(node.material)
+            ? node.material
+            : [node.material];
+        return materials.some((material) =>
+            this.isFixedBrakePartName(material?.name || '')
+        );
+    }
+
+    isWheelLinkedAttachmentName(name: string) {
+        const lowered = String(name || '').toLowerCase();
+        if (!lowered) return false;
+        return WHEEL_LINKED_ATTACHMENT_HINT_REGEX.test(lowered);
     }
 
     resolveMappedWheelNode(
@@ -1951,10 +2321,15 @@ export default class RaceVehicle {
             wheels.reduce((sum, wheel) => sum + wheel.radius, 0) / wheels.length;
         const tunedRadius = this.currentTuning.wheelRadiusMeters;
         const delta = Math.abs(average - tunedRadius);
-        if (delta > tunedRadius * 0.35) {
+        if (delta > tunedRadius * 0.14) {
             return tunedRadius;
         }
-        return THREE.MathUtils.clamp(average, 0.24, 0.46);
+        const blended = THREE.MathUtils.lerp(tunedRadius, average, 0.35);
+        return THREE.MathUtils.clamp(
+            blended,
+            tunedRadius * 0.9,
+            tunedRadius * 1.1
+        );
     }
 
     resolveWheelNode(node: THREE.Object3D, model: THREE.Object3D) {
@@ -2030,6 +2405,26 @@ export default class RaceVehicle {
         return WHEEL_MATERIAL_HINT_REGEX.test(lowered);
     }
 
+    meshHasWheelLikeMaterial(mesh: THREE.Mesh) {
+        if (!mesh.material) return false;
+        const materials = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+        return materials.some((material) =>
+            this.isWheelMaterialName(material?.name || '')
+        );
+    }
+
+    meshHasWheelLinkedAttachmentMaterial(mesh: THREE.Mesh) {
+        if (!mesh.material) return false;
+        const materials = Array.isArray(mesh.material)
+            ? mesh.material
+            : [mesh.material];
+        return materials.some((material) =>
+            this.isWheelLinkedAttachmentName(material?.name || '')
+        );
+    }
+
     isWheelName(name: string) {
         const lowered = String(name || '').toLowerCase();
         if (!lowered) return false;
@@ -2062,6 +2457,19 @@ export default class RaceVehicle {
             child.castShadow = false;
             child.receiveShadow = true;
 
+            if (
+                child.material &&
+                !Array.isArray(child.material)
+            ) {
+                const material = child.material as THREE.MeshStandardMaterial;
+                this.applyTextureQuality(material);
+            }
+
+            if (carId === MERCEDES_GT63S_EDITION_ONE_ID) {
+                this.applyGt63DecalDepthFix(child);
+                return;
+            }
+
             if (!child.material || Array.isArray(child.material)) return;
             const material = child.material as THREE.MeshStandardMaterial;
             if (envMap) {
@@ -2070,29 +2478,85 @@ export default class RaceVehicle {
             }
             material.needsUpdate = true;
         });
+        if (carId === MERCEDES_GT63S_EDITION_ONE_ID) {
+            return;
+        }
         this.applyRaceMaterialStyling(model, carId);
     }
 
-    applyRaceMaterialStyling(model: THREE.Object3D, carId: string) {
-        if (carId !== AMG_ONE_ID && carId !== TOYOTA_CROWN_ID) return;
+    applyTextureQuality(material: THREE.MeshStandardMaterial) {
+        const renderer = this.application.renderer?.instance;
+        const maxAnisotropy = renderer?.capabilities?.getMaxAnisotropy
+            ? renderer.capabilities.getMaxAnisotropy()
+            : 1;
+        const anisotropy = Math.min(8, maxAnisotropy);
+        const maps = [
+            material.map,
+            material.normalMap,
+            material.roughnessMap,
+            material.metalnessMap,
+            material.alphaMap,
+            material.emissiveMap,
+            material.aoMap,
+        ];
+        maps.forEach((map) => {
+            if (!map) return;
+            map.anisotropy = anisotropy;
+            map.needsUpdate = true;
+        });
+    }
 
-        const bodyColor =
-            carId === TOYOTA_CROWN_ID ? TOYOTA_CROWN_SILVER : AMG_ONE_RACE_BLUE;
-        const bodyMatchers =
-            carId === TOYOTA_CROWN_ID
-                ? ['body', 'blue']
-                : [
-                      'body_color',
-                      'piano_black',
-                      'piano_black_0',
-                      'piano_black_1',
-                      'piano_black_2',
-                      'black',
-                      'black_m_nc_black_0',
-                      'black_under_black_0',
-                      'material',
-                      'mizo',
-                  ];
+    applyGt63DecalDepthFix(mesh: THREE.Mesh) {
+        if (!mesh.material || Array.isArray(mesh.material)) {
+            return;
+        }
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        const materialName = (material.name || '').toLowerCase();
+        const meshName = (mesh.name || '').toLowerCase();
+        const isDecalLike = GT63_DECAL_HINTS.some(
+            (hint) => materialName.includes(hint) || meshName.includes(hint)
+        );
+        if (!isDecalLike) {
+            return;
+        }
+
+        material.polygonOffset = true;
+        material.polygonOffsetFactor = -4;
+        material.polygonOffsetUnits = -8;
+        material.depthWrite = false;
+        material.needsUpdate = true;
+        mesh.renderOrder = 4;
+    }
+
+    applyRaceMaterialStyling(model: THREE.Object3D, carId: string) {
+        let bodyColor: THREE.Color;
+        let bodyMatchers: string[] = [];
+        let roughness = 0.18;
+
+        if (carId === TOYOTA_CROWN_ID) {
+            bodyColor = TOYOTA_CROWN_SILVER;
+            bodyMatchers = ['body', 'blue'];
+        } else if (carId === AMG_ONE_ID) {
+            bodyColor = AMG_ONE_RACE_BLUE;
+            bodyMatchers = [
+                'body_color',
+                'piano_black',
+                'piano_black_0',
+                'piano_black_1',
+                'piano_black_2',
+                'black',
+                'black_m_nc_black_0',
+                'black_under_black_0',
+                'material',
+                'mizo',
+            ];
+        } else if (carId === BMW_F90_M5_COMPETITION_ID) {
+            bodyColor = BMW_F90_M5_TANZANITE_BLUE;
+            bodyMatchers = ['m5_metallic', 'mat_m5_metallic'];
+            roughness = 0.22;
+        } else {
+            return;
+        }
 
         model.traverse((child) => {
             if (!(child instanceof THREE.Mesh) || !child.material) return;
@@ -2107,7 +2571,7 @@ export default class RaceVehicle {
 
             material.color.copy(bodyColor);
             material.metalness = 1;
-            material.roughness = 0.18;
+            material.roughness = roughness;
             material.envMapIntensity = 1.1;
             material.needsUpdate = true;
         });
@@ -2188,9 +2652,14 @@ export default class RaceVehicle {
         const curve = this.track.getCurve();
         const point = curve.getPointAt(SPAWN_T);
         const tangent = curve.getTangentAt(SPAWN_T).normalize();
+        const startForwardOffset =
+            this.currentTuning.startForwardOffsetMeters || 0;
 
-        this.position.copy(point).add(new THREE.Vector3(0, 180, 0));
         this.forward.set(tangent.x, 0, tangent.z).normalize();
+        this.position
+            .copy(point)
+            .add(new THREE.Vector3(0, 180, 0))
+            .addScaledVector(this.forward, startForwardOffset);
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
 
         this.surfaceNormal.set(0, 1, 0);
@@ -2245,33 +2714,23 @@ export default class RaceVehicle {
     ) {
         const speedSign = Math.sign(this.speedMps);
         const speedAbs = Math.abs(this.speedMps);
-        const speedRatio = speedAbs / Math.max(1, this.maxForwardSpeedMps);
-
-        const firstGear = this.currentTuning.gearRatios[0] || 1;
-        const currentRatio =
-            this.gear > 0
-                ? this.currentTuning.gearRatios[this.gear - 1] || firstGear
-                : this.currentTuning.reverseRatio;
-        const gearPull = THREE.MathUtils.clamp(currentRatio / firstGear, 0.28, 1.18);
-
-        const rpmRange = Math.max(
-            1,
-            this.currentTuning.redlineRpm - this.currentTuning.idleRpm
-        );
-        const rpmNorm = THREE.MathUtils.clamp(
-            (this.rpm - this.currentTuning.idleRpm) / rpmRange,
+        const speedRatio = THREE.MathUtils.clamp(
+            speedAbs / Math.max(1, this.maxForwardSpeedMps),
             0,
             1
         );
-        const torqueCurve = 0.58 + Math.sin(rpmNorm * Math.PI) * 0.5;
-        const launchBoost = 1 + Math.max(0, 1 - speedRatio) * 0.34;
-
-        const drivetrainGrip =
-            this.currentTuning.drivetrain === 'AWD'
-                ? 1
-                : this.currentTuning.drivetrain === 'RWD'
-                ? 0.97
-                : 0.93;
+        const gearPull = THREE.MathUtils.lerp(
+            1.12,
+            0.44,
+            Math.pow(speedRatio, 0.62)
+        );
+        const torqueCurve = THREE.MathUtils.lerp(
+            1.04,
+            0.72,
+            Math.pow(speedRatio, 0.85)
+        );
+        const launchBoost = 1 + Math.max(0, 1 - speedRatio) * 0.18;
+        const drivetrainGrip = 1;
         const throttleAccel =
             throttle *
             this.engineAccelBase *
@@ -2287,7 +2746,7 @@ export default class RaceVehicle {
 
         if (brake > 0.01) {
             if (this.speedMps > 0.4) {
-                acceleration -= brake * this.currentTuning.brakeDecel;
+                acceleration -= brake * SHARED_BRAKE_DECEL;
             } else {
                 acceleration -= brake * this.reverseAccel;
             }
@@ -2308,8 +2767,7 @@ export default class RaceVehicle {
         this.speedMps += acceleration * deltaSeconds;
 
         if (handbrake > 0.2 && speedAbs > 8) {
-            const handbrakeDamping =
-                this.currentTuning.drivetrain === 'RWD' ? 0.68 : 0.44;
+            const handbrakeDamping = this.usesRwdDriftTuning() ? 0.68 : 0.44;
             this.speedMps *= 1 - handbrake * handbrakeDamping * deltaSeconds;
         }
 
@@ -2333,7 +2791,7 @@ export default class RaceVehicle {
         const speed = Math.abs(this.speedMps);
         const speedFactor = THREE.MathUtils.clamp(speed / 52, 0, 1);
         const maxSteerAngle = THREE.MathUtils.degToRad(
-            this.currentTuning.maxSteerAngleDeg
+            SHARED_MAX_STEER_ANGLE_DEG
         ) * STEERING_SENSITIVITY_SCALE;
         const steerScale = THREE.MathUtils.lerp(1, 0.5, speedFactor);
         const lowSpeedBoostT = THREE.MathUtils.clamp(
@@ -2346,10 +2804,15 @@ export default class RaceVehicle {
             1,
             lowSpeedBoostT
         );
+        const steerResponseBoost = THREE.MathUtils.lerp(
+            LOW_SPEED_STEER_RESPONSE_BOOST,
+            1,
+            lowSpeedBoostT
+        );
         const targetSteerAngle =
             steer * maxSteerAngle * steerScale * lowSpeedSteerBoost;
         const steerLerp = THREE.MathUtils.clamp(
-            deltaSeconds * 12 * STEERING_SENSITIVITY_SCALE,
+            deltaSeconds * 12 * STEERING_SENSITIVITY_SCALE * steerResponseBoost,
             0,
             1
         );
@@ -2369,20 +2832,47 @@ export default class RaceVehicle {
         let yawRate =
             (this.speedMps / wheelBase) *
             Math.tan(this.steerAngle);
+        const driftCapability = this.getDriftCapability();
+        const usesRwdDriftTuning = driftCapability > 0.001;
 
-        const driftEligible =
-            this.currentTuning.drivetrain === 'RWD' &&
-            handbrake > 0.2 &&
-            throttle > 0.2 &&
-            speed > DRIFT_ENTRY_SPEED_MPS &&
-            Math.abs(steer) > 0.18;
+        const driftSpeedNorm = THREE.MathUtils.clamp(
+            (speed - DRIFT_ENTRY_SPEED_MPS) /
+                Math.max(1e-3, DRIFT_FULL_SPEED_MPS - DRIFT_ENTRY_SPEED_MPS),
+            0,
+            1
+        );
+        const driftSteerNorm = THREE.MathUtils.clamp(
+            (Math.abs(steer) - 0.12) / 0.88,
+            0,
+            1
+        );
+        const driftHandbrakeNorm = THREE.MathUtils.clamp((handbrake - 0.18) / 0.82, 0, 1);
+        const driftThrottleNorm = THREE.MathUtils.clamp((throttle - 0.15) / 0.85, 0, 1);
+        const driftInputNorm = Math.min(driftHandbrakeNorm, driftThrottleNorm);
+        const driftTarget = usesRwdDriftTuning
+            ? driftSpeedNorm * driftSteerNorm * driftInputNorm * driftCapability
+            : 0;
+        const driftBuildRate =
+            THREE.MathUtils.lerp(1.4, 3.1, driftTarget) *
+            THREE.MathUtils.lerp(0.7, 1, driftCapability);
+        const driftReleaseRate =
+            speed > DRIFT_RELEASE_SPEED_MPS
+                ? THREE.MathUtils.lerp(2.4, 4.2, 1 - driftTarget)
+                : THREE.MathUtils.lerp(4.2, 6, 1 - driftTarget);
+        const driftRate =
+            driftTarget >= this.driftAmount ? driftBuildRate : driftReleaseRate;
+        this.driftAmount = THREE.MathUtils.lerp(
+            this.driftAmount,
+            driftTarget,
+            THREE.MathUtils.clamp(deltaSeconds * driftRate, 0, 1)
+        );
 
-        if (driftEligible) {
-            this.driftAmount = Math.min(1, this.driftAmount + deltaSeconds * 2.5);
+        if (this.driftAmount > 0.001) {
+            const driftPower = THREE.MathUtils.lerp(0.74, 1.12, driftCapability);
             const driftSlipTarget =
-                -steer * speed * (0.6 + this.driftAmount * 1.2);
+                -steer * speed * (0.3 + this.driftAmount * 1.05) * driftPower;
             const driftSlipLerp = THREE.MathUtils.clamp(
-                deltaSeconds * (3.9 + this.driftAmount * 3.4),
+                deltaSeconds * (2.2 + this.driftAmount * 2.4),
                 0,
                 1
             );
@@ -2391,23 +2881,20 @@ export default class RaceVehicle {
                 driftSlipTarget,
                 driftSlipLerp
             );
-            yawRate += steer * (1 + this.driftAmount * 1.55);
-        } else {
-            const releaseSpeed = speed > DRIFT_RELEASE_SPEED_MPS ? 1.2 : 2.4;
-            this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * releaseSpeed);
+            yawRate += steer * (0.35 + this.driftAmount * 1.15) * driftPower;
         }
 
-        const baseLateralGrip =
-            this.currentTuning.drivetrain === 'AWD'
-                ? 6.9
-                : this.currentTuning.drivetrain === 'FWD'
-                ? 7.4
-                : 5.6;
+        const baseLateralGrip = usesRwdDriftTuning
+            ? driftCapability >= 0.95
+                ? 5.4
+                : 6.15
+            : this.currentTuning.drivetrain === 'FWD'
+            ? 7.4
+            : 6.9;
         const driftGripScale = THREE.MathUtils.lerp(1, 0.09, this.driftAmount);
-        const handbrakeGripScale =
-            this.currentTuning.drivetrain === 'RWD'
-                ? THREE.MathUtils.lerp(1, 0.2, handbrake)
-                : THREE.MathUtils.lerp(1, 0.45, handbrake);
+        const handbrakeGripScale = usesRwdDriftTuning
+            ? THREE.MathUtils.lerp(1, driftCapability >= 0.95 ? 0.2 : 0.34, handbrake)
+            : THREE.MathUtils.lerp(1, 0.45, handbrake);
         const damping = baseLateralGrip * driftGripScale * handbrakeGripScale;
         this.lateralSpeed = THREE.MathUtils.lerp(
             this.lateralSpeed,
@@ -2537,7 +3024,21 @@ export default class RaceVehicle {
                 .transformDirection(hit.object.matrixWorld)
                 .normalize();
 
-            const normalLerp = THREE.MathUtils.clamp(deltaSeconds * 9, 0, 1);
+            const normalSpeedFactor = THREE.MathUtils.clamp(
+                Math.abs(this.speedMps) / SURFACE_NORMAL_BLEND_SPEED_MPS,
+                0,
+                1
+            );
+            const normalLerp = THREE.MathUtils.clamp(
+                deltaSeconds *
+                    THREE.MathUtils.lerp(
+                        SURFACE_NORMAL_LERP_MIN,
+                        SURFACE_NORMAL_LERP_MAX,
+                        normalSpeedFactor
+                    ),
+                0,
+                1
+            );
             this.surfaceNormal.lerp(this.tmpVectorC, normalLerp).normalize();
             return;
         }
@@ -2596,7 +3097,16 @@ export default class RaceVehicle {
         this.tmpMatrix.makeBasis(this.tmpVectorB, this.surfaceNormal, this.tmpVectorC);
         this.orientationTarget.setFromRotationMatrix(this.tmpMatrix);
 
-        const rotLerp = THREE.MathUtils.clamp(deltaSeconds * 10, 0, 1);
+        const rotationSpeedFactor = THREE.MathUtils.clamp(
+            Math.abs(this.speedMps) / 14,
+            0,
+            1
+        );
+        const rotLerp = THREE.MathUtils.clamp(
+            deltaSeconds * THREE.MathUtils.lerp(5, 10, rotationSpeedFactor),
+            0,
+            1
+        );
         this.carPivot.quaternion.slerp(this.orientationTarget, rotLerp);
         this.carPivot.position.copy(this.position);
     }
@@ -2612,6 +3122,19 @@ export default class RaceVehicle {
         this.tmpVectorD.crossVectors(from, to);
         const sign = Math.sign(this.tmpVectorD.dot(normal)) || 1;
         return angle * sign;
+    }
+
+    usesRwdDriftTuning() {
+        return (
+            this.currentTuning.drivetrain === 'RWD' ||
+            this.currentTuning.allowRwdDrift === true
+        );
+    }
+
+    getDriftCapability() {
+        if (this.currentTuning.drivetrain === 'RWD') return 1;
+        if (this.currentTuning.allowRwdDrift === true) return 0.72;
+        return 0;
     }
 
     updateDrivetrain(deltaSeconds: number, throttle: number, brake: number) {
@@ -2685,12 +3208,25 @@ export default class RaceVehicle {
 
         this.wheelSpinAngle +=
             (this.speedMps / Math.max(0.1, this.wheelRadius)) * deltaSeconds;
+        const lowSpeedVisualBoostT = THREE.MathUtils.clamp(
+            Math.abs(this.speedMps) / LOW_SPEED_STEER_BOOST_FADE_MPS,
+            0,
+            1
+        );
+        const visualSteerBoost = THREE.MathUtils.lerp(
+            LOW_SPEED_VISUAL_STEER_BOOST,
+            1,
+            lowSpeedVisualBoostT
+        );
         const maxVisualSteerAngle =
-            THREE.MathUtils.degToRad(this.currentTuning.maxSteerAngleDeg) *
+            THREE.MathUtils.degToRad(SHARED_MAX_STEER_ANGLE_DEG) *
             STEERING_SENSITIVITY_SCALE *
-            FRONT_WHEEL_VISUAL_STEER_MULTIPLIER;
+            FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
+            visualSteerBoost;
         const targetVisualSteerAngle = THREE.MathUtils.clamp(
-            this.steerAngle * FRONT_WHEEL_VISUAL_STEER_MULTIPLIER,
+            this.steerAngle *
+                FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
+                visualSteerBoost,
             -maxVisualSteerAngle,
             maxVisualSteerAngle
         );
@@ -2706,9 +3242,10 @@ export default class RaceVehicle {
         );
 
         this.wheelRig.forEach((wheel) => {
+            const spinAngle = this.wheelSpinAngle * wheel.spinSign;
             const spinQuaternion = this.tmpQuatB.setFromAxisAngle(
                 wheel.spinAxis,
-                this.wheelSpinAngle * wheel.spinSign
+                spinAngle
             );
 
             wheel.object.position.copy(wheel.basePosition);
@@ -2716,6 +3253,13 @@ export default class RaceVehicle {
             if (wheel.front) {
                 this.rotateWheelLocalAroundCenter(wheel, steerQuaternion);
             }
+            const wheelWorldQuaternionBeforeSpin = wheel.object.getWorldQuaternion(
+                this.tmpQuatE
+            );
+            const wheelSpinAxisWorld = this.tmpVectorE
+                .copy(wheel.spinAxis)
+                .applyQuaternion(wheelWorldQuaternionBeforeSpin)
+                .normalize();
             this.rotateWheelLocalAroundCenter(wheel, spinQuaternion);
 
             wheel.linkedVisuals.forEach((linked) => {
@@ -2728,10 +3272,33 @@ export default class RaceVehicle {
                         steerQuaternion
                     );
                 }
+                const linkedWorldOrigin =
+                    linked.object.getWorldPosition(this.tmpVectorA);
+                const linkedWorldAxisTip = this.tmpVectorB
+                    .copy(linkedWorldOrigin)
+                    .add(wheelSpinAxisWorld);
+                const linkedLocalOrigin = linked.object.worldToLocal(
+                    this.tmpVectorC.copy(linkedWorldOrigin)
+                );
+                const linkedLocalAxisTip = linked.object.worldToLocal(
+                    this.tmpVectorD.copy(linkedWorldAxisTip)
+                );
+                const linkedSpinAxisLocal = this.tmpVectorF
+                    .copy(linkedLocalAxisTip)
+                    .sub(linkedLocalOrigin);
+                if (linkedSpinAxisLocal.lengthSq() <= 1e-10) {
+                    linkedSpinAxisLocal.copy(wheel.spinAxis);
+                } else {
+                    linkedSpinAxisLocal.normalize();
+                }
+                const linkedSpinQuaternion = this.tmpQuatG.setFromAxisAngle(
+                    linkedSpinAxisLocal,
+                    spinAngle
+                );
                 this.rotateObjectLocalAroundCenter(
                     linked.object,
                     linked.spinCenter,
-                    spinQuaternion
+                    linkedSpinQuaternion
                 );
             });
         });
