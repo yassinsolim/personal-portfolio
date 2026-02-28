@@ -9,7 +9,7 @@ import fragmentShader from '../Shaders/coffee/fragment.glsl';
 import vertexShader from '../Shaders/coffee/vertex.glsl';
 
 export default class CoffeeSteam {
-    model: any;
+    model: Record<string, unknown>;
     application: Application;
     resources: Resources;
     scene: THREE.Scene;
