@@ -15,6 +15,7 @@ jobs:
           git config --global --add safe.directory /opt/sites/personal-portfolio
           cd /opt/sites/personal-portfolio
           git fetch origin
+          git clean -fd
           git reset --hard origin/main
 
           cd /opt/sites

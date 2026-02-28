@@ -1,0 +1,6 @@
+{
+  "supabaseUrl": "https://axrljzcrlmliscstmctb.supabase.co",
+  "supabaseAnonKey": "sb_publishable_kmJfyQBkUkubZRE2NwEF-w_42MC0z74",
+  "leaderboardTable": "nordschleife_leaderboard",
+  "lobbyChannelPrefix": "nordschleife_lobby_v1"
+}

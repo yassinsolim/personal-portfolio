@@ -5,4 +5,3 @@ package-lock.json
 
 build/
 exports/
-static/config/racing.config.json
