@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../Application';
 import { AmbienceAudio, ComputerAudio } from './AudioSources';
 import UIEventBus from '../UI/EventBus';
+import { randomChoice, randomRange } from '../Utils/Random';
 
 const POS_DEBUG = false;
 const DEFAULT_REF_DISTANCE = 10000;
@@ -125,7 +126,7 @@ export default class Audio {
 
         // Calculate detune
         const detuneAmount =
-            (Math.random() * 200 - 100) *
+            randomRange(-100, 100) *
             (options.randDetuneScale ? options.randDetuneScale : 0);
 
         // Set detune after .play is called
@@ -179,7 +180,7 @@ export default class Audio {
                 variants.push(key);
             }
         }
-        return variants[Math.floor(Math.random() * variants.length)];
+        return randomChoice(variants, sourceName);
     }
 
     update() {

@@ -1,3 +1,5 @@
+import { randomInt } from '../../Utils/Random';
+
 export type LeaderboardEntry = {
     id: string;
     name: string;
@@ -51,7 +53,7 @@ export default class LocalLeaderboard {
 
     add(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'source'>) {
         const next: LeaderboardEntry = {
-            id: `local-${Date.now()}-${Math.round(Math.random() * 10000)}`,
+            id: `local-${Date.now()}-${randomInt(10001)}`,
             createdAt: new Date().toISOString(),
             source: 'local',
             ...entry,
@@ -64,4 +66,3 @@ export default class LocalLeaderboard {
         return next;
     }
 }
-

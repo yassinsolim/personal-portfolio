@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
+import { randomRange } from '../../Utils/Random';
 
 const COLLIDER_LAYER = 1;
 const DEFAULT_UV_SCALE = 0.0015;
@@ -184,9 +185,9 @@ export default class NordschleifeTrack {
         context.fillRect(0, 0, canvas.width, canvas.height);
 
         for (let i = 0; i < 5400; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const intensity = 28 + Math.random() * 44;
+            const x = randomRange(0, canvas.width);
+            const y = randomRange(0, canvas.height);
+            const intensity = randomRange(28, 72);
             context.fillStyle = `rgb(${intensity},${intensity},${intensity})`;
             context.fillRect(x, y, 1, 1);
         }
@@ -196,8 +197,14 @@ export default class NordschleifeTrack {
         context.lineWidth = 1;
         for (let i = 0; i < 18; i++) {
             context.beginPath();
-            context.moveTo(Math.random() * canvas.width, Math.random() * canvas.height);
-            context.lineTo(Math.random() * canvas.width, Math.random() * canvas.height);
+            context.moveTo(
+                randomRange(0, canvas.width),
+                randomRange(0, canvas.height)
+            );
+            context.lineTo(
+                randomRange(0, canvas.width),
+                randomRange(0, canvas.height)
+            );
             context.stroke();
         }
         context.globalAlpha = 1;
