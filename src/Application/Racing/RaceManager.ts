@@ -5,7 +5,7 @@ import NordschleifeTrack from './Track/NordschleifeTrack';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
-import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
+import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import GhostReplay from './Ghost/GhostReplay';
@@ -99,6 +99,11 @@ export default class RaceManager {
     tmpRemoteQuatE: THREE.Quaternion;
     tmpRemoteQuatF: THREE.Quaternion;
     remoteSessionScratch: Set<string>;
+    hiddenLobbyObjects: THREE.Object3D[];
+    defaultSceneBackground: THREE.Color | THREE.Texture | THREE.CubeTexture | null;
+    defaultSceneFog: THREE.FogBase | null;
+    topLeaderboardGhostLapId: string | null;
+    topLeaderboardGhostRequestSerial: number;
 
     constructor() {
         this.application = new Application();
@@ -152,6 +157,11 @@ export default class RaceManager {
         this.tmpRemoteQuatE = new THREE.Quaternion();
         this.tmpRemoteQuatF = new THREE.Quaternion();
         this.remoteSessionScratch = new Set();
+        this.hiddenLobbyObjects = [];
+        this.defaultSceneBackground = this.scene.background;
+        this.defaultSceneFog = this.scene.fog;
+        this.topLeaderboardGhostLapId = null;
+        this.topLeaderboardGhostRequestSerial = 0;
         this.multiplayer.onStateChange((state) => {
             if (state.mode === 'lobby' && state.connected) {
                 state.players.forEach((player) => {
@@ -279,13 +289,15 @@ export default class RaceManager {
 
         const fallbackName = this.multiplayer.getLocalPlayerName() || 'Driver';
         const name = (preferredName || fallbackName).trim().slice(0, 16) || 'Driver';
+        const lapReplay = this.ghostReplay.getLastCompletedLapReplay(lapTimeMs);
 
         try {
             const telemetry = this.vehicle.getTelemetry();
             const entry = await this.leaderboardService.submitLap(
                 name,
                 lapTimeMs,
-                telemetry.carId
+                telemetry.carId,
+                lapReplay
             );
             this.multiplayer.setLocalPlayerName(name);
             this.multiplayer.publishLap(entry);
@@ -307,6 +319,9 @@ export default class RaceManager {
         this.initialized = true;
         this.active = true;
         this.paused = false;
+        this.setLobbyObjectsVisible(false);
+        this.scene.background = new THREE.Color(0x0b0f14);
+        this.scene.fog = new THREE.Fog(0x0b0f14, 380, 8800);
         this.raceRoot.visible = true;
         this.vehicle.resetToStart();
         this.vehicle.setActive(true);
@@ -341,6 +356,9 @@ export default class RaceManager {
         this.active = false;
         this.paused = false;
         this.raceRoot.visible = false;
+        this.setLobbyObjectsVisible(true);
+        this.scene.background = this.defaultSceneBackground;
+        this.scene.fog = this.defaultSceneFog;
         this.vehicle.setActive(false);
         this.chaseCamera.setPaused(false);
         this.chaseCamera.setActive(false);
@@ -369,6 +387,25 @@ export default class RaceManager {
             this.application.renderer.cssInstance.domElement.style.pointerEvents =
                 raceActive ? 'none' : 'auto';
         }
+    }
+
+    setLobbyObjectsVisible(visible: boolean) {
+        if (!visible) {
+            this.hiddenLobbyObjects = [];
+            this.scene.children.forEach((child) => {
+                if (child === this.raceRoot) return;
+                if (child instanceof THREE.Light) return;
+                if (!child.visible) return;
+                child.visible = false;
+                this.hiddenLobbyObjects.push(child);
+            });
+            return;
+        }
+
+        this.hiddenLobbyObjects.forEach((object) => {
+            object.visible = true;
+        });
+        this.hiddenLobbyObjects = [];
     }
 
     dispatchState() {
@@ -405,6 +442,43 @@ export default class RaceManager {
         const entries = await this.leaderboardService.getLeaderboard(10);
         UIEventBus.dispatch('race:leaderboardUpdate', {
             entries,
+        });
+        void this.syncTopLeaderboardGhost(entries);
+    }
+
+    async syncTopLeaderboardGhost(entries: LeaderboardEntry[]) {
+        const topEntry = entries[0];
+        if (!topEntry) {
+            this.topLeaderboardGhostLapId = null;
+            this.ghostReplay.setExternalReplay(null);
+            return;
+        }
+
+        if (this.topLeaderboardGhostLapId === topEntry.id) {
+            return;
+        }
+
+        const requestId = ++this.topLeaderboardGhostRequestSerial;
+        const replay = await this.leaderboardService.getGhostReplayForLap(
+            topEntry.id,
+            topEntry.carId,
+            topEntry.lapTimeMs
+        );
+        if (requestId !== this.topLeaderboardGhostRequestSerial) {
+            return;
+        }
+
+        if (!replay || replay.samples.length < 2) {
+            this.topLeaderboardGhostLapId = null;
+            this.ghostReplay.setExternalReplay(null);
+            return;
+        }
+
+        this.topLeaderboardGhostLapId = topEntry.id;
+        this.ghostReplay.setExternalReplay({
+            lapTimeMs: topEntry.lapTimeMs,
+            carId: replay.carId || topEntry.carId,
+            samples: replay.samples,
         });
     }
 

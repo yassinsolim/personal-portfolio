@@ -2,5 +2,6 @@
   "supabaseUrl": "https://YOUR_PROJECT_ID.supabase.co",
   "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY",
   "leaderboardTable": "nordschleife_leaderboard",
+  "ghostReplayTable": "nordschleife_ghost_replays",
   "lobbyChannelPrefix": "nordschleife_lobby_v1"
 }

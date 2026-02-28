@@ -18,6 +18,7 @@ Fill:
 - `supabaseUrl`
 - `supabaseAnonKey`
 - `leaderboardTable` (default: `nordschleife_leaderboard`)
+- `ghostReplayTable` (default: `nordschleife_ghost_replays`)
 - `lobbyChannelPrefix` (default: `nordschleife_lobby_v1`)
 
 Important security note:
@@ -67,6 +68,51 @@ In Supabase:
 - Database -> Replication -> enable replication for `public.nordschleife_leaderboard`
 
 The app subscribes to `INSERT` events and refreshes leaderboard automatically when anyone submits a lap.
+
+## 3b) Ghost replay table for leaderboard #1 ghost
+
+Run in Supabase SQL editor:
+
+```sql
+create table if not exists public.nordschleife_ghost_replays (
+  lap_id uuid primary key references public.nordschleife_leaderboard(id) on delete cascade,
+  lap_time_ms integer not null check (lap_time_ms between 1000 and 7200000),
+  car_id text not null check (char_length(car_id) between 1 and 64),
+  samples jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.nordschleife_ghost_replays enable row level security;
+
+drop policy if exists "public read ghost replays" on public.nordschleife_ghost_replays;
+drop policy if exists "public insert ghost replays" on public.nordschleife_ghost_replays;
+
+create policy "public read ghost replays"
+on public.nordschleife_ghost_replays
+for select
+to anon, authenticated
+using (true);
+
+create policy "public insert ghost replays"
+on public.nordschleife_ghost_replays
+for insert
+to anon, authenticated
+with check (
+  lap_time_ms between 1000 and 7200000
+  and char_length(car_id) between 1 and 64
+);
+
+drop policy if exists "public update ghost replays" on public.nordschleife_ghost_replays;
+create policy "public update ghost replays"
+on public.nordschleife_ghost_replays
+for update
+to anon, authenticated
+using (true)
+with check (
+  lap_time_ms between 1000 and 7200000
+  and char_length(car_id) between 1 and 64
+);
+```
 
 ## 4) Realtime for multiplayer lobbies
 
