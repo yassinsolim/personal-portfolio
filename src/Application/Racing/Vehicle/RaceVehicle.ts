@@ -36,8 +36,30 @@ const LOW_SPEED_GROUNDING_LERP_MAX = 30;
 const LOW_SPEED_GROUNDING_MAX_STEP_MIN = 0.006;
 const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
 const SURFACE_NORMAL_BLEND_SPEED_MPS = 16;
-const SURFACE_NORMAL_LERP_MIN = 2.2;
-const SURFACE_NORMAL_LERP_MAX = 9;
+const SURFACE_NORMAL_LERP_MIN = 1.5;
+const SURFACE_NORMAL_LERP_MAX = 8.2;
+const LOW_SPEED_UPRIGHT_BLEND_FADE_MPS = 14;
+const LOW_SPEED_UPRIGHT_BLEND_MAX = 0.74;
+const MIN_SURFACE_NORMAL_Y = 0.72;
+const MIN_ORIENTATION_NORMAL_Y = 0.84;
+const AIRBORNE_ACCEL_MULTIPLIER_TRANSIENT = 0.82;
+const AIRBORNE_ACCEL_MULTIPLIER_SUSTAINED = 0.5;
+const AIRBORNE_TRANSIENT_WINDOW_S = 0.32;
+const SAFE_CHECKPOINT_MIN_INTERVAL_S = 0.08;
+const FALL_RECOVERY_DELAY_S = 1.35;
+const FALL_RECOVERY_LOOKBACK_S = 2.2;
+const FALL_RECOVERY_COOLDOWN_S = 1.1;
+const FALL_RECOVERY_LOOKBACK_STEP_S = 1.15;
+const FALL_RECOVERY_MAX_FAILURES = 5;
+const FALL_RECOVERY_MIN_DISTANCE_M = 10;
+const FALL_RECOVERY_REPEAT_RADIUS_M = 8;
+const POST_RECOVERY_CHECKPOINT_GRACE_S = 1.2;
+const SAFE_STATE_HISTORY_RETENTION_S = 8;
+const SAFE_STATE_HISTORY_MAX_ENTRIES = 120;
+const SAFE_STATE_MIN_SNAPSHOT_INTERVAL_S = 0.14;
+const SAFE_STATE_MIN_SNAPSHOT_DISTANCE = 0.6;
+const UPSIDE_DOWN_RECOVERY_UP_THRESHOLD = -0.2;
+const UPSIDE_DOWN_RECOVERY_DELAY_S = 0.6;
 const FRONT_WHEEL_VISUAL_STEER_MULTIPLIER = 1.45;
 const LOW_SPEED_VISUAL_STEER_BOOST = 1.65;
 const SHARED_TOP_SPEED_KPH = 300;
@@ -47,6 +69,7 @@ const SHARED_AERO_DRAG = 0.00014;
 const SHARED_ROLLING_RESISTANCE = 0.34;
 const SHARED_MAX_STEER_ANGLE_DEG = 34;
 const AMG_ONE_ID = 'amg-one';
+const BMW_E92_M3_ID = 'bmw-e92-m3';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
@@ -84,6 +107,7 @@ const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
     '539_refl_black_0_1',
 ];
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
+const BMW_E92_RIM_SILVER = new THREE.Color(0xd3d8de);
 const BMW_F90_M5_TANZANITE_BLUE = new THREE.Color(0x0c2c84);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const GT63_DECAL_HINTS = [
@@ -167,6 +191,15 @@ export type WheelVisualMeta = {
 
 type WheelNodeMap = NonNullable<CarRaceConfig['wheelNodeMap']>;
 
+type SafeStateSnapshot = {
+    time: number;
+    position: THREE.Vector3;
+    forward: THREE.Vector3;
+    surfaceNormal: THREE.Vector3;
+    yaw: number;
+    speedMps: number;
+};
+
 export default class RaceVehicle {
     application: Application;
     resources: Resources;
@@ -211,6 +244,26 @@ export default class RaceVehicle {
     surfaceNormal: THREE.Vector3;
     forward: THREE.Vector3;
     orientationTarget: THREE.Quaternion;
+    airborneTime: number;
+    upsideDownTime: number;
+    recoveryCooldown: number;
+    recoveryClock: number;
+    postRecoveryCheckpointLockout: number;
+    lastRecoveryAt: number;
+    lastRecoveryPosition: THREE.Vector3;
+    safeCheckpointTimer: number;
+    lastSafePosition: THREE.Vector3;
+    lastSafeForward: THREE.Vector3;
+    lastSafeSurfaceNormal: THREE.Vector3;
+    lastSafeYaw: number;
+    lastSafeSpeedMps: number;
+    safeStateHistory: SafeStateSnapshot[];
+    fallAnchorValid: boolean;
+    fallAnchorPosition: THREE.Vector3;
+    fallAnchorForward: THREE.Vector3;
+    fallAnchorYaw: number;
+    fallAnchorSpeedMps: number;
+    fallRecoveryFailures: number;
     wheelRig: WheelRig[];
     frontWheelRig: WheelRig[];
     rearWheelRig: WheelRig[];
@@ -285,6 +338,26 @@ export default class RaceVehicle {
         this.surfaceNormal = new THREE.Vector3(0, 1, 0);
         this.forward = new THREE.Vector3(0, 0, 1);
         this.orientationTarget = new THREE.Quaternion();
+        this.airborneTime = 0;
+        this.upsideDownTime = 0;
+        this.recoveryCooldown = 0;
+        this.recoveryClock = 0;
+        this.postRecoveryCheckpointLockout = 0;
+        this.lastRecoveryAt = -Infinity;
+        this.lastRecoveryPosition = new THREE.Vector3();
+        this.safeCheckpointTimer = 0;
+        this.lastSafePosition = new THREE.Vector3();
+        this.lastSafeForward = new THREE.Vector3(0, 0, 1);
+        this.lastSafeSurfaceNormal = new THREE.Vector3(0, 1, 0);
+        this.lastSafeYaw = 0;
+        this.lastSafeSpeedMps = 0;
+        this.safeStateHistory = [];
+        this.fallAnchorValid = false;
+        this.fallAnchorPosition = new THREE.Vector3();
+        this.fallAnchorForward = new THREE.Vector3(0, 0, 1);
+        this.fallAnchorYaw = 0;
+        this.fallAnchorSpeedMps = 0;
+        this.fallRecoveryFailures = 0;
         this.wheelRig = [];
         this.frontWheelRig = [];
         this.rearWheelRig = [];
@@ -475,6 +548,7 @@ export default class RaceVehicle {
             wheelRig = this.buildWheelRig(model, wheelNodeMapForRig);
         }
         wheelRig = this.filterValidWheelRig(carId, wheelRig);
+        this.applyWheelFinishStyling(model, carId, wheelRig);
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
@@ -2577,6 +2651,83 @@ export default class RaceVehicle {
         });
     }
 
+    applyWheelFinishStyling(model: THREE.Object3D, carId: string, wheelRig: WheelRig[]) {
+        if (carId !== BMW_E92_M3_ID || wheelRig.length === 0) {
+            return;
+        }
+
+        wheelRig.forEach((wheel) => {
+            this.applyE92ChromeFinishForObject(wheel.object);
+            wheel.linkedVisuals.forEach((linked) => {
+                this.applyE92ChromeFinishForObject(linked.object);
+            });
+        });
+
+        model.traverse((child) => {
+            if (!(child instanceof THREE.Mesh) || !child.material) return;
+            const name = (child.name || '').toLowerCase();
+            if (!name.includes('e92_wheel_05a_19x9')) return;
+            this.applyE92ChromeFinishForObject(child);
+        });
+    }
+
+    applyE92ChromeFinishForObject(object: THREE.Object3D) {
+        if (!(object instanceof THREE.Mesh) || !object.material) {
+            return;
+        }
+
+        const objectName = (object.name || '').toLowerCase();
+        if (
+            objectName.includes('tire') ||
+            objectName.includes('tyre') ||
+            objectName.includes('rubber')
+        ) {
+            return;
+        }
+
+        if (Array.isArray(object.material)) {
+            object.material.forEach((material) =>
+                this.applyE92ChromeFinishForMaterial(material, objectName)
+            );
+            return;
+        }
+
+        this.applyE92ChromeFinishForMaterial(object.material, objectName);
+    }
+
+    applyE92ChromeFinishForMaterial(material: THREE.Material, objectName: string) {
+        if (!(material instanceof THREE.MeshStandardMaterial)) {
+            return;
+        }
+
+        const materialName = (material.name || '').toLowerCase();
+        if (
+            materialName.includes('tire') ||
+            materialName.includes('tyre') ||
+            materialName.includes('rubber')
+        ) {
+            return;
+        }
+
+        const likelyRimMaterial =
+            materialName.includes('wheel') ||
+            materialName.includes('rim') ||
+            materialName.includes('chrome') ||
+            materialName.includes('alloy') ||
+            materialName.includes('spoke') ||
+            objectName.includes('wheel_05a_19x9');
+
+        if (!likelyRimMaterial) {
+            return;
+        }
+
+        material.color.copy(BMW_E92_RIM_SILVER);
+        material.metalness = Math.max(material.metalness, 0.95);
+        material.roughness = Math.min(material.roughness, 0.2);
+        material.envMapIntensity = Math.max(material.envMapIntensity || 0, 1.18);
+        material.needsUpdate = true;
+    }
+
     getModelLength(model: THREE.Object3D) {
         const box = new THREE.Box3().setFromObject(model);
         const size = new THREE.Vector3();
@@ -2634,6 +2785,17 @@ export default class RaceVehicle {
         this.input.setEnabled(active);
         this.smoke.setActive(active);
         if (!active) {
+            this.airborneTime = 0;
+            this.upsideDownTime = 0;
+            this.recoveryCooldown = 0;
+            this.recoveryClock = 0;
+            this.postRecoveryCheckpointLockout = 0;
+            this.lastRecoveryAt = -Infinity;
+            this.lastRecoveryPosition.set(0, 0, 0);
+            this.safeCheckpointTimer = 0;
+            this.fallAnchorValid = false;
+            this.fallRecoveryFailures = 0;
+            this.clearSafeStateHistory();
             this.speedMps = 0;
             this.lateralSpeed = 0;
             this.driftAmount = 0;
@@ -2668,6 +2830,17 @@ export default class RaceVehicle {
         this.driftAmount = 0;
         this.slipRatio = 0;
         this.verticalVelocity = 0;
+        this.airborneTime = 0;
+        this.upsideDownTime = 0;
+        this.recoveryCooldown = 0;
+        this.recoveryClock = 0;
+        this.postRecoveryCheckpointLockout = 0;
+        this.lastRecoveryAt = -Infinity;
+        this.lastRecoveryPosition.set(0, 0, 0);
+        this.safeCheckpointTimer = 0;
+        this.fallAnchorValid = false;
+        this.fallRecoveryFailures = 0;
+        this.clearSafeStateHistory();
         this.steerAngle = 0;
         this.steerVisualAngle = 0;
         this.wheelSpinAngle = 0;
@@ -2677,33 +2850,424 @@ export default class RaceVehicle {
         this.smoke.clear();
         this.groundToCollider(0);
         this.updateTransform(1);
+        this.captureSafeCheckpoint(true);
         this.resetWheelVisuals();
+    }
+
+    captureSafeCheckpoint(force = false) {
+        if (!force) {
+            if (!this.grounded) return;
+            if (this.surfaceNormal.y < 0.84) return;
+        }
+
+        const hit = this.raycastGroundAt(this.position.x, this.position.z);
+        if (hit) {
+            const hitNormal = this.tmpVectorC
+                .copy(hit.face?.normal || this.tmpVectorD.set(0, 1, 0))
+                .transformDirection(hit.object.matrixWorld)
+                .normalize();
+            if (hitNormal.y < 0) {
+                hitNormal.multiplyScalar(-1);
+            }
+            if (!force && hitNormal.y < 0.8) {
+                return;
+            }
+            this.lastSafePosition
+                .set(this.position.x, hit.point.y + this.rideHeight + 0.03, this.position.z);
+            this.lastSafeSurfaceNormal.copy(hitNormal).normalize();
+        } else {
+            if (!force) return;
+            this.lastSafePosition.copy(this.position);
+            this.lastSafeSurfaceNormal.copy(this.surfaceNormal).normalize();
+        }
+
+        this.lastSafeForward.copy(this.forward).normalize();
+        this.lastSafeYaw = this.yaw;
+        this.lastSafeSpeedMps = this.speedMps;
+        this.safeCheckpointTimer = 0;
+        this.recordSafeStateSnapshot(force);
+    }
+
+    clearSafeStateHistory() {
+        this.safeStateHistory.length = 0;
+    }
+
+    recordSafeStateSnapshot(force = false) {
+        const now = this.recoveryClock;
+        const last = this.safeStateHistory[this.safeStateHistory.length - 1];
+        if (!force && last) {
+            const timeDelta = now - last.time;
+            const distanceSq = last.position.distanceToSquared(this.lastSafePosition);
+            if (
+                timeDelta < SAFE_STATE_MIN_SNAPSHOT_INTERVAL_S &&
+                distanceSq <
+                    SAFE_STATE_MIN_SNAPSHOT_DISTANCE * SAFE_STATE_MIN_SNAPSHOT_DISTANCE
+            ) {
+                return;
+            }
+        }
+
+        this.safeStateHistory.push({
+            time: now,
+            position: this.lastSafePosition.clone(),
+            forward: this.lastSafeForward.clone(),
+            surfaceNormal: this.lastSafeSurfaceNormal.clone(),
+            yaw: this.lastSafeYaw,
+            speedMps: this.lastSafeSpeedMps,
+        });
+        this.pruneSafeStateHistory();
+    }
+
+    pruneSafeStateHistory() {
+        const minTime = this.recoveryClock - SAFE_STATE_HISTORY_RETENTION_S;
+        while (
+            this.safeStateHistory.length > 0 &&
+            this.safeStateHistory[0].time < minTime
+        ) {
+            this.safeStateHistory.shift();
+        }
+        while (this.safeStateHistory.length > SAFE_STATE_HISTORY_MAX_ENTRIES) {
+            this.safeStateHistory.shift();
+        }
+    }
+
+    getSafeStateForLookback(lookbackSeconds: number) {
+        if (this.safeStateHistory.length === 0) return null;
+        const targetTime = Math.max(0, this.recoveryClock - lookbackSeconds);
+        for (let i = this.safeStateHistory.length - 1; i >= 0; i--) {
+            const snapshot = this.safeStateHistory[i];
+            if (snapshot.time <= targetTime) {
+                return snapshot;
+            }
+        }
+        return this.safeStateHistory[0];
+    }
+
+    isValidRecoveryNormal(normal: THREE.Vector3) {
+        return Number.isFinite(normal.x) && Number.isFinite(normal.y) && normal.y >= 0.74;
+    }
+
+    tryApplyRecoverySnapshot(snapshot: SafeStateSnapshot, speedScale: number) {
+        const hit = this.raycastGroundAt(snapshot.position.x, snapshot.position.z);
+        if (!hit) {
+            return false;
+        }
+
+        const hitNormal = this.tmpVectorC
+            .copy(hit.face?.normal || this.tmpVectorD.set(0, 1, 0))
+            .transformDirection(hit.object.matrixWorld)
+            .normalize();
+        if (hitNormal.y < 0) {
+            hitNormal.multiplyScalar(-1);
+        }
+        if (!this.isValidRecoveryNormal(hitNormal)) {
+            return false;
+        }
+
+        this.position.set(
+            snapshot.position.x,
+            hit.point.y + this.rideHeight + 0.03,
+            snapshot.position.z
+        );
+        this.forward.copy(snapshot.forward).normalize();
+        this.surfaceNormal.copy(hitNormal).normalize();
+        this.yaw = snapshot.yaw;
+        this.speedMps = THREE.MathUtils.clamp(
+            snapshot.speedMps * speedScale,
+            -this.maxReverseSpeedMps,
+            this.maxForwardSpeedMps
+        );
+        return true;
+    }
+
+    tryRestoreFromSafeHistoryLookback(
+        lookbackSeconds: number,
+        minDistanceMeters = 0
+    ): boolean {
+        if (this.safeStateHistory.length === 0) return false;
+
+        const repeatRecovery =
+            this.recoveryClock - this.lastRecoveryAt < 4.5 &&
+            this.lastRecoveryPosition.lengthSq() > 0.0001;
+        const minDistanceSq = minDistanceMeters * minDistanceMeters;
+        const repeatDistanceSq =
+            FALL_RECOVERY_REPEAT_RADIUS_M * FALL_RECOVERY_REPEAT_RADIUS_M;
+        const targetTime = Math.max(0, this.recoveryClock - lookbackSeconds);
+
+        let startIndex = -1;
+        for (let i = this.safeStateHistory.length - 1; i >= 0; i--) {
+            if (this.safeStateHistory[i].time <= targetTime) {
+                startIndex = i;
+                break;
+            }
+        }
+        if (startIndex < 0) {
+            startIndex = 0;
+        }
+
+        for (let i = startIndex; i >= 0; i--) {
+            const snapshot = this.safeStateHistory[i];
+            if (snapshot.position.distanceToSquared(this.position) < minDistanceSq) {
+                continue;
+            }
+            if (
+                repeatRecovery &&
+                snapshot.position.distanceToSquared(this.lastRecoveryPosition) <
+                    repeatDistanceSq
+            ) {
+                continue;
+            }
+            if (this.tryApplyRecoverySnapshot(snapshot, 0.9)) {
+                return true;
+            }
+        }
+
+        if (minDistanceMeters > 0) {
+            return this.tryRestoreFromSafeHistoryLookback(lookbackSeconds, 0);
+        }
+        return false;
+    }
+
+    captureFallAnchor() {
+        this.fallAnchorValid = true;
+        this.fallAnchorPosition.copy(this.position);
+        this.fallAnchorForward.copy(this.forward).normalize();
+        this.fallAnchorYaw = this.yaw;
+        this.fallAnchorSpeedMps = this.speedMps;
+    }
+
+    raycastGroundAt(x: number, z: number) {
+        const probeStartY =
+            Math.max(
+                this.position.y,
+                this.lastSafePosition.y || this.position.y,
+                this.fallAnchorPosition.y || this.position.y
+            ) +
+            RAYCAST_HEIGHT +
+            900;
+        this.tmpVectorA.set(x, probeStartY, z);
+        this.tmpVectorB.set(0, -1, 0);
+        this.raycaster.layers.set(this.track.getColliderLayer());
+        this.raycaster.set(this.tmpVectorA, this.tmpVectorB);
+        this.raycaster.far = RAYCAST_DISTANCE + 2000;
+        const hit = this.raycaster.intersectObject(this.colliderMesh, false)[0];
+        return hit || null;
+    }
+
+    tryRestoreFromFallAnchor() {
+        if (!this.fallAnchorValid) return false;
+
+        const hit = this.raycastGroundAt(
+            this.fallAnchorPosition.x,
+            this.fallAnchorPosition.z
+        );
+        if (!hit) {
+            this.fallRecoveryFailures++;
+            return false;
+        }
+
+        const hitNormal = this.tmpVectorC
+            .copy(hit.face?.normal || this.tmpVectorD.set(0, 1, 0))
+            .transformDirection(hit.object.matrixWorld)
+            .normalize();
+        if (hitNormal.y < 0) {
+            hitNormal.multiplyScalar(-1);
+        }
+        if (!this.isValidRecoveryNormal(hitNormal)) {
+            this.fallRecoveryFailures++;
+            return false;
+        }
+
+        this.position.set(
+            this.fallAnchorPosition.x,
+            hit.point.y + this.rideHeight + 0.03,
+            this.fallAnchorPosition.z
+        );
+        this.forward.copy(this.fallAnchorForward).normalize();
+        this.surfaceNormal.copy(hitNormal).normalize();
+        this.yaw = this.fallAnchorYaw;
+        this.speedMps = THREE.MathUtils.clamp(
+            this.fallAnchorSpeedMps,
+            -this.maxReverseSpeedMps,
+            this.maxForwardSpeedMps
+        );
+        this.fallRecoveryFailures = 0;
+        return true;
+    }
+
+    restoreFromSafeCheckpoint(reason: 'fall' | 'flip' | 'invalid') {
+        let restored = false;
+        if (reason === 'fall') {
+            const recentRecoveryWindow = this.recoveryClock - this.lastRecoveryAt < 4.5;
+            this.fallRecoveryFailures = recentRecoveryWindow
+                ? this.fallRecoveryFailures + 1
+                : Math.max(this.fallRecoveryFailures, 1);
+
+            if (this.fallRecoveryFailures >= FALL_RECOVERY_MAX_FAILURES) {
+                this.resetToStart();
+                return;
+            }
+
+            const dynamicLookback = THREE.MathUtils.clamp(
+                FALL_RECOVERY_LOOKBACK_S +
+                    this.fallRecoveryFailures * FALL_RECOVERY_LOOKBACK_STEP_S,
+                FALL_RECOVERY_LOOKBACK_S,
+                SAFE_STATE_HISTORY_RETENTION_S - 0.2
+            );
+            restored = this.tryRestoreFromSafeHistoryLookback(
+                dynamicLookback,
+                FALL_RECOVERY_MIN_DISTANCE_M
+            );
+            if (!restored) {
+                restored = this.tryRestoreFromFallAnchor();
+            }
+        }
+
+        if (!restored) {
+            const hasCheckpoint = this.lastSafePosition.lengthSq() > 0.0001;
+            if (!hasCheckpoint) {
+                this.resetToStart();
+                return;
+            }
+            this.position
+                .copy(this.lastSafePosition)
+                .addScaledVector(this.lastSafeSurfaceNormal, 0.2);
+            this.forward.copy(this.lastSafeForward).normalize();
+            this.surfaceNormal.copy(this.lastSafeSurfaceNormal).normalize();
+            this.yaw = this.lastSafeYaw;
+            this.speedMps = THREE.MathUtils.clamp(
+                this.lastSafeSpeedMps * 0.94,
+                -this.maxReverseSpeedMps,
+                this.maxForwardSpeedMps
+            );
+        }
+
+        this.lateralSpeed = 0;
+        this.verticalVelocity = 0;
+        this.driftAmount = 0;
+        this.slipRatio = 0;
+        this.steerAngle = 0;
+        this.steerVisualAngle = 0;
+        this.airborneTime = 0;
+        this.upsideDownTime = 0;
+        this.recoveryCooldown = FALL_RECOVERY_COOLDOWN_S;
+        this.postRecoveryCheckpointLockout = POST_RECOVERY_CHECKPOINT_GRACE_S;
+        this.lastRecoveryAt = this.recoveryClock;
+        this.lastRecoveryPosition.copy(this.position);
+        this.fallAnchorValid = false;
+        this.grounded = true;
+        this.smokeSpawnCooldown = 0.08;
+        this.input.reset();
+        this.updateTransform(1 / 60);
+        this.resetWheelVisuals();
+        if (reason !== 'fall') {
+            this.fallRecoveryFailures = 0;
+        }
+
+        if (reason === 'flip' || reason === 'invalid') {
+            this.captureSafeCheckpoint(true);
+        }
+    }
+
+    shouldRecoverFromFall() {
+        if (this.recoveryCooldown > 0) return false;
+        if (this.grounded) return false;
+        return this.airborneTime >= FALL_RECOVERY_DELAY_S;
+    }
+
+    hasInvalidState() {
+        return (
+            !Number.isFinite(this.position.x) ||
+            !Number.isFinite(this.position.y) ||
+            !Number.isFinite(this.position.z) ||
+            !Number.isFinite(this.speedMps) ||
+            !Number.isFinite(this.yaw)
+        );
+    }
+
+    shouldRecoverFromFlip(throttle: number, brake: number, deltaSeconds: number) {
+        if (this.recoveryCooldown > 0) return false;
+        if (!this.grounded) return false;
+        if (Math.abs(this.speedMps) > 1.5) return false;
+        if (throttle > 0.2 || brake > 0.2) return false;
+
+        const carUp = this.tmpVectorF
+            .set(0, 1, 0)
+            .applyQuaternion(this.carPivot.quaternion)
+            .normalize();
+        if (carUp.y <= UPSIDE_DOWN_RECOVERY_UP_THRESHOLD) {
+            this.upsideDownTime += deltaSeconds;
+        } else {
+            this.upsideDownTime = 0;
+        }
+        return this.upsideDownTime >= UPSIDE_DOWN_RECOVERY_DELAY_S;
     }
 
     update(deltaSeconds: number) {
         if (!this.active) return;
 
-        this.input.update(deltaSeconds);
+        const dt = THREE.MathUtils.clamp(
+            Number.isFinite(deltaSeconds) ? deltaSeconds : 0,
+            0,
+            0.1
+        );
+        this.recoveryClock += dt;
+        this.recoveryCooldown = Math.max(0, this.recoveryCooldown - dt);
+        this.postRecoveryCheckpointLockout = Math.max(
+            0,
+            this.postRecoveryCheckpointLockout - dt
+        );
+        this.safeCheckpointTimer += dt;
+
+        this.input.update(dt);
         const controls = this.input.getState();
 
         this.updateLongitudinalSpeed(
-            deltaSeconds,
+            dt,
             controls.throttle,
             controls.brake,
             controls.handbrake
         );
         this.updateSteering(
-            deltaSeconds,
+            dt,
             controls.steer,
             controls.handbrake,
             controls.throttle
         );
-        this.updatePosition(deltaSeconds);
-        this.groundToCollider(deltaSeconds);
-        this.updateTransform(deltaSeconds);
-        this.updateDrivetrain(deltaSeconds, controls.throttle, controls.brake);
-        this.updateWheelVisuals(deltaSeconds);
-        this.updateDriftSmoke(deltaSeconds);
+        this.updatePosition(dt);
+        this.groundToCollider(dt);
+
+        if (this.hasInvalidState()) {
+            this.restoreFromSafeCheckpoint('invalid');
+            return;
+        }
+        if (this.shouldRecoverFromFall()) {
+            this.restoreFromSafeCheckpoint('fall');
+            return;
+        }
+        if (!this.grounded) {
+            this.upsideDownTime = 0;
+        }
+        if (this.shouldRecoverFromFlip(controls.throttle, controls.brake, dt)) {
+            this.restoreFromSafeCheckpoint('flip');
+            return;
+        }
+
+        if (
+            this.grounded &&
+            this.postRecoveryCheckpointLockout <= 0 &&
+            this.safeCheckpointTimer >= SAFE_CHECKPOINT_MIN_INTERVAL_S
+        ) {
+            this.captureSafeCheckpoint();
+            if (this.fallRecoveryFailures > 0) {
+                this.fallRecoveryFailures = Math.max(0, this.fallRecoveryFailures - 1);
+            }
+        }
+
+        this.updateTransform(dt);
+        this.updateDrivetrain(dt, controls.throttle, controls.brake);
+        this.updateWheelVisuals(dt);
+        this.updateDriftSmoke(dt);
     }
 
     updateLongitudinalSpeed(
@@ -2761,14 +3325,21 @@ export default class RaceVehicle {
         acceleration -= aero + rolling;
 
         if (!this.grounded) {
-            acceleration *= 0.38;
+            const airborneFactor =
+                this.airborneTime <= AIRBORNE_TRANSIENT_WINDOW_S
+                    ? AIRBORNE_ACCEL_MULTIPLIER_TRANSIENT
+                    : AIRBORNE_ACCEL_MULTIPLIER_SUSTAINED;
+            acceleration *= airborneFactor;
         }
 
         this.speedMps += acceleration * deltaSeconds;
 
-        if (handbrake > 0.2 && speedAbs > 8) {
-            const handbrakeDamping = this.usesRwdDriftTuning() ? 0.68 : 0.44;
-            this.speedMps *= 1 - handbrake * handbrakeDamping * deltaSeconds;
+        if (handbrake > 0.2 && speedAbs > 6) {
+            const handbrakeDamping = this.usesRwdDriftTuning() ? 0.56 : 0.4;
+            const driftDampingScale =
+                this.driftAmount > 0.2 && throttle > 0.35 ? 0.35 : 1;
+            this.speedMps *=
+                1 - handbrake * handbrakeDamping * driftDampingScale * deltaSeconds;
         }
 
         this.speedMps = THREE.MathUtils.clamp(
@@ -2967,10 +3538,11 @@ export default class RaceVehicle {
 
         const hits = this.raycaster.intersectObject(this.colliderMesh, false);
         const hit = hits[0];
+        const wasGrounded = this.grounded;
 
         if (hit) {
-            const wasGrounded = this.grounded;
             this.grounded = true;
+            this.airborneTime = 0;
             const targetGroundY = hit.point.y + this.rideHeight;
             if (!wasGrounded || deltaSeconds <= 0) {
                 this.position.y = targetGroundY;
@@ -3023,6 +3595,19 @@ export default class RaceVehicle {
                 .copy(hit.face?.normal || new THREE.Vector3(0, 1, 0))
                 .transformDirection(hit.object.matrixWorld)
                 .normalize();
+            if (this.tmpVectorC.y < 0) {
+                this.tmpVectorC.multiplyScalar(-1);
+            }
+            if (this.tmpVectorC.y < MIN_SURFACE_NORMAL_Y) {
+                const correctionT = THREE.MathUtils.clamp(
+                    (MIN_SURFACE_NORMAL_Y - this.tmpVectorC.y) / MIN_SURFACE_NORMAL_Y,
+                    0,
+                    1
+                );
+                this.tmpVectorC
+                    .lerp(this.tmpVectorD.set(0, 1, 0), correctionT)
+                    .normalize();
+            }
 
             const normalSpeedFactor = THREE.MathUtils.clamp(
                 Math.abs(this.speedMps) / SURFACE_NORMAL_BLEND_SPEED_MPS,
@@ -3043,7 +3628,12 @@ export default class RaceVehicle {
             return;
         }
 
+        if (wasGrounded) {
+            this.captureFallAnchor();
+        }
+
         this.grounded = false;
+        this.airborneTime += deltaSeconds;
         this.verticalVelocity -= GRAVITY * deltaSeconds;
         this.position.y += this.verticalVelocity * deltaSeconds;
         this.surfaceNormal
@@ -3052,21 +3642,57 @@ export default class RaceVehicle {
     }
 
     updateTransform(deltaSeconds: number) {
-        this.tmpVectorA
+        const speedAbs = Math.abs(this.speedMps);
+        const uprightBlendFactor = THREE.MathUtils.clamp(
+            1 - speedAbs / LOW_SPEED_UPRIGHT_BLEND_FADE_MPS,
+            0,
+            1
+        );
+        const orientationNormal = this.tmpVectorD.copy(this.surfaceNormal);
+        if (uprightBlendFactor > 0) {
+            orientationNormal
+                .lerp(
+                    this.tmpVectorE.set(0, 1, 0),
+                    uprightBlendFactor * LOW_SPEED_UPRIGHT_BLEND_MAX
+                )
+                .normalize();
+        }
+        if (orientationNormal.y < MIN_ORIENTATION_NORMAL_Y) {
+            const uprightCorrection = THREE.MathUtils.clamp(
+                (MIN_ORIENTATION_NORMAL_Y - orientationNormal.y) /
+                    Math.max(1e-4, 1 - MIN_ORIENTATION_NORMAL_Y),
+                0,
+                1
+            );
+            orientationNormal
+                .lerp(this.tmpVectorE.set(0, 1, 0), uprightCorrection)
+                .normalize();
+        }
+
+        const planarForward = this.tmpVectorA
             .copy(this.forward)
-            .projectOnPlane(this.surfaceNormal)
-            .normalize();
+            .projectOnPlane(orientationNormal);
+        if (planarForward.lengthSq() <= 1e-8) {
+            planarForward
+                .set(0, 0, 1)
+                .applyQuaternion(this.carPivot.quaternion)
+                .projectOnPlane(orientationNormal);
+        }
+        if (planarForward.lengthSq() <= 1e-8) {
+            planarForward.set(0, 0, 1);
+        }
+        planarForward.normalize();
 
         if (this.driftAmount > 0.04 && this.velocity.lengthSq() > 9) {
             this.tmpVectorC
                 .copy(this.velocity)
-                .projectOnPlane(this.surfaceNormal)
+                .projectOnPlane(orientationNormal)
                 .normalize();
             if (this.tmpVectorC.lengthSq() > 0.0001) {
                 const slipAngle = this.getSignedAngleAroundNormal(
-                    this.tmpVectorA,
+                    planarForward,
                     this.tmpVectorC,
-                    this.surfaceNormal
+                    orientationNormal
                 );
                 const clampedSlipAngle = THREE.MathUtils.clamp(
                     slipAngle,
@@ -3078,23 +3704,30 @@ export default class RaceVehicle {
                     0,
                     0.42
                 );
-                this.tmpVectorA
+                planarForward
                     .applyAxisAngle(
-                        this.surfaceNormal,
+                        orientationNormal,
                         clampedSlipAngle * driftVisualBlend
                     )
                     .normalize();
             }
         }
 
-        this.tmpVectorB
-            .crossVectors(this.surfaceNormal, this.tmpVectorA)
-            .normalize();
-        this.tmpVectorC
-            .crossVectors(this.tmpVectorB, this.surfaceNormal)
-            .normalize();
+        const side = this.tmpVectorB.crossVectors(orientationNormal, planarForward);
+        if (side.lengthSq() <= 1e-8) {
+            side.set(1, 0, 0);
+        }
+        side.normalize();
 
-        this.tmpMatrix.makeBasis(this.tmpVectorB, this.surfaceNormal, this.tmpVectorC);
+        const finalForward = this.tmpVectorC
+            .crossVectors(side, orientationNormal)
+            .normalize();
+        if (finalForward.dot(planarForward) < 0) {
+            side.multiplyScalar(-1);
+            finalForward.multiplyScalar(-1);
+        }
+
+        this.tmpMatrix.makeBasis(side, orientationNormal, finalForward);
         this.orientationTarget.setFromRotationMatrix(this.tmpMatrix);
 
         const rotationSpeedFactor = THREE.MathUtils.clamp(
@@ -3119,8 +3752,8 @@ export default class RaceVehicle {
         const angle = from.angleTo(to);
         if (angle < 1e-5) return 0;
 
-        this.tmpVectorD.crossVectors(from, to);
-        const sign = Math.sign(this.tmpVectorD.dot(normal)) || 1;
+        this.tmpVectorF.crossVectors(from, to);
+        const sign = Math.sign(this.tmpVectorF.dot(normal)) || 1;
         return angle * sign;
     }
 
