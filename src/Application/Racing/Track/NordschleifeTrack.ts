@@ -9,10 +9,10 @@ const DEFAULT_SAMPLES = 1200;
 const DEFAULT_WIDTH = 36;
 const ROOT_MARKER = 'nordschleifeTrackRoot';
 const CENTER_DASH_WIDTH = 1.15;
-const START_PAD_EXTRA_WIDTH_SCALE = 2.4;
-const START_PAD_BLEND = 0.18;
-const START_PAD_FLAT_BLEND = 0.03;
-const START_PAD_BANK_BLEND = 0.04;
+const START_PAD_EXTRA_WIDTH_SCALE = 0.55;
+const START_PAD_BLEND = 0.045;
+const START_PAD_FLAT_BLEND = 0.08;
+const START_PAD_BANK_BLEND = 0.12;
 const TRACK_LENGTH_SCALE = 0.475;
 const EDGE_MARKING_ELEVATION_OFFSET = 0.026;
 const CENTER_MARKING_ELEVATION_OFFSET = 0.028;
@@ -169,6 +169,7 @@ export default class NordschleifeTrack {
         mesh.name = 'nordschleife-visual';
         mesh.receiveShadow = true;
         mesh.castShadow = false;
+        mesh.frustumCulled = false;
         return mesh;
     }
 
@@ -241,6 +242,7 @@ export default class NordschleifeTrack {
         leftStrip.receiveShadow = true;
         leftStrip.castShadow = false;
         leftStrip.renderOrder = 2;
+        leftStrip.frustumCulled = false;
 
         const rightStrip = new THREE.Mesh(
             this.createEdgeStripGeometry(data, curve, -0.97, -0.84),
@@ -250,6 +252,7 @@ export default class NordschleifeTrack {
         rightStrip.receiveShadow = true;
         rightStrip.castShadow = false;
         rightStrip.renderOrder = 2;
+        rightStrip.frustumCulled = false;
 
         group.add(leftStrip);
         group.add(rightStrip);
@@ -374,6 +377,7 @@ export default class NordschleifeTrack {
         centerLine.receiveShadow = true;
         centerLine.castShadow = false;
         centerLine.renderOrder = 3;
+        centerLine.frustumCulled = false;
         return centerLine;
     }
 

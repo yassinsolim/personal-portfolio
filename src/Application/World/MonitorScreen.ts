@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 import GUI from 'lil-gui';
 import Application from '../Application';
+import UIEventBus from '../UI/EventBus';
 import Debug from '../Utils/Debug';
 import Resources from '../Utils/Resources';
 import Sizes from '../Utils/Sizes';
@@ -9,10 +10,11 @@ import Camera from '../Camera/Camera';
 import EventEmitter from '../Utils/EventEmitter';
 
 const SCREEN_SIZE = { w: 1280, h: 1024 };
-const IFRAME_PADDING = 0;
+const IFRAME_MARGIN_X = 44;
+const IFRAME_MARGIN_Y = 40;
 const IFRAME_SIZE = {
-    w: SCREEN_SIZE.w - IFRAME_PADDING,
-    h: SCREEN_SIZE.h - IFRAME_PADDING,
+    w: SCREEN_SIZE.w - IFRAME_MARGIN_X * 2,
+    h: SCREEN_SIZE.h - IFRAME_MARGIN_Y * 2,
 };
 const MONITOR_EDGE_LEEWAY_PX = 28;
 const MONITOR_LEAVE_DEBOUNCE_MS = 180;
@@ -34,6 +36,10 @@ export default class MonitorScreen extends EventEmitter {
     inComputer: boolean;
     mouseClickInProgress: boolean;
     monitorIframe: HTMLIFrameElement | null;
+    monitorContainer: HTMLDivElement | null;
+    monitorCssObject: CSS3DObject | null;
+    monitorSceneObjects: THREE.Object3D[];
+    raceModeActive: boolean;
     leaveMonitorTimeoutId: number | null;
     dimmingPlane: THREE.Mesh;
     videoTextures: { [key in string]: THREE.VideoTexture };
@@ -55,14 +61,57 @@ export default class MonitorScreen extends EventEmitter {
         this.mouseClickInProgress = false;
         this.shouldLeaveMonitor = false;
         this.monitorIframe = null;
+        this.monitorContainer = null;
+        this.monitorCssObject = null;
+        this.monitorSceneObjects = [];
+        this.raceModeActive = false;
         this.leaveMonitorTimeoutId = null;
 
         // Create screen
+        this.bindRaceModeVisibility();
         this.initializeScreenEvents();
         this.createIframe();
         const maxOffset = this.createTextureLayers();
         this.createEnclosingPlanes(maxOffset);
         this.createPerspectiveDimmer(maxOffset);
+        this.setMonitorVisualVisibility(true);
+    }
+
+    bindRaceModeVisibility() {
+        UIEventBus.on(
+            'raceMode:changed',
+            (state: { active?: boolean } | undefined) => {
+                const active = Boolean(state?.active);
+                this.raceModeActive = active;
+                this.setMonitorVisualVisibility(!active);
+                if (active) {
+                    this.clearPendingMonitorLeave();
+                    this.inComputer = false;
+                    this.prevInComputer = false;
+                    this.mouseClickInProgress = false;
+                    this.shouldLeaveMonitor = false;
+                    this.camera.trigger('leftMonitor');
+                }
+            }
+        );
+    }
+
+    setMonitorVisualVisibility(visible: boolean) {
+        if (this.monitorCssObject) {
+            this.monitorCssObject.visible = visible;
+        }
+        this.monitorSceneObjects.forEach((object) => {
+            object.visible = visible;
+        });
+
+        if (this.monitorContainer) {
+            this.monitorContainer.style.visibility = visible ? 'visible' : 'hidden';
+            this.monitorContainer.style.pointerEvents = visible ? 'auto' : 'none';
+        }
+
+        if (this.monitorIframe) {
+            this.monitorIframe.style.pointerEvents = visible ? 'auto' : 'none';
+        }
     }
 
     initializeScreenEvents() {
@@ -136,6 +185,10 @@ export default class MonitorScreen extends EventEmitter {
     }
 
     isMonitorPointerEvent(event: MouseEvent & { inComputer?: boolean }) {
+        if (this.raceModeActive) {
+            return false;
+        }
+
         if (Boolean(event.inComputer)) {
             return true;
         }
@@ -198,13 +251,17 @@ export default class MonitorScreen extends EventEmitter {
      */
     createIframe() {
         // Create container
-        const container = document.createElement('div');
+        const container = document.createElement('div') as HTMLDivElement;
         container.style.width = this.screenSize.width + 'px';
         container.style.height = this.screenSize.height + 'px';
+        container.style.position = 'relative';
+        container.style.overflow = 'hidden';
+        container.style.borderRadius = '8px';
         container.style.opacity = '1';
         container.style.background = '#000000';
         container.style.backfaceVisibility = 'hidden';
         container.style.transformStyle = 'preserve-3d';
+        this.monitorContainer = container;
 
         // Create iframe
         const iframe = document.createElement('iframe');
@@ -231,9 +288,11 @@ export default class MonitorScreen extends EventEmitter {
          * Warning: This will not work unless the dev server is running on localhost:3000
          * Also running the dev server causes browsers to flag the insecure iframe.
          */
-        iframe.style.width = this.screenSize.width + 'px';
-        iframe.style.height = this.screenSize.height + 'px';
-        iframe.style.padding = IFRAME_PADDING + 'px';
+        iframe.style.width = IFRAME_SIZE.w + 'px';
+        iframe.style.height = IFRAME_SIZE.h + 'px';
+        iframe.style.left = IFRAME_MARGIN_X + 'px';
+        iframe.style.top = IFRAME_MARGIN_Y + 'px';
+        iframe.style.position = 'absolute';
         iframe.style.boxSizing = 'border-box';
         iframe.style.opacity = '1';
         if (urlParams.has('crt')) {
@@ -364,6 +423,7 @@ export default class MonitorScreen extends EventEmitter {
 
         // Add to CSS scene
         this.cssScene.add(object);
+        this.monitorCssObject = object;
 
         // Create GL plane
         const material = new THREE.MeshLambertMaterial();
@@ -389,6 +449,7 @@ export default class MonitorScreen extends EventEmitter {
 
         // Add to gl scene
         this.scene.add(mesh);
+        this.monitorSceneObjects.push(mesh);
     }
 
     /**
@@ -505,6 +566,7 @@ export default class MonitorScreen extends EventEmitter {
         mesh.rotation.copy(this.rotation);
 
         this.scene.add(mesh);
+        this.monitorSceneObjects.push(mesh);
     }
 
     /**
@@ -587,6 +649,7 @@ export default class MonitorScreen extends EventEmitter {
         mesh.rotation.copy(plane.rotation);
 
         this.scene.add(mesh);
+        this.monitorSceneObjects.push(mesh);
     }
 
     createPerspectiveDimmer(maxOffset: number) {
@@ -616,6 +679,7 @@ export default class MonitorScreen extends EventEmitter {
         this.dimmingPlane = mesh;
 
         this.scene.add(mesh);
+        this.monitorSceneObjects.push(mesh);
     }
 
     /**
@@ -632,6 +696,10 @@ export default class MonitorScreen extends EventEmitter {
     }
 
     update() {
+        if (this.raceModeActive) {
+            return;
+        }
+
         if (this.dimmingPlane) {
             const planeNormal = new THREE.Vector3(0, 0, 1);
             const viewVector = new THREE.Vector3();

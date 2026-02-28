@@ -17,6 +17,12 @@ type GhostSample = {
     qw: number;
 };
 
+export type GhostLapReplay = {
+    lapTimeMs: number;
+    carId: string;
+    samples: GhostSample[];
+};
+
 type GhostStoragePayload = {
     bestLapTimeMs: number;
     samples: GhostSample[];
@@ -46,6 +52,8 @@ export default class GhostReplay {
     bestLapTimeMs: number;
     carId: string;
     lastSampleAtMs: number;
+    externalReplay: GhostLapReplay | null;
+    lastCompletedLapReplay: GhostLapReplay | null;
 
     constructor(parent: THREE.Object3D) {
         const app = new Application();
@@ -77,13 +85,15 @@ export default class GhostReplay {
         this.bestLapTimeMs = 0;
         this.carId = 'unknown';
         this.lastSampleAtMs = -Infinity;
+        this.externalReplay = null;
+        this.lastCompletedLapReplay = null;
 
         this.load();
     }
 
     setActive(active: boolean) {
         this.active = active;
-        this.root.visible = active && this.playbackSamples.length > 1;
+        this.root.visible = active && this.getActivePlaybackSamples().length > 1;
         if (!active) {
             this.recording = false;
             this.playbackTimeMs = 0;
@@ -106,7 +116,7 @@ export default class GhostReplay {
         if (!this.recording) return;
         if (nowMs - this.lastSampleAtMs < SAMPLE_INTERVAL_MS) return;
 
-        if (telemetry.carId && telemetry.carId !== this.carId) {
+        if (!this.externalReplay && telemetry.carId && telemetry.carId !== this.carId) {
             this.setGhostCar(telemetry.carId);
         }
 
@@ -130,6 +140,16 @@ export default class GhostReplay {
         if (!this.recording) return;
         this.recording = false;
 
+        if (valid && this.recordingSamples.length >= 8) {
+            this.lastCompletedLapReplay = {
+                lapTimeMs,
+                carId: this.carId,
+                samples: this.recordingSamples.map((sample) => ({ ...sample })),
+            };
+        } else {
+            this.lastCompletedLapReplay = null;
+        }
+
         if (!valid || this.recordingSamples.length < 8) {
             this.recordingSamples = [];
             return;
@@ -147,8 +167,10 @@ export default class GhostReplay {
             this.playbackSamples[this.playbackSamples.length - 1]?.t || lapTimeMs;
         this.playbackTimeMs = 0;
         this.recordingSamples = [];
-        this.root.visible = this.active;
-        this.setGhostCar(this.carId);
+        if (!this.externalReplay) {
+            this.root.visible = this.active;
+            this.setGhostCar(this.carId);
+        }
         this.save();
     }
 
@@ -178,20 +200,72 @@ export default class GhostReplay {
             this.playbackDurationMs =
                 this.playbackSamples[this.playbackSamples.length - 1]?.t || 0;
             this.carId = parsed.carId || 'unknown';
-            this.setGhostCar(this.carId);
+            if (!this.externalReplay) {
+                this.setGhostCar(this.carId);
+            }
         } catch (error) {
             return;
         }
     }
 
+    setExternalReplay(replay: GhostLapReplay | null) {
+        if (!replay || replay.samples.length < 2) {
+            this.externalReplay = null;
+            if (this.playbackSamples.length > 1) {
+                this.setGhostCar(this.carId);
+            }
+            this.root.visible = this.active && this.getActivePlaybackSamples().length > 1;
+            this.playbackTimeMs = 0;
+            return;
+        }
+
+        this.externalReplay = {
+            lapTimeMs: replay.lapTimeMs,
+            carId: replay.carId,
+            samples: replay.samples.map((sample) => ({ ...sample })),
+        };
+        this.setGhostCar(this.externalReplay.carId || this.carId);
+        this.root.visible = this.active;
+        this.playbackTimeMs = 0;
+    }
+
+    getLastCompletedLapReplay(expectedLapTimeMs?: number) {
+        if (!this.lastCompletedLapReplay) return null;
+        if (
+            Number.isFinite(expectedLapTimeMs) &&
+            expectedLapTimeMs &&
+            this.lastCompletedLapReplay.lapTimeMs !== Math.floor(expectedLapTimeMs)
+        ) {
+            return null;
+        }
+        return {
+            lapTimeMs: this.lastCompletedLapReplay.lapTimeMs,
+            carId: this.lastCompletedLapReplay.carId,
+            samples: this.lastCompletedLapReplay.samples.map((sample) => ({
+                ...sample,
+            })),
+        };
+    }
+
+    getActivePlaybackSamples() {
+        return this.externalReplay?.samples || this.playbackSamples;
+    }
+
+    getActivePlaybackDurationMs() {
+        const samples = this.getActivePlaybackSamples();
+        return samples[samples.length - 1]?.t || 0;
+    }
+
     update(deltaSeconds: number) {
-        if (!this.active || this.playbackSamples.length < 2) return;
-        if (!this.playbackDurationMs) return;
+        const samples = this.getActivePlaybackSamples();
+        const durationMs = this.getActivePlaybackDurationMs();
+        if (!this.active || samples.length < 2) return;
+        if (!durationMs) return;
 
         this.playbackTimeMs =
-            (this.playbackTimeMs + deltaSeconds * 1000) % this.playbackDurationMs;
+            (this.playbackTimeMs + deltaSeconds * 1000) % durationMs;
 
-        const sample = this.sampleAt(this.playbackTimeMs);
+        const sample = this.sampleAt(this.playbackTimeMs, samples);
         if (!sample) return;
 
         this.ghostMesh.position.set(sample.x, sample.y, sample.z);
@@ -271,8 +345,7 @@ export default class GhostReplay {
         this.disposeGhostOverrides(previousOverrides);
     }
 
-    sampleAt(timeMs: number) {
-        const samples = this.playbackSamples;
+    sampleAt(timeMs: number, samples: GhostSample[]) {
         if (samples.length < 2) return null;
 
         let i = 0;
@@ -303,6 +376,6 @@ export default class GhostReplay {
     }
 
     getBestLapTimeMs() {
-        return this.bestLapTimeMs;
+        return this.externalReplay?.lapTimeMs || this.bestLapTimeMs;
     }
 }

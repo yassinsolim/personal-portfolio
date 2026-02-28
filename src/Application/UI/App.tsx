@@ -445,13 +445,13 @@ const App = () => {
                     {!raceModeActive && (
                         <div className="multiplayer-menu" data-prevent-click>
                             <div className="multiplayer-row">
-                                <label htmlFor="multiplayer-name">Driver</label>
+                                <label htmlFor="multiplayer-name">Driver Name</label>
                                 <input
                                     id="multiplayer-name"
                                     value={playerName}
                                     onChange={handlePlayerNameChange}
                                     maxLength={16}
-                                    placeholder="Driver"
+                                    placeholder="Driver Name"
                                 />
                             </div>
                             <div className="multiplayer-actions">

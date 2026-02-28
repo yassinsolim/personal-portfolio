@@ -319,7 +319,7 @@ br {
 }
 
 .look-hint .multiplayer-row label {
-    min-width: 42px;
+    min-width: 76px;
     color: inherit;
     font-size: 11px;
 }
