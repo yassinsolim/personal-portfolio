@@ -13,6 +13,8 @@ const START_PAD_BLEND = 0.18;
 const START_PAD_FLAT_BLEND = 0.03;
 const START_PAD_BANK_BLEND = 0.04;
 const TRACK_LENGTH_SCALE = 0.475;
+const EDGE_MARKING_ELEVATION_OFFSET = 0.026;
+const CENTER_MARKING_ELEVATION_OFFSET = 0.028;
 
 type TrackAssetData = {
     name?: string;
@@ -157,6 +159,9 @@ export default class NordschleifeTrack {
             metalness: 0.03,
             map: asphaltTexture,
             side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: 1,
+            polygonOffsetUnits: 2,
         });
 
         const mesh = new THREE.Mesh(geometry, material);
@@ -201,6 +206,7 @@ export default class NordschleifeTrack {
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.set(95, 95);
+        texture.anisotropy = this.getTextureAnisotropy();
         texture.needsUpdate = true;
         return texture;
     }
@@ -215,8 +221,9 @@ export default class NordschleifeTrack {
             metalness: 0.02,
             side: THREE.DoubleSide,
             polygonOffset: true,
-            polygonOffsetFactor: -1,
-            polygonOffsetUnits: -2,
+            polygonOffsetFactor: -4,
+            polygonOffsetUnits: -8,
+            depthWrite: false,
         });
 
         const leftStrip = new THREE.Mesh(
@@ -226,6 +233,7 @@ export default class NordschleifeTrack {
         leftStrip.name = 'nordschleife-edge-left';
         leftStrip.receiveShadow = true;
         leftStrip.castShadow = false;
+        leftStrip.renderOrder = 2;
 
         const rightStrip = new THREE.Mesh(
             this.createEdgeStripGeometry(data, curve, -0.97, -0.84),
@@ -234,6 +242,7 @@ export default class NordschleifeTrack {
         rightStrip.name = 'nordschleife-edge-right';
         rightStrip.receiveShadow = true;
         rightStrip.castShadow = false;
+        rightStrip.renderOrder = 2;
 
         group.add(leftStrip);
         group.add(rightStrip);
@@ -250,7 +259,7 @@ export default class NordschleifeTrack {
         const width = data.width ?? DEFAULT_WIDTH;
         const halfWidth = width * 0.5;
         const uvScale = data.uvScale ?? DEFAULT_UV_SCALE;
-        const elevationOffset = 0.0015;
+        const elevationOffset = EDGE_MARKING_ELEVATION_OFFSET;
 
         const tangent = new THREE.Vector3();
         const point = new THREE.Vector3();
@@ -348,14 +357,16 @@ export default class NordschleifeTrack {
             alphaMap: dashTexture,
             alphaTest: 0.35,
             polygonOffset: true,
-            polygonOffsetFactor: -1,
-            polygonOffsetUnits: -3,
+            polygonOffsetFactor: -4,
+            polygonOffsetUnits: -10,
+            depthWrite: false,
         });
 
         const centerLine = new THREE.Mesh(geometry, material);
         centerLine.name = 'nordschleife-centerline';
         centerLine.receiveShadow = true;
         centerLine.castShadow = false;
+        centerLine.renderOrder = 3;
         return centerLine;
     }
 
@@ -382,6 +393,7 @@ export default class NordschleifeTrack {
         texture.wrapS = THREE.ClampToEdgeWrapping;
         texture.wrapT = THREE.RepeatWrapping;
         texture.repeat.set(1, 30);
+        texture.anisotropy = this.getTextureAnisotropy();
         texture.needsUpdate = true;
         return texture;
     }
@@ -389,7 +401,7 @@ export default class NordschleifeTrack {
     createCenterStripGeometry(data: TrackAssetData, curve: THREE.Curve<THREE.Vector3>) {
         const samples = Math.max(64, data.samples ?? DEFAULT_SAMPLES);
         const halfWidth = CENTER_DASH_WIDTH * 0.5;
-        const elevationOffset = 0.0018;
+        const elevationOffset = CENTER_MARKING_ELEVATION_OFFSET;
 
         const tangent = new THREE.Vector3();
         const point = new THREE.Vector3();
@@ -594,6 +606,14 @@ export default class NordschleifeTrack {
             1
         );
         return normalized * normalized * (3 - 2 * normalized);
+    }
+
+    getTextureAnisotropy() {
+        const renderer = this.application.renderer?.instance;
+        if (!renderer?.capabilities?.getMaxAnisotropy) {
+            return 1;
+        }
+        return Math.min(8, renderer.capabilities.getMaxAnisotropy());
     }
 
     getOffset(offset?: number[]) {

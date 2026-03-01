@@ -9,11 +9,13 @@ import Camera from '../Camera/Camera';
 import EventEmitter from '../Utils/EventEmitter';
 
 const SCREEN_SIZE = { w: 1280, h: 1024 };
-const IFRAME_PADDING = 32;
+const IFRAME_PADDING = 0;
 const IFRAME_SIZE = {
     w: SCREEN_SIZE.w - IFRAME_PADDING,
     h: SCREEN_SIZE.h - IFRAME_PADDING,
 };
+const MONITOR_EDGE_LEEWAY_PX = 28;
+const MONITOR_LEAVE_DEBOUNCE_MS = 180;
 
 export default class MonitorScreen extends EventEmitter {
     application: Application;
@@ -31,6 +33,8 @@ export default class MonitorScreen extends EventEmitter {
     shouldLeaveMonitor: boolean;
     inComputer: boolean;
     mouseClickInProgress: boolean;
+    monitorIframe: HTMLIFrameElement | null;
+    leaveMonitorTimeoutId: number | null;
     dimmingPlane: THREE.Mesh;
     videoTextures: { [key in string]: THREE.VideoTexture };
 
@@ -46,8 +50,12 @@ export default class MonitorScreen extends EventEmitter {
         this.position = new THREE.Vector3(0, 950, 255);
         this.rotation = new THREE.Euler(-3 * THREE.MathUtils.DEG2RAD, 0, 0);
         this.videoTextures = {};
+        this.prevInComputer = false;
+        this.inComputer = false;
         this.mouseClickInProgress = false;
         this.shouldLeaveMonitor = false;
+        this.monitorIframe = null;
+        this.leaveMonitorTimeoutId = null;
 
         // Create screen
         this.initializeScreenEvents();
@@ -61,15 +69,11 @@ export default class MonitorScreen extends EventEmitter {
         document.addEventListener(
             'mousemove',
             (event) => {
-                // @ts-ignore
-                const id = event.target.id;
-                if (id === 'computer-screen') {
-                    // @ts-ignore
-                    event.inComputer = true;
-                }
+                this.inComputer = this.isMonitorPointerEvent(event);
 
-                // @ts-ignore
-                this.inComputer = event.inComputer;
+                if (this.inComputer) {
+                    this.clearPendingMonitorLeave();
+                }
 
                 if (this.inComputer && !this.prevInComputer) {
                     this.camera.trigger('enterMonitor');
@@ -80,7 +84,7 @@ export default class MonitorScreen extends EventEmitter {
                     this.prevInComputer &&
                     !this.mouseClickInProgress
                 ) {
-                    this.camera.trigger('leftMonitor');
+                    this.scheduleMonitorLeave();
                 }
 
                 if (
@@ -89,7 +93,7 @@ export default class MonitorScreen extends EventEmitter {
                     this.prevInComputer
                 ) {
                     this.shouldLeaveMonitor = true;
-                } else {
+                } else if (this.inComputer) {
                     this.shouldLeaveMonitor = false;
                 }
 
@@ -102,11 +106,13 @@ export default class MonitorScreen extends EventEmitter {
         document.addEventListener(
             'mousedown',
             (event) => {
-                // @ts-ignore
-                this.inComputer = event.inComputer;
+                this.inComputer = this.isMonitorPointerEvent(event);
                 this.application.mouse.trigger('mousedown', [event]);
 
                 this.mouseClickInProgress = true;
+                if (this.inComputer) {
+                    this.clearPendingMonitorLeave();
+                }
                 this.prevInComputer = this.inComputer;
             },
             false
@@ -114,12 +120,11 @@ export default class MonitorScreen extends EventEmitter {
         document.addEventListener(
             'mouseup',
             (event) => {
-                // @ts-ignore
-                this.inComputer = event.inComputer;
+                this.inComputer = this.isMonitorPointerEvent(event);
                 this.application.mouse.trigger('mouseup', [event]);
 
                 if (this.shouldLeaveMonitor) {
-                    this.camera.trigger('leftMonitor');
+                    this.scheduleMonitorLeave();
                     this.shouldLeaveMonitor = false;
                 }
 
@@ -128,6 +133,64 @@ export default class MonitorScreen extends EventEmitter {
             },
             false
         );
+    }
+
+    isMonitorPointerEvent(event: MouseEvent & { inComputer?: boolean }) {
+        if (Boolean(event.inComputer)) {
+            return true;
+        }
+
+        const target = event.target as HTMLElement | null;
+        if (target?.id === 'computer-screen' || target?.closest('#computer-screen')) {
+            return true;
+        }
+
+        if (
+            typeof event.clientX !== 'number' ||
+            typeof event.clientY !== 'number' ||
+            !Number.isFinite(event.clientX) ||
+            !Number.isFinite(event.clientY)
+        ) {
+            return false;
+        }
+
+        return this.isWithinMonitorBounds(event.clientX, event.clientY);
+    }
+
+    isWithinMonitorBounds(clientX: number, clientY: number) {
+        const iframe = this.monitorIframe;
+        if (!iframe) return false;
+
+        const rect = iframe.getBoundingClientRect();
+        const pad = MONITOR_EDGE_LEEWAY_PX;
+        return (
+            clientX >= rect.left - pad &&
+            clientX <= rect.right + pad &&
+            clientY >= rect.top - pad &&
+            clientY <= rect.bottom + pad
+        );
+    }
+
+    scheduleMonitorLeave() {
+        if (this.leaveMonitorTimeoutId !== null) {
+            return;
+        }
+
+        this.leaveMonitorTimeoutId = window.setTimeout(() => {
+            this.leaveMonitorTimeoutId = null;
+            if (this.inComputer || this.mouseClickInProgress) {
+                return;
+            }
+            this.camera.trigger('leftMonitor');
+        }, MONITOR_LEAVE_DEBOUNCE_MS);
+    }
+
+    clearPendingMonitorLeave() {
+        if (this.leaveMonitorTimeoutId === null) {
+            return;
+        }
+        window.clearTimeout(this.leaveMonitorTimeoutId);
+        this.leaveMonitorTimeoutId = null;
     }
 
     /**
@@ -147,7 +210,7 @@ export default class MonitorScreen extends EventEmitter {
         const iframe = document.createElement('iframe');
 
         // Set iframe attributes
-        const productionSrc = 'https://os.yassin.app';
+        const productionSrc = 'https://os.yassin.app/?embed=1&quality=high';
         const localDevSrc = 'http://localhost:3000/';
         const urlParams = new URLSearchParams(window.location.search);
         const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
@@ -158,7 +221,7 @@ export default class MonitorScreen extends EventEmitter {
         iframe.src = iframeSrc;
         iframe.setAttribute(
             'sandbox',
-            'allow-scripts allow-same-origin allow-forms allow-pointer-lock'
+            'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
         );
         iframe.setAttribute('referrerpolicy', 'no-referrer');
 
@@ -173,11 +236,17 @@ export default class MonitorScreen extends EventEmitter {
         iframe.style.padding = IFRAME_PADDING + 'px';
         iframe.style.boxSizing = 'border-box';
         iframe.style.opacity = '1';
-        iframe.className = 'jitter';
+        if (urlParams.has('crt')) {
+            iframe.className = 'jitter';
+        }
         iframe.id = 'computer-screen';
         iframe.frameBorder = '0';
+        iframe.style.border = '0';
+        iframe.style.transform = 'translateZ(0)';
+        iframe.style.imageRendering = 'auto';
         iframe.style.backfaceVisibility = 'hidden';
         // iframe.title = 'yassinOS';
+        this.monitorIframe = iframe;
 
         // Bubble mouse move events to the main application, so we can affect the camera
         const iframeOrigin = new URL(iframeSrc, window.location.href).origin;

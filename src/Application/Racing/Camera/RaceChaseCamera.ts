@@ -13,6 +13,7 @@ const MIN_CAMERA_DISTANCE = 11.4;
 const MAX_CAMERA_DISTANCE = 21;
 const SHAKE_SPEED_START = 22;
 const RACE_CAMERA_NEAR = 0.18;
+const RACE_CAMERA_FAR = 120000;
 const DRIFT_SHAKE_SCALE = 0.5;
 const CLOSE_CAMERA_NEAR = 0.32;
 const CAMERA_BODY_CLEARANCE = 2.8;
@@ -32,6 +33,7 @@ export default class RaceChaseCamera {
     smoothLookAt: THREE.Vector3;
     defaultFov: number;
     defaultNear: number;
+    defaultFar: number;
     shakeTime: number;
     tmpUp: THREE.Vector3;
     tmpForward: THREE.Vector3;
@@ -61,6 +63,7 @@ export default class RaceChaseCamera {
         this.smoothLookAt = new THREE.Vector3();
         this.defaultFov = this.application.camera.instance.fov;
         this.defaultNear = this.application.camera.instance.near;
+        this.defaultFar = this.application.camera.instance.far;
         this.shakeTime = 0;
 
         this.tmpUp = new THREE.Vector3();
@@ -257,6 +260,7 @@ export default class RaceChaseCamera {
         if (active) {
             this.shakeTime = 0;
             this.application.camera.instance.near = RACE_CAMERA_NEAR;
+            this.application.camera.instance.far = RACE_CAMERA_FAR;
             this.application.camera.instance.fov = BASE_FOV;
             this.application.camera.instance.updateProjectionMatrix();
             return;
@@ -271,6 +275,7 @@ export default class RaceChaseCamera {
             this.pitchOffset = 0.1;
             this.shakeTime = 0;
             this.application.camera.instance.near = this.defaultNear;
+            this.application.camera.instance.far = this.defaultFar;
             this.application.camera.instance.fov = this.defaultFov;
             this.application.camera.instance.updateProjectionMatrix();
             UIEventBus.dispatch('race:inputReset', {
