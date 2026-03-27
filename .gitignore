@@ -5,3 +5,7 @@ package-lock.json
 
 build/
 exports/
+
+# Environment variables
+.env
+.env.local

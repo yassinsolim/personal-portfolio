@@ -110,7 +110,7 @@ export default class Camera extends EventEmitter {
     transition(
         key: CameraKey,
         duration: number = 1000,
-        easing?: any,
+        easing?: (k: number) => number,
         callback?: () => void
     ) {
         if (this.currentKeyframe === key) return;

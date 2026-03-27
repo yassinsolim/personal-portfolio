@@ -17,7 +17,7 @@ export default class Mouse extends EventEmitter {
         // this.audio = this.application.world.audio;
 
         // Resize event
-        this.on('mousemove', (event: any) => {
+        this.on('mousemove', (event: MouseEvent & { inComputer?: boolean }) => {
             if (event.clientX && event.clientY) {
                 this.x = event.clientX;
                 this.y = event.clientY;
