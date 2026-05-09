@@ -2,7 +2,7 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-const ROOT = 'c:/Users/solim/personal-portfolio';
+const ROOT = path.resolve(__dirname, '..');
 const OUT_DIR = path.join(ROOT, '.tmp-validation');
 const URL =
     process.env.RACE_VALIDATION_URL || 'http://127.0.0.1:8137/?raceDebug=1';

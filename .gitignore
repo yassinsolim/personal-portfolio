@@ -1,7 +1,13 @@
 node_modules
-package-lock.json
 .DS_Store
 *.psd
 
 build/
 exports/
+
+# Local scratch, validation output, and runtime logs.
+.codex-tmp/
+.tmp-baseline/
+.tmp-validation/
+*.log
+*.pid

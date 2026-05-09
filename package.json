@@ -4,7 +4,8 @@
     "scripts": {
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
-        "export:glb": "set EXPORT_SCENE=1&& npm run dev"
+        "export:glb": "set EXPORT_SCENE=1&& npm run dev",
+        "validate:race": "node scripts/run-regression-validation.js"
     },
     "dependencies": {
         "@babel/core": "^7.16.12",

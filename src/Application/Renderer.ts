@@ -85,7 +85,7 @@ export default class Renderer {
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
         this.cssInstance.domElement.style.position = 'absolute';
         this.cssInstance.domElement.style.top = '0px';
-        this.cssInstance.domElement.style.zIndex = '2';
+        this.cssInstance.domElement.style.zIndex = '0';
 
         document
             .querySelector('#css')
