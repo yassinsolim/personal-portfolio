@@ -198,45 +198,93 @@ export default class Camera extends EventEmitter {
         });
     }
 
-    enableFreeCam(duration: number = 750) {
-        if (this.freeCam) return;
+    setFreeCamLayerInteraction(enabled: boolean) {
+        const webgl = document.getElementById('webgl');
+        if (webgl) {
+            webgl.style.pointerEvents = enabled ? 'auto' : 'none';
+        }
+        if (this.renderer.cssInstance?.domElement) {
+            this.renderer.cssInstance.domElement.style.pointerEvents = enabled
+                ? 'none'
+                : 'auto';
+        }
+    }
+
+    dispatchFreeCamState(pending = false) {
+        UIEventBus.dispatch('freeCam:state', {
+            active: this.freeCam,
+            pending,
+        });
+    }
+
+    activateFreeCam(transitionToken: number) {
+        if (transitionToken !== this.freeCamTransitionToken) return;
+        if (!this.freeCamLocked || this.raceModeActive) {
+            this.dispatchFreeCamState(false);
+            return;
+        }
+        this.instance.position.copy(this.keyframes.orbitControlsStart.position);
+        this.orbitControls.target.copy(
+            this.keyframes.orbitControlsStart.focalPoint
+        );
+        this.orbitControls.object.position.copy(this.instance.position);
+        this.orbitControls.update();
+        this.freeCam = true;
+        this.syncOrbitControlsState();
+        this.setFreeCamLayerInteraction(true);
+        this.dispatchFreeCamState(false);
+    }
+
+    enableFreeCam(duration: number = 450) {
+        if (this.raceModeActive) {
+            this.dispatchFreeCamState(false);
+            return;
+        }
+
+        this.freeCamLocked = true;
+        this.setFreeCamLayerInteraction(true);
+
+        if (this.freeCam) {
+            this.syncOrbitControlsState();
+            this.dispatchFreeCamState(false);
+            return;
+        }
+
         const transitionToken = ++this.freeCamTransitionToken;
+        this.dispatchFreeCamState(true);
+
+        if (
+            this.currentKeyframe === CameraKey.ORBIT_CONTROLS_START &&
+            !this.targetKeyframe
+        ) {
+            this.activateFreeCam(transitionToken);
+            return;
+        }
+
         this.transition(
             CameraKey.ORBIT_CONTROLS_START,
             duration,
             BezierEasing(0.13, 0.99, 0, 1),
-            () => {
-                if (transitionToken !== this.freeCamTransitionToken) return;
-                if (!this.freeCamLocked || this.raceModeActive) return;
-                this.instance.position.copy(
-                    this.keyframes.orbitControlsStart.position
-                );
-                this.orbitControls.target.copy(
-                    this.keyframes.orbitControlsStart.focalPoint
-                );
-                this.orbitControls.update();
-                this.freeCam = true;
-                this.syncOrbitControlsState();
-            }
+            () => this.activateFreeCam(transitionToken)
         );
-        // @ts-ignore
-        document.getElementById('webgl').style.pointerEvents = 'auto';
-        if (this.renderer.cssInstance?.domElement) {
-            this.renderer.cssInstance.domElement.style.pointerEvents = 'none';
-        }
     }
 
     disableFreeCam() {
         this.freeCamTransitionToken++;
-        if (!this.freeCam) return;
+        this.freeCamLocked = false;
+        const shouldReturnToDesk =
+            this.freeCam ||
+            this.targetKeyframe === CameraKey.ORBIT_CONTROLS_START ||
+            this.currentKeyframe === CameraKey.ORBIT_CONTROLS_START;
         this.freeCam = false;
         this.syncOrbitControlsState();
-        this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
-        // @ts-ignore
-        document.getElementById('webgl').style.pointerEvents = 'none';
-        if (this.renderer.cssInstance?.domElement) {
-            this.renderer.cssInstance.domElement.style.pointerEvents = 'auto';
+        if (!this.raceModeActive) {
+            this.setFreeCamLayerInteraction(false);
         }
+        if (shouldReturnToDesk && !this.raceModeActive) {
+            this.transition(CameraKey.DESK, 600, TWEEN.Easing.Exponential.Out);
+        }
+        this.dispatchFreeCamState(false);
     }
 
     syncOrbitControlsState() {

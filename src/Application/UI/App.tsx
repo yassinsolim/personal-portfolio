@@ -123,6 +123,7 @@ const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
     const [freeCamActive, setFreeCamActive] = useState(false);
+    const [freeCamPending, setFreeCamPending] = useState(false);
     const [raceModeActive, setRaceModeActive] = useState(false);
     const [racePaused, setRacePaused] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
@@ -161,6 +162,7 @@ const App = () => {
                 setRacePaused(Boolean(state?.paused));
                 if (active) {
                     setFreeCamActive(false);
+                    setFreeCamPending(false);
                 }
                 if (!active) {
                     setPointerLocked(false);
@@ -176,6 +178,14 @@ const App = () => {
             'race:pointerLockChanged',
             (state: { locked?: boolean } | undefined) => {
                 setPointerLocked(Boolean(state?.locked));
+            }
+        );
+
+        eventBus.on(
+            'freeCam:state',
+            (state: { active?: boolean; pending?: boolean } | undefined) => {
+                setFreeCamActive(Boolean(state?.active));
+                setFreeCamPending(Boolean(state?.pending));
             }
         );
 
@@ -255,9 +265,14 @@ const App = () => {
     };
 
     const handleViewToggle = () => {
-        if (raceModeActive) return;
+        if (raceModeActive || freeCamPending) return;
         const nextState = !freeCamActive;
-        setFreeCamActive(nextState);
+        if (nextState) {
+            setFreeCamPending(true);
+        } else {
+            setFreeCamActive(false);
+            setFreeCamPending(false);
+        }
         eventBus.dispatch('freeCamToggle', nextState);
     };
 
@@ -435,8 +450,14 @@ const App = () => {
                     </div>
                     {!raceModeActive && (
                         <div className="view-toggle" data-prevent-click>
-                            <button type="button" onClick={handleViewToggle}>
-                                {freeCamActive
+                            <button
+                                type="button"
+                                onClick={handleViewToggle}
+                                disabled={freeCamPending}
+                            >
+                                {freeCamPending
+                                    ? 'Entering look around'
+                                    : freeCamActive
                                     ? 'Exit look around'
                                     : 'Look around'}
                             </button>

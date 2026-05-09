@@ -217,6 +217,11 @@ br {
     cursor: pointer;
 }
 
+.look-hint .view-toggle button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
 .look-hint .race-toggle {
     margin-top: 6px;
     display: flex;
