@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../Application';
 import Resources from '../Utils/Resources';
 import UIEventBus from '../UI/EventBus';
+import { applyBmwM5GlassTint } from '../Utils/BmwM5GlassTint';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
 
@@ -11,9 +12,11 @@ const CAR_ROTATION = new THREE.Euler(0, -Math.PI / 2, 0);
 const CAR_ENV_INTENSITY = 0.95;
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
+const BMW_M8_COMPETITION_COUPE_ID = 'bmw-m8-competition-coupe';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const BODY_BLUE = new THREE.Color(0x050f2f);
-const BMW_F90_M5_TANZANITE_BLUE = new THREE.Color(0x0c2c84);
+const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
+const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
 const TOYOTA_CROWN_GRAY = new THREE.Color(0x8f9296);
 const TOYOTA_CROWN_SCALE = 0.95;
 const TOYOTA_CROWN_ROTATION_OFFSET = Math.PI / 2;
@@ -449,18 +452,28 @@ export default class Car {
         ]);
         const toyotaBodyNames = new Set(['body']);
         const bmwM5BodyNames = new Set([...defaultBodyNames, 'bmat_m5_metallic1']);
+        const bmwM8BodyNames = new Set(['bbmw_m8competition_2020paint_material1']);
         const isToyotaCrown = carOption.id === TOYOTA_CROWN_ID;
         const isBmwM5 = carOption.id === BMW_F90_M5_COMPETITION_ID;
+        const isBmwM8 = carOption.id === BMW_M8_COMPETITION_COUPE_ID;
         const bodyNames = isToyotaCrown
             ? toyotaBodyNames
+            : isBmwM8
+            ? bmwM8BodyNames
             : isBmwM5
             ? bmwM5BodyNames
             : defaultBodyNames;
         const bodyColor = isToyotaCrown
             ? TOYOTA_CROWN_GRAY
+            : isBmwM8
+            ? BMW_M8_FROZEN_MARINA_BAY_BLUE
             : isBmwM5
-            ? BMW_F90_M5_TANZANITE_BLUE
+            ? BMW_F90_M5_METALLIC_MARINA_BAY_BLUE
             : BODY_BLUE;
+        const bodyMetalness = isBmwM8 ? 0.85 : 1;
+        const bodyRoughness = isBmwM8 ? 0.38 : isBmwM5 ? 0.12 : 0.18;
+        const bodyEnvMapIntensity = isBmwM8 ? 0.85 : isBmwM5 ? 1.35 : 1.1;
+        const preserveWheelMaterials = isBmwM8;
 
         const carbonNames = ['carbon', 'carbon_0', 'parts', 'side_wing_carbon_0'];
         const windowNames = [
@@ -494,10 +507,13 @@ export default class Car {
                 const name = material.name.toLowerCase();
 
                 if (bodyNames.has(name)) {
+                    if (isBmwM8) {
+                        material.map = null;
+                    }
                     material.color.copy(bodyColor);
-                    material.metalness = 1;
-                    material.roughness = 0.18;
-                    material.envMapIntensity = 1.1;
+                    material.metalness = bodyMetalness;
+                    material.roughness = bodyRoughness;
+                    material.envMapIntensity = bodyEnvMapIntensity;
                 } else if (carbonNames.some((n) => name.includes(n))) {
                     material.color.multiplyScalar(0.6);
                     material.metalness = 0.1;
@@ -509,7 +525,10 @@ export default class Car {
                     material.opacity = 0.45;
                     material.transparent = true;
                     material.envMapIntensity = 0.5;
-                } else if (wheelNames.some((n) => name.includes(n))) {
+                } else if (
+                    !preserveWheelMaterials &&
+                    wheelNames.some((n) => name.includes(n))
+                ) {
                     material.color.copy(WHEEL_SILVER);
                     material.metalness = 1;
                     material.roughness = 0.1;
@@ -527,6 +546,10 @@ export default class Car {
                 material.needsUpdate = true;
             }
         });
+
+        if (isBmwM5) {
+            applyBmwM5GlassTint(car);
+        }
     }
 
     getGroundYFromScene() {

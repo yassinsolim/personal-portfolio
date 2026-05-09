@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
 import UIEventBus from '../../UI/EventBus';
+import { applyBmwM5GlassTint } from '../../Utils/BmwM5GlassTint';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -71,6 +72,7 @@ const SHARED_MAX_STEER_ANGLE_DEG = 34;
 const AMG_ONE_ID = 'amg-one';
 const BMW_E92_M3_ID = 'bmw-e92-m3';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
+const BMW_M8_COMPETITION_COUPE_ID = 'bmw-m8-competition-coupe';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const TOYOTA_SPLIT_GROUP_FRONT_LEFT = 'toyota_split_wheel_front_left';
@@ -108,7 +110,8 @@ const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
 ];
 const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
 const BMW_E92_RIM_SILVER = new THREE.Color(0xd3d8de);
-const BMW_F90_M5_TANZANITE_BLUE = new THREE.Color(0x0c2c84);
+const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
+const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
 const GT63_DECAL_HINTS = [
     'stripe',
@@ -2606,6 +2609,9 @@ export default class RaceVehicle {
         let bodyColor: THREE.Color;
         let bodyMatchers: string[] = [];
         let roughness = 0.18;
+        let metalness = 1;
+        let envMapIntensity = 1.1;
+        let clearBaseColorMap = false;
 
         if (carId === TOYOTA_CROWN_ID) {
             bodyColor = TOYOTA_CROWN_SILVER;
@@ -2625,9 +2631,18 @@ export default class RaceVehicle {
                 'mizo',
             ];
         } else if (carId === BMW_F90_M5_COMPETITION_ID) {
-            bodyColor = BMW_F90_M5_TANZANITE_BLUE;
+            bodyColor = BMW_F90_M5_METALLIC_MARINA_BAY_BLUE;
             bodyMatchers = ['m5_metallic', 'mat_m5_metallic'];
-            roughness = 0.22;
+            roughness = 0.12;
+            metalness = 1;
+            envMapIntensity = 1.35;
+        } else if (carId === BMW_M8_COMPETITION_COUPE_ID) {
+            bodyColor = BMW_M8_FROZEN_MARINA_BAY_BLUE;
+            bodyMatchers = ['m8competition_2020paint'];
+            roughness = 0.38;
+            metalness = 0.85;
+            envMapIntensity = 0.85;
+            clearBaseColorMap = true;
         } else {
             return;
         }
@@ -2643,12 +2658,19 @@ export default class RaceVehicle {
             );
             if (!isBodyMaterial) return;
 
+            if (clearBaseColorMap) {
+                material.map = null;
+            }
             material.color.copy(bodyColor);
-            material.metalness = 1;
+            material.metalness = metalness;
             material.roughness = roughness;
-            material.envMapIntensity = 1.1;
+            material.envMapIntensity = envMapIntensity;
             material.needsUpdate = true;
         });
+
+        if (carId === BMW_F90_M5_COMPETITION_ID) {
+            applyBmwM5GlassTint(model);
+        }
     }
 
     applyWheelFinishStyling(model: THREE.Object3D, carId: string, wheelRig: WheelRig[]) {
