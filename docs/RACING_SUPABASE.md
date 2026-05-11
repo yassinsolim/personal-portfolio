@@ -26,6 +26,18 @@ Important security note:
 - Use only the **anon public key** in this client config.
 - Never put a service-role key in frontend files.
 
+### Vercel setup
+
+For Vercel, set these Project Settings -> Environment Variables and redeploy:
+
+- `RACING_SUPABASE_URL`
+- `RACING_SUPABASE_ANON_KEY`
+- `RACING_LEADERBOARD_TABLE` (optional, defaults to `nordschleife_leaderboard`)
+- `RACING_GHOST_REPLAY_TABLE` (optional, defaults to `nordschleife_ghost_replays`)
+- `RACING_LOBBY_CHANNEL_PREFIX` (optional, defaults to `nordschleife_lobby_v1`)
+
+`npm run build` runs `scripts/write-racing-config.js` first. If the Supabase URL/key are set, it writes `static/config/racing.config.json`, then Webpack copies that file into `build/config/racing.config.json`.
+
 ## 2) Secure leaderboard table
 
 Run in Supabase SQL editor:

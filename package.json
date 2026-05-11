@@ -2,6 +2,7 @@
     "repository": "#",
     "license": "UNLICENSED",
     "scripts": {
+        "prebuild": "node scripts/write-racing-config.js",
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
         "export:glb": "set EXPORT_SCENE=1&& npm run dev",

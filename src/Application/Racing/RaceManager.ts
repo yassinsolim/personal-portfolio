@@ -131,7 +131,9 @@ export default class RaceManager {
         this.lapSubmitInFlight = false;
         this.lastHudDispatchMs = 0;
         this.engineAudio = new RaceEngineAudio();
-        this.ghostReplay = new GhostReplay(this.raceRoot);
+        this.ghostReplay = new GhostReplay(this.raceRoot, (carId) =>
+            this.vehicle.getPreparedModel(carId)
+        );
         this.remoteSmoke = new DriftSmoke(this.raceRoot);
         this.remoteSmoke.root.name = 'race-remote-drift-smoke-root';
         this.remoteSmoke.setActive(false);

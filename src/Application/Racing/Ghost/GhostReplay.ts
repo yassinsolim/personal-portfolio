@@ -35,11 +35,14 @@ type GhostTelemetry = {
     carId: string;
 };
 
+type PreparedGhostModelProvider = (carId: string) => THREE.Group | null;
+
 export default class GhostReplay {
     root: THREE.Group;
     ghostMesh: THREE.Object3D;
     ghostMaterialOverrides: THREE.Material[];
     resources: Application['resources'];
+    getPreparedModel: PreparedGhostModelProvider | null;
     fallbackGeometry: THREE.BoxGeometry;
     fallbackMaterial: THREE.MeshBasicMaterial;
     playbackSamples: GhostSample[];
@@ -55,9 +58,13 @@ export default class GhostReplay {
     externalReplay: GhostLapReplay | null;
     lastCompletedLapReplay: GhostLapReplay | null;
 
-    constructor(parent: THREE.Object3D) {
+    constructor(
+        parent: THREE.Object3D,
+        getPreparedModel: PreparedGhostModelProvider | null = null
+    ) {
         const app = new Application();
         this.resources = app.resources;
+        this.getPreparedModel = getPreparedModel;
 
         this.root = new THREE.Group();
         this.root.name = 'race-ghost-root';
@@ -303,22 +310,25 @@ export default class GhostReplay {
         this.ghostMaterialOverrides = [];
 
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
-        const gltf = option
+        const preparedModel = this.getPreparedModel?.(option?.id || carId) || null;
+        const gltf = !preparedModel && option
             ? this.resources.items.gltfModel[option.resourceName]
             : null;
-        const scene = gltf?.scene;
+        const scene = preparedModel || gltf?.scene;
 
         let nextGhost: THREE.Object3D = this.buildFallbackGhostMesh();
         if (scene) {
             const clone = scene.clone(true);
             clone.name = 'race-ghost-car';
 
-            const box = new THREE.Box3().setFromObject(clone);
-            const size = new THREE.Vector3();
-            box.getSize(size);
-            const rawLength = Math.max(size.x, size.y, size.z);
-            if (rawLength > 0 && option?.lengthMeters) {
-                clone.scale.setScalar(option.lengthMeters / rawLength);
+            if (!preparedModel) {
+                const box = new THREE.Box3().setFromObject(clone);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const rawLength = Math.max(size.x, size.y, size.z);
+                if (rawLength > 0 && option?.lengthMeters) {
+                    clone.scale.setScalar(option.lengthMeters / rawLength);
+                }
             }
 
             clone.traverse((child) => {
