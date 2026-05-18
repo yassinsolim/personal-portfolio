@@ -11,9 +11,12 @@ type DrivingInputState = {
     handbrake: number;
 };
 
+type TouchControlName = 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake';
+
 export default class DrivingInput {
     enabled: boolean;
     keyState: Record<string, boolean>;
+    touchState: Record<TouchControlName, boolean>;
     smoothState: DrivingInputState;
     keyDownHandler: (event: KeyboardEvent) => void;
     keyUpHandler: (event: KeyboardEvent) => void;
@@ -24,6 +27,13 @@ export default class DrivingInput {
     constructor() {
         this.enabled = false;
         this.keyState = {};
+        this.touchState = {
+            throttle: false,
+            brake: false,
+            steerLeft: false,
+            steerRight: false,
+            handbrake: false,
+        };
         this.smoothState = {
             throttle: 0,
             brake: 0,
@@ -79,6 +89,22 @@ export default class DrivingInput {
         UIEventBus.on('race:inputReset', () => {
             this.reset();
         });
+
+        UIEventBus.on(
+            'race:touchControl',
+            (
+                payload:
+                    | {
+                          control?: TouchControlName;
+                          active?: boolean;
+                      }
+                    | undefined
+            ) => {
+                if (!payload?.control) return;
+                if (!(payload.control in this.touchState)) return;
+                this.touchState[payload.control] = Boolean(payload.active);
+            }
+        );
     }
 
     shouldIgnoreInputTarget(target: EventTarget | null) {
@@ -96,6 +122,11 @@ export default class DrivingInput {
 
     reset() {
         this.keyState = {};
+        this.touchState.throttle = false;
+        this.touchState.brake = false;
+        this.touchState.steerLeft = false;
+        this.touchState.steerRight = false;
+        this.touchState.handbrake = false;
         this.smoothState.throttle = 0;
         this.smoothState.brake = 0;
         this.smoothState.steer = 0;
@@ -104,12 +135,20 @@ export default class DrivingInput {
 
     update(deltaSeconds: number) {
         const smoothing = Math.min(1, Math.max(0.08, deltaSeconds * 8));
-        const targetThrottle = this.keyState.KeyW ? 1 : 0;
-        const targetBrake = this.keyState.KeyS ? 1 : 0;
-        const steerFromKeyD = this.keyState.KeyD ? STEER_VALUE_FROM_KEY_D : 0;
-        const steerFromKeyA = this.keyState.KeyA ? STEER_VALUE_FROM_KEY_A : 0;
+        const targetThrottle =
+            this.keyState.KeyW || this.touchState.throttle ? 1 : 0;
+        const targetBrake = this.keyState.KeyS || this.touchState.brake ? 1 : 0;
+        const steerFromKeyD =
+            this.keyState.KeyD || this.touchState.steerLeft
+                ? STEER_VALUE_FROM_KEY_D
+                : 0;
+        const steerFromKeyA =
+            this.keyState.KeyA || this.touchState.steerRight
+                ? STEER_VALUE_FROM_KEY_A
+                : 0;
         const steerTarget = steerFromKeyD + steerFromKeyA;
-        const handbrakeTarget = this.keyState.Space ? 1 : 0;
+        const handbrakeTarget =
+            this.keyState.Space || this.touchState.handbrake ? 1 : 0;
 
         this.smoothState.throttle +=
             (targetThrottle - this.smoothState.throttle) * smoothing;

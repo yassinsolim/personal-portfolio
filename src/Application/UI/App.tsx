@@ -25,6 +25,19 @@ type HudState = {
     ghostBestLapMs?: number;
 };
 
+type DebugStats = {
+    fps?: number;
+    frameMs?: number;
+    physicsMs?: number;
+    speedKph?: number;
+    grounded?: boolean;
+    wheelContactCount?: number;
+    suspensionCompression?: number[];
+    roadNormal?: [number, number, number];
+};
+
+type TouchControlName = 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake';
+
 type LeaderboardEntry = {
     id: string;
     name: string;
@@ -77,6 +90,50 @@ const getStoredMuted = () => {
     } catch {
         return false;
     }
+};
+
+const isTouchRaceDevice = () =>
+    Boolean(
+        window.matchMedia?.('(pointer: coarse)').matches ||
+            window.matchMedia?.('(max-width: 820px)').matches ||
+            window.matchMedia?.('(max-height: 520px)').matches
+    );
+
+const setTouchControl = (control: TouchControlName, active: boolean) => {
+    eventBus.dispatch('race:touchControl', { control, active });
+};
+
+const RaceTouchButton = ({
+    control,
+    label,
+    className = '',
+}: {
+    control: TouchControlName;
+    label: string;
+    className?: string;
+}) => {
+    const activate = (event: React.PointerEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        setTouchControl(control, true);
+    };
+    const deactivate = (event: React.PointerEvent<HTMLButtonElement>) => {
+        event.preventDefault();
+        setTouchControl(control, false);
+    };
+
+    return (
+        <button
+            type="button"
+            className={`race-touch-button ${className}`}
+            onPointerDown={activate}
+            onPointerUp={deactivate}
+            onPointerCancel={deactivate}
+            onPointerLeave={deactivate}
+        >
+            {label}
+        </button>
+    );
 };
 
 const getStoredMultiplayerName = () => {
@@ -148,6 +205,12 @@ const App = () => {
         defaultMultiplayerState
     );
     const [lobbyCodeCopyState, setLobbyCodeCopyState] = useState('');
+    const [touchRaceDevice, setTouchRaceDevice] = useState(() =>
+        isTouchRaceDevice()
+    );
+    const [rotateHint, setRotateHint] = useState(false);
+    const [graphicsContextLost, setGraphicsContextLost] = useState(false);
+    const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -211,10 +274,60 @@ const App = () => {
             }
         );
 
+        eventBus.on('graphics:contextLost', () => {
+            setGraphicsContextLost(true);
+        });
+
+        eventBus.on('graphics:contextRestored', () => {
+            setGraphicsContextLost(false);
+        });
+
+        eventBus.on('race:debugStats', (stats: DebugStats) => {
+            setDebugStats(stats);
+        });
+
         eventBus.dispatch('race:requestLeaderboard', {});
         eventBus.dispatch('race:multiplayerSetName', { playerName });
         eventBus.dispatch('race:multiplayerRequestState', {});
     }, []);
+
+    useEffect(() => {
+        const mediaQueries = [
+            window.matchMedia?.('(pointer: coarse)'),
+            window.matchMedia?.('(max-width: 820px)'),
+            window.matchMedia?.('(max-height: 520px)'),
+        ].filter(Boolean) as MediaQueryList[];
+        const updateTouchDevice = () => setTouchRaceDevice(isTouchRaceDevice());
+        mediaQueries.forEach((query) => {
+            query.addEventListener?.('change', updateTouchDevice);
+        });
+        window.addEventListener('resize', updateTouchDevice);
+        return () => {
+            mediaQueries.forEach((query) => {
+                query.removeEventListener?.('change', updateTouchDevice);
+            });
+            window.removeEventListener('resize', updateTouchDevice);
+        };
+    }, []);
+
+    useEffect(() => {
+        document.body.classList.toggle('race-mode-active', raceModeActive);
+        document.body.classList.toggle(
+            'race-mode-touch',
+            raceModeActive && touchRaceDevice
+        );
+        return () => {
+            document.body.classList.remove('race-mode-active');
+            document.body.classList.remove('race-mode-touch');
+        };
+    }, [raceModeActive, touchRaceDevice]);
+
+    useEffect(() => {
+        if (!raceModeActive) {
+            setRotateHint(false);
+            eventBus.dispatch('race:inputReset', { source: 'raceModeInactive' });
+        }
+    }, [raceModeActive]);
 
     useEffect(() => {
         eventBus.dispatch('race:qualityChange', { mode: qualityMode });
@@ -276,6 +389,32 @@ const App = () => {
         eventBus.dispatch('freeCamToggle', nextState);
     };
 
+    const requestMobileRacePresentation = async () => {
+        if (!touchRaceDevice) return;
+        setRotateHint(true);
+        try {
+            const root = document.documentElement as HTMLElement & {
+                requestFullscreen?: () => Promise<void>;
+            };
+            if (root.requestFullscreen && !document.fullscreenElement) {
+                await root.requestFullscreen();
+            }
+        } catch {
+            // Fullscreen is best-effort on mobile browsers.
+        }
+
+        try {
+            const orientation = (screen as Screen & {
+                orientation?: {
+                    lock?: (orientation: string) => Promise<void>;
+                };
+            }).orientation;
+            await orientation?.lock?.('landscape');
+        } catch {
+            // iOS Safari and some embedded browsers do not expose orientation lock.
+        }
+    };
+
     const handleRaceToggle = () => {
         if (raceModeActive) {
             eventBus.dispatch('raceMode:exit', {
@@ -285,12 +424,14 @@ const App = () => {
         }
 
         if (multiplayer.mode === 'lobby' && multiplayer.connected) {
+            void requestMobileRacePresentation();
             eventBus.dispatch('raceMode:start', {
                 fromUI: true,
             });
             return;
         }
 
+        void requestMobileRacePresentation();
         eventBus.dispatch('race:multiplayerPlaySolo', {
             playerName,
             startRace: true,
@@ -304,6 +445,10 @@ const App = () => {
     const handleResumeRace = () => {
         eventBus.dispatch('race:setPaused', { paused: false });
         eventBus.dispatch('race:requestPointerLock', { fromUI: true });
+    };
+
+    const handleResetVehicle = () => {
+        eventBus.dispatch('race:resetVehicle', {});
     };
 
     const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,6 +479,7 @@ const App = () => {
     };
 
     const handlePlaySolo = () => {
+        void requestMobileRacePresentation();
         eventBus.dispatch('race:multiplayerPlaySolo', {
             playerName,
             startRace: true,
@@ -341,6 +487,7 @@ const App = () => {
     };
 
     const handleCreateLobby = () => {
+        void requestMobileRacePresentation();
         eventBus.dispatch('race:multiplayerCreateLobby', {
             playerName,
             startRace: true,
@@ -356,6 +503,7 @@ const App = () => {
         } catch {
             // no-op
         }
+        void requestMobileRacePresentation();
         eventBus.dispatch('race:multiplayerJoinLobby', {
             playerName,
             lobbyCode,
@@ -380,6 +528,7 @@ const App = () => {
         const code = sanitizeLobbyCode(multiplayer.lobbyCode || lobbyCodeInput);
         if (!code) return;
         setLobbyCodeInput(code);
+        void requestMobileRacePresentation();
         eventBus.dispatch('race:multiplayerJoinLobby', {
             playerName,
             lobbyCode: code,
@@ -575,7 +724,7 @@ const App = () => {
                             </button>
                         </div>
                     )}
-                    {raceModeActive && !racePaused && !pointerLocked && (
+                    {raceModeActive && !racePaused && !pointerLocked && !touchRaceDevice && (
                         <div className="race-lock-hint">
                             Click the scene to lock mouse. Press Esc to pause.
                         </div>
@@ -671,6 +820,65 @@ const App = () => {
                             )}
                         </div>
                     )}
+                </div>
+            )}
+            {raceModeActive && touchRaceDevice && rotateHint && (
+                <div className="race-rotate-hint" data-prevent-click>
+                    Rotate your phone for the best racing experience.
+                </div>
+            )}
+            {raceModeActive && touchRaceDevice && !racePaused && (
+                <div className="race-touch-controls" data-prevent-click>
+                    <div className="race-touch-cluster race-touch-steer">
+                        <RaceTouchButton
+                            control="steerRight"
+                            label="A"
+                            className="race-touch-secondary"
+                        />
+                        <RaceTouchButton
+                            control="steerLeft"
+                            label="D"
+                            className="race-touch-secondary"
+                        />
+                    </div>
+                    <div className="race-touch-cluster race-touch-actions">
+                        <button
+                            type="button"
+                            className="race-touch-button race-touch-reset"
+                            onClick={handleResetVehicle}
+                        >
+                            Reset
+                        </button>
+                        <RaceTouchButton
+                            control="brake"
+                            label="Brake"
+                            className="race-touch-secondary"
+                        />
+                        <RaceTouchButton control="throttle" label="Gas" />
+                    </div>
+                </div>
+            )}
+            {graphicsContextLost && (
+                <div className="graphics-context-lost" data-prevent-click>
+                    Graphics context lost. Reload game.
+                </div>
+            )}
+            {debugStats && (
+                <div className="race-debug-panel" data-prevent-click>
+                    <div>FPS {debugStats.fps ?? '--'}</div>
+                    <div>Frame {debugStats.frameMs ?? '--'}ms</div>
+                    <div>Physics {debugStats.physicsMs ?? '--'}ms</div>
+                    <div>Speed {debugStats.speedKph ?? 0} km/h</div>
+                    <div>
+                        Ground {debugStats.grounded ? 'yes' : 'no'} / wheels{' '}
+                        {debugStats.wheelContactCount ?? 0}
+                    </div>
+                    <div>
+                        Susp{' '}
+                        {(debugStats.suspensionCompression || [])
+                            .map((value) => value.toFixed(2))
+                            .join(' ')}
+                    </div>
                 </div>
             )}
             {raceModeActive && racePaused && (

@@ -266,6 +266,16 @@ br {
     color: rgba(255, 255, 255, 0.7);
 }
 
+body.race-mode-touch {
+    overscroll-behavior: none;
+}
+
+body.race-mode-touch #webgl,
+body.race-mode-touch #ui-app {
+    touch-action: none;
+    user-select: none;
+}
+
 .lobby-code-banner {
     position: fixed;
     top: 18px;
@@ -535,6 +545,100 @@ br {
     color: rgba(255, 255, 255, 0.84);
 }
 
+.race-touch-controls {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 35;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 0
+        max(14px, env(safe-area-inset-right))
+        max(12px, env(safe-area-inset-bottom))
+        max(14px, env(safe-area-inset-left));
+    pointer-events: none;
+    touch-action: none;
+}
+
+.race-touch-cluster {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: auto;
+}
+
+.race-touch-button {
+    min-width: clamp(54px, 13vw, 86px);
+    min-height: clamp(48px, 12vw, 72px);
+    border: 1px solid rgba(255, 255, 255, 0.36);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.56);
+    color: rgba(255, 255, 255, 0.94);
+    font-family: monospace;
+    font-size: clamp(12px, 2.4vw, 16px);
+    font-weight: 700;
+    backdrop-filter: blur(5px);
+    touch-action: none;
+    user-select: none;
+}
+
+.race-touch-button:active {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.race-touch-secondary {
+    min-width: clamp(48px, 11vw, 70px);
+}
+
+.race-touch-reset {
+    min-width: clamp(58px, 12vw, 80px);
+    min-height: clamp(40px, 10vw, 58px);
+    font-size: clamp(11px, 2.1vw, 14px);
+}
+
+.race-rotate-hint,
+.graphics-context-lost,
+.race-debug-panel {
+    position: fixed;
+    z-index: 60;
+    font-family: monospace;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(0, 0, 0, 0.68);
+    color: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(5px);
+    pointer-events: none;
+}
+
+.race-rotate-hint {
+    left: 50%;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(360px, calc(100vw - 32px));
+    padding: 8px 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.graphics-context-lost {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 12px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.race-debug-panel {
+    left: 12px;
+    bottom: 112px;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
 .lap-name-overlay {
     position: fixed;
     inset: 0;
@@ -626,5 +730,135 @@ br {
     .loading-screen-footer {
         padding: 16px;
         padding-bottom: 32px;
+    }
+
+    .look-hint {
+        top: max(10px, env(safe-area-inset-top));
+        left: max(10px, env(safe-area-inset-left));
+        right: auto;
+        width: min(280px, calc(100vw - 20px));
+        max-height: min(48dvh, 320px);
+        overflow: auto;
+        padding: 6px 8px;
+        font-size: 11px;
+        box-sizing: border-box;
+    }
+
+    .look-hint .multiplayer-menu {
+        gap: 5px;
+    }
+
+    .look-hint .multiplayer-row {
+        gap: 5px;
+    }
+
+    .look-hint .multiplayer-row label {
+        min-width: 58px;
+        font-size: 10px;
+    }
+
+    .look-hint .multiplayer-row input,
+    .look-hint .car-switcher select,
+    .look-hint .view-toggle button,
+    .look-hint .race-toggle button,
+    .look-hint .race-pause-toggle button,
+    .look-hint .multiplayer-row button,
+    .look-hint .multiplayer-actions button,
+    .look-hint .multiplayer-status button,
+    .look-hint .multiplayer-secondary-actions button {
+        font-size: 11px;
+        padding: 3px 6px;
+    }
+
+    .race-hud {
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+        gap: 6px;
+        max-width: min(260px, calc(100vw - 16px));
+    }
+
+    .race-hud-main,
+    .race-hud-board {
+        min-width: 0;
+        padding: 6px 8px;
+        border-radius: 6px;
+    }
+
+    .race-hud-speed {
+        font-size: 18px;
+    }
+
+    .race-hud-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 3px 8px;
+        font-size: 10px;
+    }
+
+    .race-hud-board {
+        display: none;
+    }
+
+    .race-menu-panel {
+        max-height: calc(100dvh - 24px);
+        overflow: auto;
+        padding: 12px;
+    }
+
+    .race-menu-row {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+    .look-hint {
+        max-width: 245px;
+        max-height: calc(100dvh - 18px);
+    }
+
+    body.race-mode-active .look-hint {
+        width: auto;
+        max-width: 190px;
+    }
+
+    body.race-mode-active .look-hint > div:not(.race-toggle):not(.race-pause-toggle) {
+        display: none;
+    }
+
+    .race-hud {
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+    }
+
+    .race-hud-main {
+        min-width: 170px;
+    }
+
+    .race-hud-speed {
+        font-size: 17px;
+    }
+
+    .race-hud-meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        font-size: 9px;
+    }
+
+    .race-touch-controls {
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
+    }
+
+    .race-rotate-hint {
+        display: none;
+    }
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+    .race-touch-controls {
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+    }
+
+    .race-touch-button {
+        min-width: 54px;
+        min-height: 46px;
     }
 }
