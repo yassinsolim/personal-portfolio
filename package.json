@@ -6,6 +6,9 @@
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
         "export:glb": "set EXPORT_SCENE=1&& npm run dev",
+        "security:check": "node scripts/security-check.mjs https://yassin.app",
+        "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
+        "game:audit": "node scripts/game-audit.mjs",
         "validate:race": "node scripts/run-regression-validation.js"
     },
     "dependencies": {
@@ -19,7 +22,7 @@
         "bezier-easing": "^2.1.0",
         "camera-controls": "^1.34.2",
         "clean-webpack-plugin": "^4.0.0",
-        "copy-webpack-plugin": "^10.2.4",
+        "copy-webpack-plugin": "^14.0.0",
         "css-loader": "^6.5.1",
         "file-loader": "^6.2.0",
         "framer-motion": "^6.3.1",
@@ -40,9 +43,9 @@
         "three": "^0.137.5",
         "ts-loader": "^9.2.8",
         "typescript": "^4.6.2",
-        "webpack": "^5.68.0",
-        "webpack-cli": "^4.9.2",
-        "webpack-dev-server": "^4.15.2",
+        "webpack": "^5.106.2",
+        "webpack-cli": "^7.0.2",
+        "webpack-dev-server": "^5.2.3",
         "webpack-merge": "^5.8.0"
     },
     "devDependencies": {

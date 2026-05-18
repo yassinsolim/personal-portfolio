@@ -7,6 +7,14 @@ const portFinderSync = require('portfinder-sync')
 
 const shouldExportScene = process.env.EXPORT_SCENE === '1'
 const MAX_EXPORT_BYTES = 100 * 1024 * 1024
+const devSecurityHeaders = {
+    'Strict-Transport-Security': 'max-age=63072000; includeSubDomains; preload',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws://127.0.0.1:8080 ws://localhost:8080; frame-src https://os.yassin.app http://localhost:3000; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'"
+}
 
 const infoColor = (_message) =>
 {
@@ -49,8 +57,9 @@ module.exports = merge(
             host: '127.0.0.1',
             port: portFinderSync.getPort(8080),
             open: shouldExportScene ? '/?export=1&save=1' : true,
-            https: false,
+            server: 'http',
             allowedHosts: ['127.0.0.1', 'localhost'],
+            headers: devSecurityHeaders,
             hot: false,
             watchFiles: ['src/**', 'static/**'],
             static:
@@ -152,13 +161,13 @@ module.exports = merge(
 
                 return middlewares
             },
-            onAfterSetupMiddleware: function(devServer)
+            onListening: function(devServer)
             {
-                const port = devServer.options.port
-                const https = devServer.options.https ? 's' : ''
+                const address = devServer.server.address()
+                const port = address && typeof address === 'object' ? address.port : devServer.options.port
                 const localIp = getLocalIpAddress()
-                const domain1 = `http${https}://${localIp}:${port}`
-                const domain2 = `http${https}://localhost:${port}`
+                const domain1 = `http://${localIp}:${port}`
+                const domain2 = `http://localhost:${port}`
                 
                 console.log(`Project running at:\n  - ${infoColor(domain1)}\n  - ${infoColor(domain2)}`)
             }

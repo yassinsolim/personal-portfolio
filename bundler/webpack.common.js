@@ -6,8 +6,12 @@ const path = require('path');
 module.exports = {
     entry: path.resolve(__dirname, '../src/script.ts'),
     output: {
+        environment: {
+            globalThis: true,
+        },
         hashFunction: 'xxhash64',
         filename: 'bundle.[contenthash].js',
+        globalObject: 'self',
         path: path.resolve(__dirname, '../build'),
     },
     plugins: [

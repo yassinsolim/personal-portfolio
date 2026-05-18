@@ -26,18 +26,35 @@ async function ensureRaceStarted(page) {
     });
 
     await page.waitForFunction(
+        () =>
+            Array.from(document.querySelectorAll('button')).some((button) =>
+                /^(Start Nordschleife race|Play Solo)$/i.test(
+                    (button.innerText || button.textContent || '').trim()
+                )
+            ),
+        null,
+        {
+            timeout: 180000,
+        }
+    );
+    await page.waitForTimeout(1200);
+    await page.evaluate(() => {
+        const startButton = Array.from(document.querySelectorAll('button')).find(
+            (button) =>
+                /^(Start Nordschleife race|Play Solo)$/i.test(
+                    (button.innerText || button.textContent || '').trim()
+                )
+        );
+        startButton?.click();
+    });
+
+    await page.waitForFunction(
         () => Boolean(window.Application?.world?.raceManager),
         null,
         {
             timeout: 180000,
         }
     );
-
-    await page.waitForSelector('text=Start Nordschleife race', {
-        timeout: 180000,
-    });
-    await page.waitForTimeout(1200);
-    await page.click('text=Start Nordschleife race');
     await page.waitForTimeout(1200);
     await page.mouse.click(960, 540);
 }
@@ -400,6 +417,7 @@ async function collectLapAndLeaderboardEvidence(page) {
         rm.localLeaderboard.entries = [];
         rm.localLeaderboard.write();
         rm.pendingLapTimeMs = 0;
+        rm.multiplayer.setLocalPlayerName('RegressionBot');
         rm.setPaused(false);
     });
 
@@ -437,26 +455,20 @@ async function collectLapAndLeaderboardEvidence(page) {
         };
     });
 
-    await page.waitForSelector('.lap-name-overlay', { timeout: 15000 });
-    await page.fill('.lap-name-panel input', 'RegressionBot');
-    await page.click('.lap-name-panel button:has-text("Save Lap")');
-    await page.waitForSelector('.lap-name-overlay', {
-        state: 'hidden',
-        timeout: 15000,
-    });
-
     await page.waitForFunction(
         () => {
             const capture = window.__raceValidationCapture;
             return (
                 capture &&
+                capture.lapSubmitted &&
+                capture.lapSubmitted.length > 0 &&
                 capture.leaderboardUpdates &&
                 capture.leaderboardUpdates.length > 0 &&
                 document.querySelectorAll('.race-hud-board ol li').length > 0
             );
         },
         null,
-        { timeout: 15000 }
+        { timeout: 30000 }
     );
 
     await page.screenshot({
