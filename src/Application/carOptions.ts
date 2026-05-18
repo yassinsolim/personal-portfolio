@@ -59,7 +59,7 @@ export const carOptions: CarOption[] = [
         lengthMeters: 4.75,
         race: {
             visualForwardAxis: 'positiveZ',
-            groundOffsetMeters: -0.05,
+            groundOffsetMeters: -0.08,
             wheelNodeMap: {
                 frontLeft: ['rim_wheel_0'],
                 frontRight: ['rim_wheel_d_0'],
@@ -403,7 +403,7 @@ export const carOptions: CarOption[] = [
         race: {
             visualForwardAxis: 'negativeZ',
             visualYawOffsetDeg: 0,
-            groundOffsetMeters: 0.4,
+            groundOffsetMeters: 0,
             cameraFollowDistanceOffsetMeters: 3.8,
             startForwardOffsetMeters: 0,
             wheelSpinDirectionMultiplier: -1,

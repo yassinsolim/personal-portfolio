@@ -25,6 +25,10 @@ type MultiplayerActionPayload = {
     startRace?: boolean;
 };
 
+const MAX_VEHICLE_SUBSTEP_SECONDS = 1 / 60;
+const MAX_FRAME_DELTA_SECONDS = 0.05;
+const MAX_PHYSICS_STEPS_PER_FRAME = 4;
+
 type RemoteLinkedWheelVisual = {
     object: THREE.Object3D;
     spinCenter: THREE.Vector3;
@@ -104,6 +108,10 @@ export default class RaceManager {
     defaultSceneFog: THREE.FogBase | null;
     topLeaderboardGhostLapId: string | null;
     topLeaderboardGhostRequestSerial: number;
+    physicsAccumulator: number;
+    lastPhysicsStepTimeMs: number;
+    debugGameEnabled: boolean;
+    ghostPlaybackEnabled: boolean;
 
     constructor() {
         this.application = new Application();
@@ -164,6 +172,14 @@ export default class RaceManager {
         this.defaultSceneFog = this.scene.fog;
         this.topLeaderboardGhostLapId = null;
         this.topLeaderboardGhostRequestSerial = 0;
+        this.physicsAccumulator = 0;
+        this.lastPhysicsStepTimeMs = 0;
+        this.debugGameEnabled = new URLSearchParams(window.location.search).has(
+            'debugGame'
+        );
+        this.ghostPlaybackEnabled = new URLSearchParams(window.location.search).has(
+            'ghostReplay'
+        );
         this.multiplayer.onStateChange((state) => {
             if (state.mode === 'lobby' && state.connected) {
                 state.players.forEach((player) => {
@@ -173,7 +189,6 @@ export default class RaceManager {
             }
             UIEventBus.dispatch('race:multiplayerState', state);
         });
-        void this.multiplayer.initialize();
         this.leaderboardService.onLeaderboardChanged(() => {
             void this.refreshLeaderboard();
         });
@@ -192,6 +207,13 @@ export default class RaceManager {
         UIEventBus.on('race:pauseRequest', () => {
             if (!this.active) return;
             this.setPaused(true);
+        });
+
+        UIEventBus.on('race:resetVehicle', () => {
+            if (!this.active) return;
+            this.vehicle.resetToStart();
+            this.physicsAccumulator = 0;
+            UIEventBus.dispatch('race:inputReset', { source: 'resetVehicle' });
         });
 
         UIEventBus.on(
@@ -234,6 +256,7 @@ export default class RaceManager {
         UIEventBus.on(
             'race:multiplayerCreateLobby',
             async (payload: MultiplayerActionPayload | undefined) => {
+                await this.multiplayer.initialize();
                 const playerName = payload?.playerName || 'Driver';
                 const startRace = Boolean(payload?.startRace);
                 const telemetry = this.vehicle.getTelemetry();
@@ -250,6 +273,7 @@ export default class RaceManager {
         UIEventBus.on(
             'race:multiplayerJoinLobby',
             async (payload: MultiplayerActionPayload | undefined) => {
+                await this.multiplayer.initialize();
                 const playerName = payload?.playerName || 'Driver';
                 const lobbyCode = payload?.lobbyCode || '';
                 const startRace = Boolean(payload?.startRace);
@@ -326,6 +350,8 @@ export default class RaceManager {
         this.scene.fog = new THREE.Fog(0x0b0f14, 380, 8800);
         this.raceRoot.visible = true;
         this.vehicle.resetToStart();
+        this.physicsAccumulator = 0;
+        this.lastPhysicsStepTimeMs = 0;
         this.vehicle.setActive(true);
         this.chaseCamera.setActive(true);
         this.chaseCamera.setPaused(false);
@@ -338,7 +364,7 @@ export default class RaceManager {
         this.lapProgress = lapStart.progress;
         this.pendingLapTimeMs = 0;
         this.lapSubmitInFlight = false;
-        this.ghostReplay.setActive(true);
+        this.ghostReplay.setActive(this.ghostPlaybackEnabled);
         this.ghostReplay.startLap(nowMs);
         this.remoteSmoke.setActive(true);
 
@@ -362,6 +388,7 @@ export default class RaceManager {
         this.scene.background = this.defaultSceneBackground;
         this.scene.fog = this.defaultSceneFog;
         this.vehicle.setActive(false);
+        this.physicsAccumulator = 0;
         this.chaseCamera.setPaused(false);
         this.chaseCamera.setActive(false);
         this.pendingLapTimeMs = 0;
@@ -430,6 +457,7 @@ export default class RaceManager {
         this.paused = paused;
         this.vehicle.setActive(!paused);
         this.chaseCamera.setPaused(paused);
+        this.physicsAccumulator = 0;
         this.engineAudio.setPaused(paused);
         if (paused) {
             UIEventBus.dispatch('race:inputReset', {
@@ -450,6 +478,11 @@ export default class RaceManager {
 
     async syncTopLeaderboardGhost(entries: LeaderboardEntry[]) {
         const topEntry = entries[0];
+        if (!this.ghostPlaybackEnabled) {
+            this.topLeaderboardGhostLapId = null;
+            this.ghostReplay.setExternalReplay(null);
+            return;
+        }
         if (!topEntry) {
             this.topLeaderboardGhostLapId = null;
             this.ghostReplay.setExternalReplay(null);
@@ -910,14 +943,36 @@ export default class RaceManager {
         this.multiplayer.update();
         if (!this.active) {
             this.clearRemoteVehicles();
+            this.physicsAccumulator = 0;
             return;
         }
 
         const nowMs = this.application.time.elapsed;
-        const delta = this.application.time.delta / 1000;
+        const delta = Math.min(
+            MAX_FRAME_DELTA_SECONDS,
+            Math.max(0, this.application.time.delta / 1000)
+        );
         this.updateRemoteVehicles(delta);
         if (!this.paused) {
-            this.vehicle.update(delta);
+            let physicsSteps = 0;
+            let remainingVehicleDelta = delta;
+            const physicsStart =
+                typeof performance !== 'undefined' ? performance.now() : Date.now();
+            while (
+                remainingVehicleDelta > 0 &&
+                physicsSteps < MAX_PHYSICS_STEPS_PER_FRAME
+            ) {
+                const step = Math.min(
+                    MAX_VEHICLE_SUBSTEP_SECONDS,
+                    remainingVehicleDelta
+                );
+                this.vehicle.update(step);
+                remainingVehicleDelta -= step;
+                physicsSteps += 1;
+            }
+            const physicsEnd =
+                typeof performance !== 'undefined' ? performance.now() : Date.now();
+            this.lastPhysicsStepTimeMs = physicsEnd - physicsStart;
 
             const telemetry = this.vehicle.getTelemetry();
             const lapWasRunning = this.lapRunning;
@@ -1005,6 +1060,20 @@ export default class RaceManager {
         if (nowMs - this.lastHudDispatchMs > 75) {
             this.lastHudDispatchMs = nowMs;
             this.dispatchHud();
+        }
+
+        if (this.debugGameEnabled && nowMs % 500 < this.application.time.delta) {
+            const telemetry = this.vehicle.getTelemetry();
+            UIEventBus.dispatch('race:debugStats', {
+                fps: Math.round(1000 / Math.max(1, this.application.time.delta)),
+                frameMs: Math.round(this.application.time.delta * 10) / 10,
+                physicsMs: Math.round(this.lastPhysicsStepTimeMs * 100) / 100,
+                speedKph: Math.round(telemetry.speedKph),
+                grounded: telemetry.grounded,
+                wheelContactCount: telemetry.wheelContactCount,
+                suspensionCompression: telemetry.suspensionCompression,
+                roadNormal: telemetry.surfaceNormal,
+            });
         }
     }
 }

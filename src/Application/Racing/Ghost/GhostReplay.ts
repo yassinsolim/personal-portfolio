@@ -306,6 +306,9 @@ export default class GhostReplay {
     }
 
     setGhostCar(carId: string) {
+        if (!this.active && !this.externalReplay) {
+            return;
+        }
         const previousOverrides = this.ghostMaterialOverrides;
         this.ghostMaterialOverrides = [];
 

@@ -11,7 +11,7 @@ export default class Time extends EventEmitter {
         super();
 
         // Setup
-        this.start = Date.now();
+        this.start = performance.now();
         this.current = this.start;
         this.elapsed = 0;
         this.delta = 16;
@@ -21,13 +21,22 @@ export default class Time extends EventEmitter {
         });
 
         UIEventBus.on('loadingScreenDone', () => {
-            this.start = Date.now();
+            this.start = performance.now();
+            this.current = this.start;
+            this.delta = 16;
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                this.current = performance.now();
+                this.delta = 16;
+            }
         });
     }
 
     tick() {
-        const currentTime = Date.now();
-        this.delta = currentTime - this.current;
+        const currentTime = performance.now();
+        this.delta = Math.min(50, Math.max(0, currentTime - this.current));
         this.current = currentTime;
         this.elapsed = this.current - this.start;
 

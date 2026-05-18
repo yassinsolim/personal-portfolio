@@ -24,6 +24,13 @@ export default class Renderer {
     cssInstance: CSS3DRenderer;
     raiseExposure: boolean;
     qualityMode: 'quality' | 'performance';
+    lowPowerDevice: boolean;
+    mobileDevice: boolean;
+    contextLost: boolean;
+    contextLostOverlay: HTMLDivElement | null;
+    frameSamples: number[];
+    lastAdaptiveQualityMs: number;
+    debugEnabled: boolean;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -37,6 +44,18 @@ export default class Renderer {
         this.overlayScene = this.application.overlayScene;
         this.camera = this.application.camera;
         this.qualityMode = 'quality';
+        this.mobileDevice = this.detectMobileDevice();
+        this.lowPowerDevice = this.detectLowPowerDevice();
+        this.contextLost = false;
+        this.contextLostOverlay = null;
+        this.frameSamples = [];
+        this.lastAdaptiveQualityMs = 0;
+        this.debugEnabled = new URLSearchParams(window.location.search).has(
+            'debugGame'
+        );
+        if (this.lowPowerDevice) {
+            this.qualityMode = 'performance';
+        }
 
         this.setInstance();
         this.setupQualityListeners();
@@ -44,9 +63,10 @@ export default class Renderer {
 
     setInstance() {
         this.instance = new THREE.WebGLRenderer({
-            antialias: true,
+            antialias: !this.lowPowerDevice && !this.mobileDevice,
             alpha: true,
             powerPreference: 'high-performance',
+            preserveDrawingBuffer: false,
         });
         // Settings
         // this.instance.physicallyCorrectLights = true;
@@ -65,9 +85,17 @@ export default class Renderer {
         this.instance.domElement.style.top = '0px';
 
         document.querySelector('#webgl')?.appendChild(this.instance.domElement);
+        this.setupContextLossHandlers(this.instance.domElement);
 
-        this.overlayInstance = new THREE.WebGLRenderer();
+        this.overlayInstance = new THREE.WebGLRenderer({
+            antialias: false,
+            alpha: true,
+            preserveDrawingBuffer: false,
+        });
         this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
+        this.overlayInstance.setPixelRatio(
+            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
+        );
         this.overlayInstance.domElement.style.position = 'absolute';
         this.overlayInstance.domElement.style.top = '0px';
         this.overlayInstance.domElement.style.mixBlendMode = 'soft-light';
@@ -124,13 +152,90 @@ export default class Renderer {
         );
     }
 
+    detectMobileDevice() {
+        return (
+            window.matchMedia?.('(pointer: coarse)').matches ||
+            window.matchMedia?.('(max-width: 820px)').matches ||
+            window.matchMedia?.('(max-height: 520px)').matches
+        );
+    }
+
+    detectLowPowerDevice() {
+        const navigatorWithHints = navigator as Navigator & {
+            deviceMemory?: number;
+        };
+        const cores = navigator.hardwareConcurrency || 4;
+        const memory = navigatorWithHints.deviceMemory || 4;
+        return this.detectMobileDevice() || cores <= 4 || memory <= 4;
+    }
+
     getPixelRatioCap() {
-        return this.qualityMode === 'performance' ? 1 : 2;
+        if (this.qualityMode === 'performance') return 1;
+        if (this.mobileDevice) return 1.25;
+        return 1.5;
     }
 
     applyQualityMode() {
         this.overlayInstance.domElement.style.opacity =
             this.qualityMode === 'performance' ? '0.06' : '0.12';
+    }
+
+    setupContextLossHandlers(canvas: HTMLCanvasElement) {
+        canvas.addEventListener('webglcontextlost', (event) => {
+            event.preventDefault();
+            this.contextLost = true;
+            this.showContextLostOverlay();
+            UIEventBus.dispatch('graphics:contextLost', {});
+        });
+
+        canvas.addEventListener('webglcontextrestored', () => {
+            this.contextLost = false;
+            this.hideContextLostOverlay();
+            this.resize();
+            UIEventBus.dispatch('graphics:contextRestored', {});
+        });
+    }
+
+    showContextLostOverlay() {
+        if (this.contextLostOverlay) return;
+        const overlay = document.createElement('div');
+        overlay.className = 'graphics-context-lost';
+        overlay.textContent = 'Graphics context lost. Reload game.';
+        overlay.setAttribute('role', 'alert');
+        document.body.appendChild(overlay);
+        this.contextLostOverlay = overlay;
+    }
+
+    hideContextLostOverlay() {
+        this.contextLostOverlay?.remove();
+        this.contextLostOverlay = null;
+    }
+
+    updateAdaptiveQuality() {
+        if (this.qualityMode === 'performance') return;
+        if (this.time.elapsed < 6000) return;
+        if (this.time.elapsed - this.lastAdaptiveQualityMs < 2500) return;
+
+        const frameMs = Math.max(1, this.time.delta);
+        this.frameSamples.push(frameMs);
+        if (this.frameSamples.length > 90) {
+            this.frameSamples.shift();
+        }
+        if (this.frameSamples.length < 60) return;
+
+        const averageFrameMs =
+            this.frameSamples.reduce((sum, value) => sum + value, 0) /
+            this.frameSamples.length;
+        const averageFps = 1000 / averageFrameMs;
+        if (averageFps >= 42) return;
+
+        this.lastAdaptiveQualityMs = this.time.elapsed;
+        this.qualityMode = 'performance';
+        this.applyQualityMode();
+        this.resize();
+        UIEventBus.dispatch('race:qualityAutoDowngrade', {
+            averageFps,
+        });
     }
 
     resize() {
@@ -148,6 +253,8 @@ export default class Renderer {
     }
 
     update() {
+        if (this.contextLost) return;
+        this.updateAdaptiveQuality();
         this.application.camera.instance.updateProjectionMatrix();
         if (this.uniforms) {
             this.uniforms.u_time.value = Math.sin(this.time.current * 0.01);
@@ -157,5 +264,18 @@ export default class Renderer {
         this.cssInstance.render(this.cssScene, this.camera.instance);
         this.overlayInstance.render(this.overlayScene, this.camera.instance);
         this.overlay.position.copy(this.camera.instance.position);
+
+        if (this.debugEnabled && this.time.elapsed % 1000 < this.time.delta) {
+            const fps = Math.round(1000 / Math.max(1, this.time.delta));
+            console.info('[game-debug] renderer', {
+                fps,
+                frameMs: Math.round(this.time.delta * 10) / 10,
+                drawCalls: this.instance.info.render.calls,
+                geometries: this.instance.info.memory.geometries,
+                textures: this.instance.info.memory.textures,
+                pixelRatio: this.instance.getPixelRatio(),
+                qualityMode: this.qualityMode,
+            });
+        }
     }
 }
