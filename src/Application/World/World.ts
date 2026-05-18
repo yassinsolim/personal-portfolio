@@ -9,7 +9,14 @@ import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
 import Car from './Car';
 import Flipper from './Flipper';
-import RaceManager from '../Racing/RaceManager';
+import UIEventBus from '../UI/EventBus';
+import type RaceManager from '../Racing/RaceManager';
+
+type RaceAction = {
+    event: string;
+    payload: unknown;
+};
+
 export default class World {
     application: Application;
     scene: THREE.Scene;
@@ -24,12 +31,18 @@ export default class World {
     cursor: Cursor;
     car: Car;
     flipper: Flipper;
-    raceManager: RaceManager;
+    raceManager: RaceManager | null;
+    raceManagerLoading: Promise<RaceManager> | null;
+    pendingRaceAction: RaceAction | null;
 
     constructor() {
         this.application = new Application();
         this.scene = this.application.scene;
         this.resources = this.application.resources;
+        this.raceManager = null;
+        this.raceManagerLoading = null;
+        this.pendingRaceAction = null;
+        this.bindRaceManagerLoader();
         // Wait for resources
         this.resources.on('ready', () => {
             // Setup
@@ -40,10 +53,52 @@ export default class World {
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
             this.flipper = new Flipper();
-            this.raceManager = new RaceManager();
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
         });
+    }
+
+    bindRaceManagerLoader() {
+        [
+            'raceMode:start',
+            'race:multiplayerPlaySolo',
+            'race:multiplayerCreateLobby',
+            'race:multiplayerJoinLobby',
+        ].forEach((event) => {
+            UIEventBus.on(event, (payload: unknown) => {
+                if (this.raceManager) {
+                    return;
+                }
+
+                this.pendingRaceAction = { event, payload };
+                void this.ensureRaceManager();
+            });
+        });
+    }
+
+    async ensureRaceManager() {
+        if (this.raceManager) {
+            return this.raceManager;
+        }
+
+        if (!this.raceManagerLoading) {
+            this.raceManagerLoading = import('../Racing/RaceManager').then(
+                ({ default: RaceManagerClass }) => {
+                    this.raceManager = new RaceManagerClass();
+                    return this.raceManager;
+                }
+            );
+        }
+
+        const manager = await this.raceManagerLoading;
+        const pending = this.pendingRaceAction;
+        this.pendingRaceAction = null;
+        if (pending) {
+            window.setTimeout(() => {
+                UIEventBus.dispatch(pending.event, pending.payload);
+            }, 0);
+        }
+        return manager;
     }
 
     update() {

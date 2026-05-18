@@ -1,4 +1,4 @@
-import { RealtimeChannel, SupabaseClient, createClient } from '@supabase/supabase-js';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import { randomInt } from '../../Utils/Random';
 import type { LeaderboardEntry } from '../Leaderboard/LocalLeaderboard';
@@ -226,6 +226,7 @@ export default class MultiplayerService {
             this.lobbyChannelPrefix =
                 this.normalizeLobbyToken(config.lobbyChannelPrefix || '') ||
                 DEFAULT_LOBBY_PREFIX;
+            const { createClient } = await import('@supabase/supabase-js');
             this.supabase = createClient(
                 config.supabaseUrl,
                 config.supabaseAnonKey,

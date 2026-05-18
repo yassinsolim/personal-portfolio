@@ -1,4 +1,4 @@
-import { RealtimeChannel, SupabaseClient, createClient } from '@supabase/supabase-js';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import LocalLeaderboard, { LeaderboardEntry } from './LocalLeaderboard';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
@@ -92,6 +92,7 @@ export default class LeaderboardService {
             this.tableName = config.leaderboardTable || DEFAULT_TABLE;
             this.ghostReplayTableName =
                 config.ghostReplayTable || DEFAULT_GHOST_REPLAY_TABLE;
+            const { createClient } = await import('@supabase/supabase-js');
             this.supabase = createClient(
                 config.supabaseUrl,
                 config.supabaseAnonKey,
