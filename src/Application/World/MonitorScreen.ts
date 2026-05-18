@@ -281,9 +281,11 @@ export default class MonitorScreen extends EventEmitter {
         iframe.src = iframeSrc;
         iframe.setAttribute(
             'sandbox',
-            'allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation'
+            'allow-scripts allow-same-origin allow-pointer-lock'
         );
-        iframe.setAttribute('referrerpolicy', 'no-referrer');
+        iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        iframe.setAttribute('loading', 'lazy');
+        iframe.title = 'yassinOS embedded desktop';
 
         /**
          * Use dev server if query params are present and we're on localhost.
@@ -308,7 +310,6 @@ export default class MonitorScreen extends EventEmitter {
         iframe.style.imageRendering = 'auto';
         iframe.style.backfaceVisibility = 'hidden';
         iframe.style.background = '#000000';
-        // iframe.title = 'yassinOS';
         this.monitorIframe = iframe;
 
         // Bubble mouse move events to the main application, so we can affect the camera
