@@ -281,7 +281,13 @@ export default class MonitorScreen extends EventEmitter {
         iframe.src = iframeSrc;
         iframe.setAttribute(
             'sandbox',
-            'allow-scripts allow-same-origin allow-pointer-lock'
+            [
+                'allow-scripts',
+                'allow-same-origin',
+                'allow-pointer-lock',
+                'allow-popups',
+                'allow-popups-to-escape-sandbox',
+            ].join(' ')
         );
         iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
         iframe.setAttribute('loading', 'lazy');
