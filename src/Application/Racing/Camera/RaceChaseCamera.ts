@@ -162,6 +162,7 @@ export default class RaceChaseCamera {
             if (!this.active || this.paused) return;
             this.requestPointerLock();
         });
+
     }
 
     requestPointerLock() {
@@ -181,13 +182,11 @@ export default class RaceChaseCamera {
             try {
                 this.pointerLockRequestPending = true;
                 this.clearPointerLockPendingTimeout();
-                const maybePromise = canvas.requestPointerLock();
-                const pointerLockPromise = maybePromise as Promise<void> | undefined;
+                const maybePromise: unknown = canvas.requestPointerLock();
+                const pointerLockPromise =
+                    maybePromise instanceof Promise ? maybePromise : null;
 
-                if (
-                    pointerLockPromise &&
-                    typeof pointerLockPromise.catch === 'function'
-                ) {
+                if (pointerLockPromise) {
                     pointerLockPromise
                         .catch((error) => {
                             if (this.isExpectedPointerLockAbort(error)) {
@@ -228,9 +227,8 @@ export default class RaceChaseCamera {
     }
 
     isExpectedPointerLockAbort(error: unknown) {
-        if (!error) return false;
         const message = (
-            (error as { message?: string }).message || String(error)
+            error instanceof Error ? error.message : String(error)
         ).toLowerCase();
         return (
             message.includes('exited the lock before this request was completed') ||
@@ -298,6 +296,7 @@ export default class RaceChaseCamera {
             this.application.camera.instance.updateProjectionMatrix();
         }
     }
+
 
     update(deltaSeconds: number) {
         if (!this.active) return;

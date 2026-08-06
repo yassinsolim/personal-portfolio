@@ -14,6 +14,7 @@ const DEFAULT_TABLE = 'nordschleife_leaderboard';
 const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
 const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v1';
+const CONFIG_FETCH_TIMEOUT_MS = 10000;
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -72,9 +73,16 @@ export default class LeaderboardService {
     }
 
     async loadSupabaseConfig() {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+            () => controller.abort(),
+            CONFIG_FETCH_TIMEOUT_MS
+        );
+
         try {
             const response = await fetch(CONFIG_URL, {
                 cache: 'no-store',
+                signal: controller.signal,
             });
 
             if (!response.ok) {
@@ -104,8 +112,10 @@ export default class LeaderboardService {
                 }
             );
             this.subscribeToTableChanges();
-        } catch (error) {
+        } catch {
             this.logConfigFallback();
+        } finally {
+            clearTimeout(timeout);
         }
     }
 
@@ -118,9 +128,9 @@ export default class LeaderboardService {
     }
 
     async getLeaderboard(limit = 10) {
+        const localEntries = this.local.getTop(limit);
         await this.initialize();
 
-        const localEntries = this.local.getTop(limit);
         if (!this.supabase) {
             return localEntries;
         }
@@ -137,10 +147,10 @@ export default class LeaderboardService {
             }
 
             const remoteEntries = (data as RemoteLeaderboardRow[]).map((entry) => ({
-                id: String(entry.id),
-                name: entry.name,
-                lapTimeMs: entry.lap_time_ms,
-                carId: entry.car_id || 'unknown',
+                id: String(entry.id || '').slice(0, 80),
+                name: this.sanitizeName(entry.name),
+                lapTimeMs: this.sanitizeLapTime(entry.lap_time_ms),
+                carId: this.sanitizeCarId(entry.car_id),
                 createdAt: entry.created_at || new Date().toISOString(),
                 source: 'remote' as const,
             }));
@@ -197,10 +207,10 @@ export default class LeaderboardService {
 
             const row = data as RemoteLeaderboardRow;
             const entry = {
-                id: String(row.id),
-                name: row.name,
-                lapTimeMs: row.lap_time_ms,
-                carId: row.car_id || safeCarId,
+                id: String(row.id || '').slice(0, 80),
+                name: this.sanitizeName(row.name),
+                lapTimeMs: this.sanitizeLapTime(row.lap_time_ms),
+                carId: this.sanitizeCarId(row.car_id || safeCarId),
                 createdAt: row.created_at || new Date().toISOString(),
                 source: 'remote' as const,
             };
@@ -289,8 +299,7 @@ export default class LeaderboardService {
     }
 
     subscribeToTableChanges() {
-        if (!this.supabase) return;
-        if (this.tableChangesChannel) return;
+        if (!this.supabase || this.tableChangesChannel) return;
 
         const channel = this.supabase.channel(
             `leaderboard-changes:${this.tableName}`
@@ -304,24 +313,31 @@ export default class LeaderboardService {
                 table: this.tableName,
             },
             () => {
+                if (this.tableChangesChannel !== channel) return;
                 this.notifyLeaderboardChanged();
             }
         );
 
         channel.subscribe((status) => {
-            if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                this.tableChangesChannel = null;
+            if (
+                this.tableChangesChannel !== channel ||
+                (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT')
+            ) {
+                return;
             }
+            this.tableChangesChannel = null;
         });
 
         this.tableChangesChannel = channel;
     }
 
+
     sanitizeName(name: string) {
-        const normalized = String(name || '')
-            .replace(/[^a-zA-Z0-9 _-]/g, '')
-            .trim()
-            .slice(0, 16);
+        const normalized = Array.from(String(name || ''))
+            .filter((character) => !/[\u0000-\u001F\u007F-\u009F]/.test(character))
+            .slice(0, 16)
+            .join('')
+            .trim();
         return normalized || 'Driver';
     }
 

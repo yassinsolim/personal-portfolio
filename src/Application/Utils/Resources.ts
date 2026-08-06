@@ -17,6 +17,8 @@ export default class Resources extends EventEmitter {
     };
     toLoad: number;
     loaded: number;
+    failed: number;
+
         loaders: {
         gltfLoader: GLTFLoader;
         textureLoader: THREE.TextureLoader;
@@ -41,6 +43,7 @@ export default class Resources extends EventEmitter {
         };
         this.toLoad = this.sources.length;
         this.loaded = 0;
+        this.failed = 0;
         this.application = new Application();
         this.loading = this.application.loading;
 
@@ -59,43 +62,76 @@ export default class Resources extends EventEmitter {
     }
 
     startLoading() {
+
         // Load each source
         for (const source of this.sources) {
             if (source.type === 'gltfModel') {
-                this.loaders.gltfLoader.load(source.path, (file) => {
-                    this.sourceLoaded(source, file);
-                });
-            } else if (source.type === 'texture') {
-                this.loaders.textureLoader.load(source.path, (file) => {
-                    file.encoding = THREE.sRGBEncoding;
-                    this.sourceLoaded(source, file);
-                });
-            } else if (source.type === 'cubeTexture') {
-                this.loaders.cubeTextureLoader.load(source.path, (file) => {
-                    this.sourceLoaded(source, file);
-                });
-            } else if (source.type === 'audio') {
-                this.loaders.audioLoader.load(source.path, (buffer) => {
-                    this.sourceLoaded(source, buffer);
-                });
-            } else if (source.type === 'json') {
-                this.loaders.jsonLoader.load(source.path, (file) => {
-                    try {
-                        const parsed = JSON.parse(file as string);
-                        this.sourceLoaded(source, parsed);
-                    } catch (error) {
-                        console.error(
-                            `[Resources] Failed to parse JSON: ${source.name}`,
-                            error
-                        );
-                        this.sourceLoaded(source, {});
+                this.loaders.gltfLoader.load(
+                    source.path,
+                    (file) => {
+                        this.sourceLoaded(source, file);
+                    },
+                    undefined,
+                    (error) => {
+                        this.sourceFailed(source, error);
                     }
-                });
+                );
+            } else if (source.type === 'texture') {
+                this.loaders.textureLoader.load(
+                    source.path,
+                    (file) => {
+                        file.encoding = THREE.sRGBEncoding;
+                        this.sourceLoaded(source, file);
+                    },
+                    undefined,
+                    (error) => {
+                        this.sourceFailed(source, error);
+                    }
+                );
+            } else if (source.type === 'cubeTexture') {
+                this.loaders.cubeTextureLoader.load(
+                    source.path,
+                    (file) => {
+                        this.sourceLoaded(source, file);
+                    },
+                    undefined,
+                    (error) => {
+                        this.sourceFailed(source, error);
+                    }
+                );
+            } else if (source.type === 'audio') {
+                this.loaders.audioLoader.load(
+                    source.path,
+                    (buffer) => {
+                        this.sourceLoaded(source, buffer);
+                    },
+                    undefined,
+                    (error) => {
+                        this.sourceFailed(source, error);
+                    }
+                );
+            } else if (source.type === 'json') {
+                this.loaders.jsonLoader.load(
+                    source.path,
+                    (file) => {
+                        try {
+                            const parsed = JSON.parse(file as string);
+                            this.sourceLoaded(source, parsed);
+                        } catch (error) {
+                            this.sourceFailed(source, error);
+                        }
+                    },
+                    undefined,
+                    (error) => {
+                        this.sourceFailed(source, error);
+                    }
+                );
             }
         }
     }
 
     sourceLoaded(source: Resource, file: LoadedResource) {
+
         this.items[source.type][source.name] = file;
 
         this.loaded++;
@@ -107,7 +143,28 @@ export default class Resources extends EventEmitter {
         ]);
 
         if (this.loaded === this.toLoad) {
-            this.trigger('ready');
+            if (this.failed === 0) {
+                this.trigger('ready');
+            } else {
+                this.trigger('error');
+            }
         }
     }
+
+    sourceFailed(source: Resource, error: unknown) {
+
+        this.failed++;
+        this.loaded++;
+        console.error(`[Resources] Failed to load: ${source.name}`, error);
+        this.loading.trigger('failedSource', [
+            source.name,
+            this.loaded,
+            this.toLoad,
+        ]);
+
+        if (this.loaded === this.toLoad) {
+            this.trigger('error', [source, error]);
+        }
+    }
+
 }

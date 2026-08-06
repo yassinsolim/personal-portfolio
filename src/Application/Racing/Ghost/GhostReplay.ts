@@ -5,6 +5,7 @@ import Application from '../../Application';
 const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v1';
 const SAMPLE_INTERVAL_MS = 45;
 const GHOST_OPACITY = 0.38;
+const MAX_RECORDING_SAMPLES = 12000;
 
 type GhostSample = {
     t: number;
@@ -86,7 +87,6 @@ export default class GhostReplay {
         this.recordingSamples = [];
         this.recording = false;
         this.active = false;
-        this.lapStartMs = 0;
         this.playbackTimeMs = 0;
         this.playbackDurationMs = 0;
         this.bestLapTimeMs = 0;
@@ -120,8 +120,29 @@ export default class GhostReplay {
     }
 
     capture(nowMs: number, telemetry: GhostTelemetry) {
-        if (!this.recording) return;
+        if (
+            !this.recording ||
+            !Number.isFinite(nowMs) ||
+            !Number.isFinite(this.lapStartMs)
+        ) {
+            return;
+        }
         if (nowMs - this.lastSampleAtMs < SAMPLE_INTERVAL_MS) return;
+
+        const { position, quaternion } = telemetry;
+        if (
+            ![
+                position.x,
+                position.y,
+                position.z,
+                quaternion.x,
+                quaternion.y,
+                quaternion.z,
+                quaternion.w,
+            ].every(Number.isFinite)
+        ) {
+            return;
+        }
 
         if (!this.externalReplay && telemetry.carId && telemetry.carId !== this.carId) {
             this.setGhostCar(telemetry.carId);
@@ -131,21 +152,57 @@ export default class GhostReplay {
         const t = nowMs - this.lapStartMs;
         const sample: GhostSample = {
             t,
-            x: telemetry.position.x,
-            y: telemetry.position.y,
-            z: telemetry.position.z,
-            qx: telemetry.quaternion.x,
-            qy: telemetry.quaternion.y,
-            qz: telemetry.quaternion.z,
-            qw: telemetry.quaternion.w,
+            x: position.x,
+            y: position.y,
+            z: position.z,
+            qx: quaternion.x,
+            qy: quaternion.y,
+            qz: quaternion.z,
+            qw: quaternion.w,
         };
         this.recordingSamples.push(sample);
+        this.compactRecordingSamples();
         this.carId = telemetry.carId;
+    }
+
+    compactRecordingSamples() {
+        if (this.recordingSamples.length <= MAX_RECORDING_SAMPLES) return;
+
+        let writeIndex = 0;
+        for (
+            let readIndex = 0;
+            readIndex < this.recordingSamples.length;
+            readIndex += 2
+        ) {
+            this.recordingSamples[writeIndex++] =
+                this.recordingSamples[readIndex];
+        }
+        this.recordingSamples.length = writeIndex;
+    }
+
+    finalizeRecording(lapTimeMs: number) {
+        const firstSample = this.recordingSamples[0];
+        const lastSample =
+            this.recordingSamples[this.recordingSamples.length - 1];
+        if (
+            !firstSample ||
+            !lastSample ||
+            !Number.isFinite(lapTimeMs) ||
+            lapTimeMs <= lastSample.t
+        ) {
+            return;
+        }
+
+        this.recordingSamples.push({
+            ...firstSample,
+            t: lapTimeMs,
+        });
     }
 
     completeLap(valid: boolean, lapTimeMs: number) {
         if (!this.recording) return;
         this.recording = false;
+        this.finalizeRecording(lapTimeMs);
 
         if (valid && this.recordingSamples.length >= 8) {
             this.lastCompletedLapReplay = {
@@ -241,7 +298,8 @@ export default class GhostReplay {
         if (
             Number.isFinite(expectedLapTimeMs) &&
             expectedLapTimeMs &&
-            this.lastCompletedLapReplay.lapTimeMs !== Math.floor(expectedLapTimeMs)
+            Math.floor(this.lastCompletedLapReplay.lapTimeMs) !==
+                Math.floor(expectedLapTimeMs)
         ) {
             return null;
         }
@@ -259,8 +317,17 @@ export default class GhostReplay {
     }
 
     getActivePlaybackDurationMs() {
+        const replayDuration = this.externalReplay?.lapTimeMs;
+        if (
+            typeof replayDuration === 'number' &&
+            Number.isFinite(replayDuration) &&
+            replayDuration > 0
+        ) {
+            return replayDuration;
+        }
         const samples = this.getActivePlaybackSamples();
-        return samples[samples.length - 1]?.t || 0;
+        const lastSample = samples.length > 0 ? samples[samples.length - 1] : undefined;
+        return this.playbackDurationMs || lastSample?.t || 0;
     }
 
     update(deltaSeconds: number) {
@@ -387,6 +454,7 @@ export default class GhostReplay {
             qw: q.w,
         };
     }
+
 
     getBestLapTimeMs() {
         return this.externalReplay?.lapTimeMs || this.bestLapTimeMs;

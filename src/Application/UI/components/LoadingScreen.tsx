@@ -3,6 +3,13 @@ import eventBus from '../EventBus';
 import { isWebGLAvailable } from '../../Utils/webgl';
 
 type LoadingProps = {};
+type ResourceProgress = {
+    sourceName: string;
+    progress: number;
+    toLoad: number;
+    loaded: number;
+};
+
 
 const LoadingScreen: React.FC<LoadingProps> = () => {
     const [progress, setProgress] = useState(0);
@@ -15,8 +22,17 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
     const [showLoadingResources, setShowLoadingResources] = useState(false);
     const [doneLoading, setDoneLoading] = useState(false);
     const [webGLError, setWebGLError] = useState(false);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [counter, setCounter] = useState(0);
     const [resources] = useState<string[]>([]);
+    const start = useCallback(() => {
+        setLoadingOverlayOpacity(0);
+        eventBus.dispatch('loadingScreenDone', {});
+        const ui = document.getElementById('ui');
+        if (ui) {
+            ui.style.pointerEvents = 'none';
+        }
+    }, []);
 
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -31,7 +47,7 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
     }, []);
 
     useEffect(() => {
-        eventBus.on('loadedSource', (data) => {
+        const onLoadedSource = (data: ResourceProgress) => {
             setProgress(data.progress);
             setToLoad(data.toLoad);
             setLoaded(data.loaded);
@@ -43,8 +59,25 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
             if (resources.length > 8) {
                 resources.shift();
             }
-        });
-    }, []);
+        };
+        const onFailedSource = (data: ResourceProgress) => {
+            setProgress(data.progress);
+            setToLoad(data.toLoad);
+            setLoaded(data.loaded);
+            setLoadError(data.sourceName);
+            resources.push(`Failed ${data.sourceName}`);
+            if (resources.length > 8) {
+                resources.shift();
+            }
+        };
+
+        eventBus.on('loadedSource', onLoadedSource);
+        eventBus.on('failedSource', onFailedSource);
+        return () => {
+            eventBus.remove('loadedSource', onLoadedSource);
+            eventBus.remove('failedSource', onFailedSource);
+        };
+    }, [resources]);
 
     useEffect(() => {
         setShowLoadingResources(true);
@@ -52,31 +85,32 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
     }, [loaded]);
 
     useEffect(() => {
-        if (progress >= 1 && !webGLError) {
-            setDoneLoading(true);
-
-            setTimeout(() => {
-                start();
-            }, 1000);
+        if (progress < 1 || webGLError || loadError) {
+            return;
         }
-    }, [progress]);
+
+        setDoneLoading(true);
+        const timeoutId = window.setTimeout(() => {
+            start();
+        }, 1000);
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [loadError, progress, start, webGLError]);
 
     useEffect(() => {
-        if (webGLError) {
-            setTimeout(() => {
-                setWebGLErrorOpacity(1);
-            }, 500);
+        if (!webGLError) {
+            return;
         }
+
+        const timeoutId = window.setTimeout(() => {
+            setWebGLErrorOpacity(1);
+        }, 500);
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
     }, [webGLError]);
 
-    const start = useCallback(() => {
-        setLoadingOverlayOpacity(0);
-        eventBus.dispatch('loadingScreenDone', {});
-        const ui = document.getElementById('ui');
-        if (ui) {
-            ui.style.pointerEvents = 'none';
-        }
-    }, []);
 
     const getSpace = (sourceName: string) => {
         let spaces = '';
@@ -137,7 +171,12 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
                                 <div style={styles.spacer} />
                                 <div style={styles.spacer} />
                                 {showLoadingResources ? (
-                                    progress == 1 ? (
+                                    loadError ? (
+                                        <p>
+                                            FAILED TO LOAD {loadError}. RELOAD
+                                            PAGE.
+                                        </p>
+                                    ) : progress === 1 ? (
                                         <p>FINISHED LOADING RESOURCES</p>
                                     ) : (
                                         <p className="loading">

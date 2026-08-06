@@ -16,6 +16,14 @@ export class CameraKeyframeInstance {
 
     update() {}
 }
+const getViewportRatio = (sizes: Sizes) => {
+    const width =
+        Number.isFinite(sizes.width) && sizes.width > 0 ? sizes.width : 1;
+    const height =
+        Number.isFinite(sizes.height) && sizes.height > 0 ? sizes.height : 1;
+    return height / width;
+};
+
 
 const keys: { [key in CameraKey]: CameraKeyframe } = {
     idle: {
@@ -56,7 +64,7 @@ export class MonitorKeyframe extends CameraKeyframeInstance {
     }
 
     update() {
-        const aspect = this.sizes.height / this.sizes.width;
+        const aspect = getViewportRatio(this.sizes);
         const additionalZoom = this.sizes.width < 768 ? 0 : 600;
         this.targetPos.z = this.origin.z + aspect * 1200 - additionalZoom;
         this.position.copy(this.targetPos);
@@ -103,7 +111,7 @@ export class DeskKeyframe extends CameraKeyframeInstance {
             (-(this.mouse.y - this.sizes.height * 2) - this.targetPos.y) *
             0.025;
 
-        const aspect = this.sizes.height / this.sizes.width;
+        const aspect = getViewportRatio(this.sizes);
         this.targetPos.z = this.origin.z + aspect * 3000 - 1800;
 
         this.focalPoint.copy(this.targetFoc);
@@ -114,12 +122,14 @@ export class DeskKeyframe extends CameraKeyframeInstance {
 export class IdleKeyframe extends CameraKeyframeInstance {
     time: Time;
     origin: THREE.Vector3;
+    application: Application;
 
     constructor() {
         const keyframe = keys.idle;
         super(keyframe);
         this.origin = new THREE.Vector3().copy(keyframe.position);
-        this.time = new Time();
+        this.application = new Application();
+        this.time = this.application.time;
     }
 
     update() {

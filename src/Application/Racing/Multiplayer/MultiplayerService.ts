@@ -103,6 +103,7 @@ const LOBBY_CODE_LENGTH = 6;
 const LOBBY_CODE_REGEX = /^[A-Z0-9]{4,8}$/;
 const MAX_POSITION_ABS = 1000000;
 const JOIN_SUBSCRIBE_TIMEOUT_MS = 12000;
+const CONFIG_FETCH_TIMEOUT_MS = 10000;
 
 export default class MultiplayerService {
     supabase: SupabaseClient | null;
@@ -129,6 +130,7 @@ export default class MultiplayerService {
     lastTelemetrySignature: string;
     lastTelemetryHeartbeatAt: number;
     joinRequestCounter: number;
+    cancelPendingSubscription: (() => void) | null;
 
     constructor() {
         this.supabase = null;
@@ -155,6 +157,7 @@ export default class MultiplayerService {
         this.lastTelemetrySignature = '';
         this.lastTelemetryHeartbeatAt = -Infinity;
         this.joinRequestCounter = 0;
+        this.cancelPendingSubscription = null;
     }
 
     onStateChange(listener: (state: MultiplayerState) => void) {
@@ -204,9 +207,16 @@ export default class MultiplayerService {
     }
 
     async loadConfig() {
+        const controller = new AbortController();
+        const timeout = setTimeout(
+            () => controller.abort(),
+            CONFIG_FETCH_TIMEOUT_MS
+        );
+
         try {
             const response = await fetch(CONFIG_URL, {
                 cache: 'no-store',
+                signal: controller.signal,
             });
             if (!response.ok) {
                 this.supported = false;
@@ -240,10 +250,12 @@ export default class MultiplayerService {
             this.supported = true;
             this.error = null;
             this.emitState();
-        } catch (error) {
+        } catch {
             this.supported = false;
             this.error = 'Multiplayer unavailable: config load failed.';
             this.emitState();
+        } finally {
+            clearTimeout(timeout);
         }
     }
 
@@ -303,6 +315,8 @@ export default class MultiplayerService {
         if (!internal) {
             this.joinRequestCounter++;
         }
+        this.cancelPendingSubscription?.();
+        this.cancelPendingSubscription = null;
         this.connecting = false;
         this.connected = false;
         this.mode = 'solo';
@@ -314,10 +328,11 @@ export default class MultiplayerService {
         this.lastTelemetrySignature = '';
         this.lastTelemetryHeartbeatAt = -Infinity;
         this.error = null;
-        if (this.channel && this.supabase) {
-            await this.teardownChannel(this.channel);
-        }
+        const channel = this.channel;
         this.channel = null;
+        if (channel) {
+            await this.teardownChannel(channel);
+        }
         this.emitState();
     }
 
@@ -496,14 +511,15 @@ export default class MultiplayerService {
     }
 
     async teardownChannel(channel: RealtimeChannel) {
-        if (!this.supabase) return;
+        const supabase = this.supabase;
+        if (!supabase) return;
         try {
             await channel.untrack();
         } catch {
             // no-op
         }
         try {
-            await this.supabase.removeChannel(channel);
+            await supabase.removeChannel(channel);
         } catch {
             // no-op
         }
@@ -540,33 +556,89 @@ export default class MultiplayerService {
     subscribeChannel(channel: RealtimeChannel, timeoutMs: number) {
         return new Promise<boolean>((resolve) => {
             let settled = false;
-            const timeout = setTimeout(() => {
+            let cancelSubscription: (() => void) | null = null;
+            const finish = (subscribed: boolean) => {
                 if (settled) return;
                 settled = true;
-                resolve(false);
-            }, timeoutMs);
+                clearTimeout(timeout);
+                if (this.cancelPendingSubscription === cancelSubscription) {
+                    this.cancelPendingSubscription = null;
+                }
+                resolve(subscribed);
+            };
+            const timeout = setTimeout(() => finish(false), timeoutMs);
+            cancelSubscription = () => finish(false);
+            this.cancelPendingSubscription?.();
+            this.cancelPendingSubscription = cancelSubscription;
 
             channel.subscribe((status) => {
-                if (settled) return;
-                if (status === 'SUBSCRIBED') {
-                    settled = true;
-                    clearTimeout(timeout);
-                    resolve(true);
+                if (this.channel !== channel) {
+                    finish(false);
                     return;
                 }
-
+                if (!settled) {
+                    if (status === 'SUBSCRIBED') {
+                        finish(true);
+                        return;
+                    }
+                    if (
+                        status === 'CHANNEL_ERROR' ||
+                        status === 'TIMED_OUT' ||
+                        status === 'CLOSED'
+                    ) {
+                        finish(false);
+                    }
+                    return;
+                }
+                if (status === 'SUBSCRIBED') {
+                    this.handleChannelReconnected(channel);
+                    return;
+                }
                 if (
                     status === 'CHANNEL_ERROR' ||
                     status === 'TIMED_OUT' ||
                     status === 'CLOSED'
                 ) {
-                    settled = true;
-                    clearTimeout(timeout);
-                    resolve(false);
+                    this.handleChannelDisconnected(channel);
                 }
             });
         });
     }
+
+    handleChannelReconnected(channel: RealtimeChannel) {
+        if (
+            this.channel !== channel ||
+            this.mode !== 'lobby' ||
+            this.connected
+        ) {
+            return;
+        }
+
+        this.connecting = false;
+        this.connected = true;
+        this.error = null;
+        this.touchLocalPlayer();
+        this.pushLocalPresenceUpdate();
+        this.emitState();
+    }
+
+    handleChannelDisconnected(channel: RealtimeChannel) {
+        if (
+            this.channel !== channel ||
+            this.mode !== 'lobby' ||
+            !this.connected
+        ) {
+            return;
+        }
+
+        this.connecting = false;
+        this.connected = false;
+        this.error = 'Lost connection to the lobby.';
+        this.players.clear();
+        this.laps = [];
+        this.emitState();
+    }
+
 
     async joinLobbyInternal(
         lobbyCode: string,
@@ -716,7 +788,7 @@ export default class MultiplayerService {
                     this.readStringField(raw, 'name')
                 );
                 const carId = this.sanitizeCarId(this.readStringField(raw, 'car_id'));
-                const isHost = Boolean((raw as { is_host?: unknown }).is_host);
+                const isHost = this.readBooleanField(raw, 'is_host');
                 const connectedAt =
                     this.readStringField(raw, 'connected_at') || nowIso;
 
@@ -806,7 +878,7 @@ export default class MultiplayerService {
         if (!sessionId) return;
         if (sessionId === this.localSessionId) return;
 
-        const nowIso = this.sanitizeIsoString(parsed.sent_at) || new Date().toISOString();
+        const nowIso = new Date().toISOString();
         const player = this.players.get(sessionId) || {
             sessionId,
             name: this.sanitizePlayerName(parsed.name || ''),
@@ -979,10 +1051,11 @@ export default class MultiplayerService {
     }
 
     sanitizePlayerName(name: string) {
-        const clean = String(name || '')
-            .replace(/[^a-zA-Z0-9 _-]/g, '')
-            .trim()
-            .slice(0, MAX_NAME_LENGTH);
+        const clean = Array.from(String(name || ''))
+            .filter((character) => !/[\u0000-\u001F\u007F-\u009F]/.test(character))
+            .slice(0, MAX_NAME_LENGTH)
+            .join('')
+            .trim();
         return clean || 'Driver';
     }
 
@@ -1082,20 +1155,38 @@ export default class MultiplayerService {
         const z = this.readFiniteNumber(value[2]);
         const w = this.readFiniteNumber(value[3]);
         if (x === null || y === null || z === null || w === null) return fallback;
-        const lengthSq = x * x + y * y + z * z + w * w;
-        if (lengthSq <= 1e-12) return fallback;
-        const invLength = 1 / Math.sqrt(lengthSq);
+        const maxComponent = Math.max(
+            Math.abs(x),
+            Math.abs(y),
+            Math.abs(z),
+            Math.abs(w)
+        );
+        if (maxComponent === 0) {
+            return [0, 0, 0, 0] as MultiplayerQuaternion;
+        }
+        const scaledX = x / maxComponent;
+        const scaledY = y / maxComponent;
+        const scaledZ = z / maxComponent;
+        const scaledW = w / maxComponent;
+        const invLength = 1 / Math.hypot(scaledX, scaledY, scaledZ, scaledW);
         return [
-            this.clampNumber(x * invLength, -1, 1),
-            this.clampNumber(y * invLength, -1, 1),
-            this.clampNumber(z * invLength, -1, 1),
-            this.clampNumber(w * invLength, -1, 1),
+            scaledX * invLength,
+            scaledY * invLength,
+            scaledZ * invLength,
+            scaledW * invLength,
         ] as MultiplayerQuaternion;
+    }
+    isRecord(value: unknown): value is Record<string, unknown> {
+        return value !== null && typeof value === 'object';
+    }
+
+    readBooleanField(source: unknown, key: string) {
+        return this.isRecord(source) && source[key] === true;
     }
 
     readStringField(source: unknown, key: string) {
-        if (!source || typeof source !== 'object') return '';
-        const value = (source as Record<string, unknown>)[key];
+        if (!this.isRecord(source)) return '';
+        const value = source[key];
         return typeof value === 'string' ? value : '';
     }
 }

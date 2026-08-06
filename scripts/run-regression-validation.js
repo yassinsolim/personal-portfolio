@@ -688,6 +688,13 @@ async function collectDriftMetrics(page) {
             path.join(OUT_DIR, 'regression-validation-results.json'),
             JSON.stringify(results, null, 2)
         );
+
+        if (logs.pageErrors.length > 0 || logs.consoleErrors.length > 0) {
+            console.error(
+                `Regression validation observed ${logs.pageErrors.length} page error(s) and ${logs.consoleErrors.length} console error(s).`
+            );
+            process.exitCode = 1;
+        }
     } finally {
         await browser.close();
     }

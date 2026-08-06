@@ -5,7 +5,7 @@
         "prebuild": "node scripts/write-racing-config.js",
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
-        "export:glb": "set EXPORT_SCENE=1&& npm run dev",
+        "export:glb": "EXPORT_SCENE=1 npm run dev",
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",

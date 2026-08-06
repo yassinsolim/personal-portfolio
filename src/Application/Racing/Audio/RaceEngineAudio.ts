@@ -147,6 +147,7 @@ export default class RaceEngineAudio {
     compressor: DynamicsCompressorNode | null;
     finalLowPass: BiquadFilterNode | null;
     unlockHandler: () => void;
+    resumePromise: Promise<void> | null;
 
     constructor() {
         this.context = null;
@@ -182,12 +183,11 @@ export default class RaceEngineAudio {
         this.tireFilter = null;
         this.compressor = null;
         this.finalLowPass = null;
+        this.resumePromise = null;
 
         this.unlockHandler = () => {
             this.ensureContext();
-            if (this.context && this.context.state === 'suspended') {
-                this.context.resume();
-            }
+            this.resumeContext();
         };
 
         document.addEventListener('mousedown', this.unlockHandler, {
@@ -370,6 +370,26 @@ export default class RaceEngineAudio {
         this.applyMasterMix();
     }
 
+    resumeContext() {
+        if (
+            !this.context ||
+            this.context.state !== 'suspended' ||
+            this.resumePromise
+        ) {
+            return;
+        }
+
+        const context = this.context;
+        this.resumePromise = context
+            .resume()
+            .catch(() => undefined)
+            .then(() => {
+                if (this.context === context) {
+                    this.resumePromise = null;
+                }
+            });
+    }
+
     getProfile(carId: string) {
         return CAR_PROFILES[carId] || DEFAULT_PROFILE;
     }
@@ -409,7 +429,14 @@ export default class RaceEngineAudio {
     }
 
     applyMasterMix() {
-        if (!this.context || !this.masterGain || !this.engineGain || !this.effectsGain) return;
+        if (
+            !this.context ||
+            !this.masterGain ||
+            !this.engineGain ||
+            !this.effectsGain
+        ) {
+            return;
+        }
 
         const now = this.context.currentTime;
         const masterTarget = this.muted ? 0 : this.masterVolume;
@@ -427,7 +454,13 @@ export default class RaceEngineAudio {
     }
 
     triggerShiftTransient(nextGear: number) {
-        if (!this.context || !this.raceActive || this.paused) return;
+        if (
+            !this.context ||
+            !this.raceActive ||
+            this.paused
+        ) {
+            return;
+        }
         if (nextGear === this.lastGear) return;
         if (!this.engineGain) return;
 
@@ -453,6 +486,11 @@ export default class RaceEngineAudio {
         gain.connect(this.engineGain);
         osc.start(now);
         osc.stop(now + 0.26);
+        osc.onended = () => {
+            osc.disconnect();
+            filter.disconnect();
+            gain.disconnect();
+        };
     }
 
     update(telemetry: EngineTelemetry, deltaSeconds: number) {
@@ -463,7 +501,7 @@ export default class RaceEngineAudio {
             this.raceActive &&
             !this.muted
         ) {
-            this.context.resume();
+            this.resumeContext();
         }
 
         this.currentCarId = telemetry.carId || this.currentCarId;
@@ -598,4 +636,5 @@ export default class RaceEngineAudio {
             );
         }
     }
+
 }
