@@ -47,6 +47,8 @@ export default class MonitorScreen extends EventEmitter {
     monitorOcclusionPlane: THREE.Mesh | null;
     raceModeActive: boolean;
     leaveMonitorTimeoutId: number | null;
+    messageHandler: ((event: MessageEvent) => void) | null;
+
 
     constructor() {
         super();
@@ -70,6 +72,7 @@ export default class MonitorScreen extends EventEmitter {
         this.monitorOcclusionPlane = null;
         this.raceModeActive = false;
         this.leaveMonitorTimeoutId = null;
+        this.messageHandler = null;
 
         // Create screen
         this.bindRaceModeVisibility();
@@ -340,22 +343,21 @@ export default class MonitorScreen extends EventEmitter {
                 return;
             }
 
-            window.addEventListener('message', (event: MessageEvent) => {
+            if (this.messageHandler) {
+                window.removeEventListener('message', this.messageHandler);
+            }
+            this.messageHandler = (event: MessageEvent) => {
                 if (!allowedOrigins.has(event.origin)) {
                     return;
                 }
 
-                if (
+                const fromIframe =
                     event.origin === iframeOrigin &&
-                    event.source !== iframe.contentWindow
-                ) {
-                    return;
-                }
-
-                if (
+                    event.source === iframe.contentWindow;
+                const fromWindow =
                     event.origin === window.location.origin &&
-                    event.source !== window
-                ) {
+                    event.source === window;
+                if (!fromIframe && !fromWindow) {
                     return;
                 }
 
@@ -374,7 +376,7 @@ export default class MonitorScreen extends EventEmitter {
                     return;
                 }
 
-                var evt = new CustomEvent(data.type, {
+                const evt = new CustomEvent(data.type, {
                     bubbles: true,
                     cancelable: false,
                 });
@@ -391,7 +393,7 @@ export default class MonitorScreen extends EventEmitter {
                         return;
                     }
 
-                    var clRect = iframe.getBoundingClientRect();
+                    const clRect = iframe.getBoundingClientRect();
                     const { top, left, width, height } = clRect;
                     const widthRatio = width / IFRAME_SIZE.w;
                     const heightRatio = height / IFRAME_SIZE.h;
@@ -400,7 +402,7 @@ export default class MonitorScreen extends EventEmitter {
                     evt.clientX = Math.round(
                         data.clientX * widthRatio + left
                     );
-                    //@ts-ignore
+                    // @ts-ignore
                     evt.clientY = Math.round(
                         data.clientY * heightRatio + top
                     );
@@ -413,7 +415,8 @@ export default class MonitorScreen extends EventEmitter {
                 }
 
                 iframe.dispatchEvent(evt);
-            });
+            };
+            window.addEventListener('message', this.messageHandler);
         };
 
         // Add iframe to container
@@ -564,6 +567,7 @@ export default class MonitorScreen extends EventEmitter {
         newPosition.add(offset);
         return newPosition;
     }
+
 
     update() {
         if (this.raceModeActive) {

@@ -93,7 +93,7 @@ if (!statSync(buildDir, { throwIfNoEntry: false })?.isDirectory()) {
 
     const sourceMaps = findFiles(buildDir, (_, name) => name.endsWith('.map'));
     if (sourceMaps.length > 0) {
-        warn(`Production build includes ${sourceMaps.length} source map file(s).`);
+        fail(`Production build includes ${sourceMaps.length} source map file(s).`);
     }
 
     const assetFiles = findFiles(buildDir, () => true);

@@ -316,6 +316,7 @@ export default class RaceVehicle {
     tmpQuatE: THREE.Quaternion;
     tmpQuatG: THREE.Quaternion;
 
+
     constructor(parent: THREE.Object3D, track: NordschleifeTrack) {
         this.application = new Application();
         this.resources = this.application.resources;
@@ -437,7 +438,11 @@ export default class RaceVehicle {
         this.maxForwardSpeedMps = SHARED_TOP_SPEED_KPH / 3.6;
         this.maxReverseSpeedMps = MAX_REVERSE_SPEED_KPH / 3.6;
 
-        this.wheelRadius = this.currentTuning.wheelRadiusMeters;
+        const configuredWheelRadius = this.currentTuning.wheelRadiusMeters;
+        this.wheelRadius =
+            Number.isFinite(configuredWheelRadius) && configuredWheelRadius > 0
+                ? configuredWheelRadius
+                : WHEEL_RADIUS_PLAUSIBLE_MIN;
         this.rideHeight = THREE.MathUtils.clamp(this.wheelRadius * 0.98, 0.16, 0.52);
 
         const zeroToHundred = SHARED_ZERO_TO_HUNDRED_SEC;
@@ -452,6 +457,12 @@ export default class RaceVehicle {
             this.currentTuning.idleRpm,
             this.currentTuning.redlineRpm
         );
+        if (this.gear > 0) {
+            const maxGear = Math.max(1, this.currentTuning.gearRatios.length);
+            this.gear = Number.isFinite(this.gear)
+                ? THREE.MathUtils.clamp(Math.floor(this.gear), 1, maxGear)
+                : 1;
+        }
     }
 
     setModel(carId: string) {
@@ -3128,8 +3139,11 @@ export default class RaceVehicle {
         this.rearWheelRig = this.wheelRig.filter((wheel) => wheel.rear);
         this.configureWheelSpinAxes(this.wheelRig, this.carModel || undefined);
 
+        const modelWheelRadius = Number(model.userData.raceWheelRadius);
         this.wheelRadius =
-            Number(model.userData.raceWheelRadius) || this.currentTuning.wheelRadiusMeters;
+            Number.isFinite(modelWheelRadius) && modelWheelRadius > 0
+                ? modelWheelRadius
+                : this.wheelRadius;
         this.rideHeight =
             Number(model.userData.raceRideHeight) ||
             THREE.MathUtils.clamp(this.wheelRadius * 0.98, 0.16, 0.52);
@@ -3234,6 +3248,8 @@ export default class RaceVehicle {
         this.rpm = this.currentTuning.idleRpm;
         this.smokeSpawnCooldown = 0;
         this.smoke.clear();
+        this.carPivot.quaternion.identity();
+        this.orientationTarget.identity();
         this.groundToCollider(0);
         this.updateTransform(1);
         this.captureSafeCheckpoint(true);
@@ -3547,6 +3563,8 @@ export default class RaceVehicle {
         this.grounded = true;
         this.smokeSpawnCooldown = 0.08;
         this.input.reset();
+        this.carPivot.quaternion.identity();
+        this.orientationTarget.identity();
         this.updateTransform(1 / 60);
         this.resetWheelVisuals();
         if (reason !== 'fall') {
@@ -3570,7 +3588,22 @@ export default class RaceVehicle {
             !Number.isFinite(this.position.y) ||
             !Number.isFinite(this.position.z) ||
             !Number.isFinite(this.speedMps) ||
-            !Number.isFinite(this.yaw)
+            !Number.isFinite(this.lateralSpeed) ||
+            !Number.isFinite(this.verticalVelocity) ||
+            !Number.isFinite(this.yaw) ||
+            !Number.isFinite(this.surfaceNormal.x) ||
+            !Number.isFinite(this.surfaceNormal.y) ||
+            !Number.isFinite(this.surfaceNormal.z) ||
+            !Number.isFinite(this.surfaceForward.x) ||
+            !Number.isFinite(this.surfaceForward.y) ||
+            !Number.isFinite(this.surfaceForward.z) ||
+            !Number.isFinite(this.forward.x) ||
+            !Number.isFinite(this.forward.y) ||
+            !Number.isFinite(this.forward.z) ||
+            !Number.isFinite(this.carPivot.quaternion.x) ||
+            !Number.isFinite(this.carPivot.quaternion.y) ||
+            !Number.isFinite(this.carPivot.quaternion.z) ||
+            !Number.isFinite(this.carPivot.quaternion.w)
         );
     }
 
@@ -4477,8 +4510,12 @@ export default class RaceVehicle {
     }
 
     updateDrivetrain(deltaSeconds: number, throttle: number, brake: number) {
+        const wheelRadius =
+            Number.isFinite(this.wheelRadius) && this.wheelRadius > 0
+                ? this.wheelRadius
+                : WHEEL_RADIUS_PLAUSIBLE_MIN;
         const wheelRpm =
-            (Math.abs(this.speedMps) / (Math.PI * 2 * this.wheelRadius)) * 60;
+            (Math.abs(this.speedMps) / (Math.PI * 2 * wheelRadius)) * 60;
 
         if (this.speedMps < -0.5) {
             this.gear = -1;
@@ -4495,14 +4532,12 @@ export default class RaceVehicle {
             return;
         }
 
-        if (this.gear < 1) {
-            this.gear = 1;
-        }
-
-        const maxGear = this.currentTuning.gearRatios.length;
+        const maxGear = Math.max(1, this.currentTuning.gearRatios.length);
+        this.gear = Number.isFinite(this.gear)
+            ? THREE.MathUtils.clamp(Math.floor(this.gear), 1, maxGear)
+            : 1;
         const currentRatio =
-            this.currentTuning.gearRatios[this.gear - 1] ||
-            this.currentTuning.gearRatios[0];
+            this.currentTuning.gearRatios[this.gear - 1] || 1;
         let rpmTarget =
             this.currentTuning.idleRpm +
             wheelRpm * currentRatio * this.currentTuning.finalDrive;
@@ -4527,8 +4562,7 @@ export default class RaceVehicle {
         }
 
         const shiftedRatio =
-            this.currentTuning.gearRatios[this.gear - 1] ||
-            this.currentTuning.gearRatios[0];
+            this.currentTuning.gearRatios[this.gear - 1] || 1;
         rpmTarget =
             this.currentTuning.idleRpm +
             wheelRpm * shiftedRatio * this.currentTuning.finalDrive;
@@ -4893,6 +4927,7 @@ export default class RaceVehicle {
     getCameraBodyRadius() {
         return this.bodyRadius;
     }
+
 
     getTelemetry(): VehicleTelemetry {
         const speedMagnitude = this.velocity.length();

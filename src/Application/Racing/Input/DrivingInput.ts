@@ -43,7 +43,9 @@ export default class DrivingInput {
 
         this.keyDownHandler = (event: KeyboardEvent) => {
             if (!this.enabled) return;
-            if ((event as any).inComputer) return;
+            if ((event as KeyboardEvent & { inComputer?: boolean }).inComputer) {
+                return;
+            }
             if (this.shouldIgnoreInputTarget(event.target)) {
                 return;
             }

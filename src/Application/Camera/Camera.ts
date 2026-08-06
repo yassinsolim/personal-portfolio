@@ -43,6 +43,7 @@ export default class Camera extends EventEmitter {
     raceModeActive: boolean;
     freeCamTransitionToken: number;
 
+
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
     keyframes: { [key in CameraKey]: CameraKeyframeInstance };
@@ -142,7 +143,7 @@ export default class Camera extends EventEmitter {
     setInstance() {
         this.instance = new THREE.PerspectiveCamera(
             35,
-            this.sizes.width / this.sizes.height,
+            this.getAspect(),
             10,
             900000
         );
@@ -150,6 +151,18 @@ export default class Camera extends EventEmitter {
 
         this.scene.add(this.instance);
     }
+    getAspect() {
+        const width =
+            Number.isFinite(this.sizes.width) && this.sizes.width > 0
+                ? this.sizes.width
+                : 1;
+        const height =
+            Number.isFinite(this.sizes.height) && this.sizes.height > 0
+                ? this.sizes.height
+                : 1;
+        return width / height;
+    }
+
 
     setMonitorListeners() {
         this.on('enterMonitor', () => {
@@ -293,7 +306,7 @@ export default class Camera extends EventEmitter {
     }
 
     resize() {
-        this.instance.aspect = this.sizes.width / this.sizes.height;
+        this.instance.aspect = this.getAspect();
         this.instance.updateProjectionMatrix();
     }
 
@@ -352,6 +365,7 @@ export default class Camera extends EventEmitter {
             }
         }) as unknown as (pointerId: number) => void;
     }
+
 
     update() {
         TWEEN.update();

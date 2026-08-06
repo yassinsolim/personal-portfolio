@@ -109,6 +109,7 @@ export default class EventEmitter {
         return this;
     }
 
+
     trigger(_name: string, _args?: any[]) {
         // Errors
         if (typeof _name === 'undefined' || _name === '') {
@@ -151,7 +152,10 @@ export default class EventEmitter {
         }
 
         // Specified namespace
-        else if (this.callbacks[name.namespace] instanceof Object) {
+        else if (
+            this.callbacks[name.namespace] instanceof Object &&
+            this.callbacks[name.namespace][name.value] instanceof Array
+        ) {
             if (name.value === '') {
                 console.warn('wrong name');
                 return this;
