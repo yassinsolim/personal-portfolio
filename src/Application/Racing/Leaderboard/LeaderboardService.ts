@@ -313,14 +313,20 @@ export default class LeaderboardService {
                 table: this.tableName,
             },
             () => {
-                if (this.tableChangesChannel !== channel) return;
+                // Supabase rejoins this same channel after a transient error,
+                // by which point tableChangesChannel has been cleared. Only a
+                // channel that has actually been replaced should be ignored.
+                if (this.tableChangesChannel && this.tableChangesChannel !== channel) {
+                    return;
+                }
                 this.notifyLeaderboardChanged();
             }
         );
 
         channel.subscribe((status) => {
             if (
-                this.tableChangesChannel !== channel ||
+                (this.tableChangesChannel &&
+                    this.tableChangesChannel !== channel) ||
                 (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT')
             ) {
                 return;

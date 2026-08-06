@@ -18,6 +18,7 @@ export default class Resources extends EventEmitter {
     toLoad: number;
     loaded: number;
     failed: number;
+    settled: Set<string>;
 
         loaders: {
         gltfLoader: GLTFLoader;
@@ -44,6 +45,7 @@ export default class Resources extends EventEmitter {
         this.toLoad = this.sources.length;
         this.loaded = 0;
         this.failed = 0;
+        this.settled = new Set();
         this.application = new Application();
         this.loading = this.application.loading;
 
@@ -130,10 +132,22 @@ export default class Resources extends EventEmitter {
         }
     }
 
+    // CubeTextureLoader forwards these callbacks to each of its six faces, so a
+    // source can report more than once. Only the first result may settle it.
+    settleSource(source: Resource): boolean {
+        const key = `${source.type}:${source.name}`;
+
+        if (this.settled.has(key)) return false;
+
+        this.settled.add(key);
+
+        return true;
+    }
+
     sourceLoaded(source: Resource, file: LoadedResource) {
+        if (!this.settleSource(source)) return;
 
         this.items[source.type][source.name] = file;
-
         this.loaded++;
 
         this.loading.trigger('loadedSource', [
@@ -152,10 +166,12 @@ export default class Resources extends EventEmitter {
     }
 
     sourceFailed(source: Resource, error: unknown) {
+        console.error(`[Resources] Failed to load: ${source.name}`, error);
+
+        if (!this.settleSource(source)) return;
 
         this.failed++;
         this.loaded++;
-        console.error(`[Resources] Failed to load: ${source.name}`, error);
         this.loading.trigger('failedSource', [
             source.name,
             this.loaded,
