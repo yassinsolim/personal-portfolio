@@ -289,6 +289,9 @@ export default class MonitorScreen extends EventEmitter {
                 'allow-popups-to-escape-sandbox',
             ].join(' ')
         );
+        // Permissions Policy delegation: sandbox tokens alone do not grant these
+        // to a cross-origin frame, and the embedded OS runs games/emulators.
+        iframe.setAttribute('allow', 'fullscreen; pointer-lock; gamepad');
         iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
         iframe.setAttribute('loading', 'lazy');
         iframe.title = 'yassinOS embedded desktop';
