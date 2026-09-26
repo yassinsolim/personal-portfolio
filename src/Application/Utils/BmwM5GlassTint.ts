@@ -19,18 +19,18 @@ type TintSettings = {
 
 const M5_SIDE_AND_REAR_WINDOW_TINT: TintSettings = {
     color: 0x05070c,
-    opacity: 0.72,
-    metalness: 0.35,
-    roughness: 0.08,
-    envMapIntensity: 0.85,
+    opacity: 0.8,
+    metalness: 0,
+    roughness: 0.02,
+    envMapIntensity: 0.5,
 };
 
 const M5_FRONT_WINDSHIELD_TINT: TintSettings = {
     color: 0x080b12,
-    opacity: 0.32,
-    metalness: 0.25,
-    roughness: 0.08,
-    envMapIntensity: 0.7,
+    opacity: 0.5,
+    metalness: 0,
+    roughness: 0.02,
+    envMapIntensity: 0.5,
 };
 
 const applyGlassTint = (

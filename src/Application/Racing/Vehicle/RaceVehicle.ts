@@ -3,6 +3,7 @@ import Application from '../../Application';
 import Resources from '../../Utils/Resources';
 import UIEventBus from '../../UI/EventBus';
 import { applyBmwM5GlassTint } from '../../Utils/BmwM5GlassTint';
+import { applyCarFinish } from '../../Utils/CarFinish';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -2892,10 +2893,10 @@ export default class RaceVehicle {
             }
             material.needsUpdate = true;
         });
-        if (carId === MERCEDES_GT63S_EDITION_ONE_ID) {
-            return;
+        if (carId !== MERCEDES_GT63S_EDITION_ONE_ID) {
+            this.applyRaceMaterialStyling(model, carId);
         }
-        this.applyRaceMaterialStyling(model, carId);
+        applyCarFinish(model, carOptionsById[carId]);
     }
 
     applyTextureQuality(material: THREE.MeshStandardMaterial) {

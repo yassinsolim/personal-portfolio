@@ -5,7 +5,25 @@ export type CarOption = {
     modelPath: string;
     lengthMeters: number;
     race: CarRaceConfig;
+    windowTint?: CarWindowTint;
+    paint?: CarPaint;
     preload?: boolean;
+};
+
+// opacity works like tint darkness: 0.8 is roughly a 20% film, 0.5 is 50%
+export type CarWindowTint = {
+    materials: string[];
+    opacity: number;
+    windshieldOpacity: number;
+    color?: number;
+};
+
+export type CarPaint = {
+    materials: string[];
+    color: number;
+    metalness: number;
+    roughness: number;
+    clearcoatRoughness?: number;
 };
 
 export type DrivetrainType = 'RWD' | 'AWD' | 'FWD';
@@ -57,6 +75,13 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
         lengthMeters: 4.75,
+        // the canopy is two stacked glass shells, so each layer is lighter
+        // and the pair lands near the 0.8 / 0.5 the other cars use
+        windowTint: {
+            materials: ['window', 'window_0', 'window_1', 'window_b'],
+            opacity: 0.55,
+            windshieldOpacity: 0.3,
+        },
         race: {
             visualForwardAxis: 'positiveZ',
             groundOffsetMeters: -0.08,
@@ -99,6 +124,19 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/bmw_m3_e92_stance/source/bmw_m3_e92_stance.glb',
         lengthMeters: 4.615,
+        windowTint: {
+            materials: ['e92_glass', 'e92_glass_int'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        // polar white: solid (non-metallic) white under a glossy clearcoat
+        paint: {
+            materials: ['e92_paint'],
+            color: 0xd8d9d6,
+            metalness: 0,
+            roughness: 0.28,
+            clearcoatRoughness: 0.03,
+        },
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
@@ -177,6 +215,11 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/2019_mercedes-benz_c63_s_amg_coupe/source/2019_mercedes-benz_c63_s_amg_coupe.glb',
         lengthMeters: 4.75,
+        windowTint: {
+            materials: ['c63mat_glass1'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
@@ -216,6 +259,11 @@ export const carOptions: CarOption[] = [
         resourceName: 'carModelBmwF82M4',
         modelPath: 'models/Cars/bmw_m4_f82/source/bmw_m4_f82.glb',
         lengthMeters: 4.67,
+        windowTint: {
+            materials: ['arm4_glass', 'arm4_glass_tinted'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
@@ -349,6 +397,11 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/mercedes_benz_gt63s_edition_one/source/gt63s_edition1.glb',
         lengthMeters: 5.054,
+        windowTint: {
+            materials: ['window tint 20', 'glass'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
         race: {
             visualForwardAxis: 'positiveZ',
             allowRwdDrift: true,
