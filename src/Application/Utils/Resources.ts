@@ -16,7 +16,9 @@ const canCompileWasm = () => {
             new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
         );
         return true;
-    } catch (error) {
+    } catch {
+        // compiling throws exactly when csp blocks wasm, which is the case
+        // this check exists to detect
         return false;
     }
 };

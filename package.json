@@ -1,12 +1,15 @@
 {
     "repository": "#",
     "license": "UNLICENSED",
+    "engines": {
+        "node": ">=20.10.0"
+    },
     "scripts": {
         "prebuild": "node scripts/write-racing-config.js",
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
         "export:glb": "EXPORT_SCENE=1 npm run dev",
-        "optimize:models": "node --no-warnings scripts/optimize-models.mjs",
+        "optimize:models": "node scripts/optimize-models.mjs",
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",

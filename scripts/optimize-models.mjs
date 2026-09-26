@@ -17,7 +17,27 @@ import {
 import { MeshoptSimplifier } from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import sharp from 'sharp';
-import { carOptions } from '../src/Application/carOptions.ts';
+import ts from 'typescript';
+
+// node 20 can't import .ts files, so strip the types with the compiler the
+// app already uses and import the result from a data url
+const loadCarOptions = async () => {
+    const source = await fs.readFile(
+        new URL('../src/Application/carOptions.ts', import.meta.url),
+        'utf8'
+    );
+    const { outputText } = ts.transpileModule(source, {
+        compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2020,
+        },
+    });
+    const encoded = Buffer.from(outputText).toString('base64');
+    const loaded = await import(`data:text/javascript;base64,${encoded}`);
+    return loaded.carOptions;
+};
+
+const carOptions = await loadCarOptions();
 
 // max geometric deviation allowed when simplifying, in real world meters
 const SIMPLIFY_ERROR_METERS = 0.0003;
@@ -96,10 +116,9 @@ const maxScale = (matrix) =>
         Math.hypot(matrix[8], matrix[9], matrix[10])
     );
 
-// meshoptimizer's error is relative to each primitive's own extent, so convert
-// one absolute budget into a per primitive relative error. the largest world
-// scale among nodes sharing a mesh wins, keeping the strictest bound
-const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
+// the largest world scale among nodes sharing a mesh wins, so the error bound
+// holds for every instance
+const collectMeshScales = (document) => {
     const meshScales = new Map();
     for (const node of document.getRoot().listNodes()) {
         const mesh = node.getMesh();
@@ -107,22 +126,29 @@ const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
         const scale = maxScale(node.getWorldMatrix());
         meshScales.set(mesh, Math.max(meshScales.get(mesh) || 0, scale));
     }
+    return meshScales;
+};
 
-    for (const [mesh, scale] of meshScales) {
-        if (!scale) continue;
-        for (const prim of mesh.listPrimitives()) {
-            if (prim.getMode() !== TRIANGLES) continue;
-            if (!shouldSimplify(prim)) continue;
-            const position = prim.getAttribute('POSITION');
-            if (!position) continue;
-            const min = position.getMin([]);
-            const max = position.getMax([]);
-            const extent = Math.max(
-                max[0] - min[0],
-                max[1] - min[1],
-                max[2] - min[2]
+const primitiveExtent = (prim) => {
+    const position = prim.getAttribute('POSITION');
+    if (!position) return 0;
+    const min = position.getMin([]);
+    const max = position.getMax([]);
+    return Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+};
+
+// meshoptimizer's error is relative to each primitive's own extent, so convert
+// one absolute budget into a per primitive relative error
+const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
+    for (const [mesh, scale] of collectMeshScales(document)) {
+        const prims = mesh
+            .listPrimitives()
+            .filter(
+                (prim) => prim.getMode() === TRIANGLES && shouldSimplify(prim)
             );
-            if (!extent) continue;
+        for (const prim of prims) {
+            const extent = primitiveExtent(prim);
+            if (!scale || !extent) continue;
             simplifyPrimitive(prim, {
                 simplifier: MeshoptSimplifier,
                 ratio: 0,
