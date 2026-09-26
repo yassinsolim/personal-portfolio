@@ -43,9 +43,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   (0.8 is about a 20% tint). Lamp lenses that share a glass material are skipped by height/size.
 - The floor is baked and unlit, so the car's floor shadow comes from `World/CarContactShadow.ts`:
   rendered once per car from underneath, blurred, and kept as a child of the car model.
-- The room textures are baked lighting, so don't recolor them in an image editor: it leaves the
-  old color around every UV island. Edit the colors in `scripts/recolor-room.py` and rerun it;
-  it starts from Henry's original bakes (git history) and masks by the meshes' UV islands.
+- The room textures are baked lighting, so don't edit them in an image editor: it leaves the
+  old color around every UV island. Colors, the desk credits page, and the Yassin Co. labels
+  all live in `scripts/build-room-textures.py`; edit and rerun it. It starts from Henry's
+  original bakes (git history), masks by the meshes' UV islands, and writes 4k plus `_2k` copies.
+- `sources.ts` loads the `_2k` room textures on mobile and low power devices (`Utils/Device.ts`).
+  Unknown `deviceMemory` (Safari, Firefox) must not count as low memory.
 
 ## Runtime Notes
 - Requires Node 20.10 or newer (`engines` in `package.json`), Node 22 LTS recommended: webpack-cli 7

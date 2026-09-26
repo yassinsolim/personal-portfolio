@@ -9,6 +9,7 @@ import screenVert from './Shaders/screen/vertex.glsl';
 // @ts-ignore
 import screenFrag from './Shaders/screen/fragment.glsl';
 import Time from './Utils/Time';
+import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
 
 export default class Renderer {
     application: Application;
@@ -44,8 +45,8 @@ export default class Renderer {
         this.overlayScene = this.application.overlayScene;
         this.camera = this.application.camera;
         this.qualityMode = 'quality';
-        this.mobileDevice = this.detectMobileDevice();
-        this.lowPowerDevice = this.detectLowPowerDevice();
+        this.mobileDevice = isMobileDevice();
+        this.lowPowerDevice = isLowPowerDevice();
         this.contextLost = false;
         this.contextLostOverlay = null;
         this.frameSamples = [];
@@ -150,23 +151,6 @@ export default class Renderer {
                 this.resize();
             }
         );
-    }
-
-    detectMobileDevice() {
-        return (
-            window.matchMedia?.('(pointer: coarse)').matches ||
-            window.matchMedia?.('(max-width: 820px)').matches ||
-            window.matchMedia?.('(max-height: 520px)').matches
-        );
-    }
-
-    detectLowPowerDevice() {
-        const navigatorWithHints = navigator as Navigator & {
-            deviceMemory?: number;
-        };
-        const cores = navigator.hardwareConcurrency || 4;
-        const memory = navigatorWithHints.deviceMemory || 4;
-        return this.detectMobileDevice() || cores <= 4 || memory <= 4;
     }
 
     getPixelRatioCap() {

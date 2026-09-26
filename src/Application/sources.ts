@@ -1,4 +1,10 @@
 import { carOptions, getStoredCarId } from './carOptions';
+import { isLowPowerDevice } from './Utils/Device';
+
+// the baked room textures are 4k (about 85 MB of gpu memory each with mips),
+// so mobile and low power devices get the 2k copies
+const roomTexture = (path: string) =>
+    isLowPowerDevice() ? path.replace(/\.jpg$/, '_2k.jpg') : path;
 
 const initialCarId = getStoredCarId();
 const preloadIds = new Set(
@@ -23,7 +29,7 @@ const sources: Resource[] = [
     {
         name: 'computerSetupTexture',
         type: 'texture',
-        path: 'models/Computer/baked_computer.jpg',
+        path: roomTexture('models/Computer/baked_computer.jpg'),
     },
     {
         name: 'environmentModel',
@@ -33,7 +39,7 @@ const sources: Resource[] = [
     {
         name: 'environmentTexture',
         type: 'texture',
-        path: 'models/World/baked_environment.jpg',
+        path: roomTexture('models/World/baked_environment.jpg'),
     },
     {
         name: 'decorModel',
@@ -43,7 +49,7 @@ const sources: Resource[] = [
     {
         name: 'decorTexture',
         type: 'texture',
-        path: 'models/Decor/baked_decor_modified.jpg',
+        path: roomTexture('models/Decor/baked_decor_modified.jpg'),
     },
     {
         name: 'monitorSmudgeTexture',
