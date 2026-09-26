@@ -28,7 +28,7 @@ const getDepthMaterial = () => {
     depthMaterial.onBeforeCompile = (shader) => {
         shader.fragmentShader = shader.fragmentShader.replace(
             'gl_FragColor = vec4( vec3( 1.0 - fragCoordZ ), opacity );',
-            `gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * ${DARKNESS.toFixed(2)} );`,
+            `gl_FragColor = vec4( vec3( 0.0 ), ( 1.0 - fragCoordZ ) * ${DARKNESS.toFixed(2)} );`
         );
     };
     return depthMaterial;
@@ -38,7 +38,7 @@ const getBlurQuad = () => {
     if (!blurQuad) {
         blurQuad = new THREE.Mesh(
             new THREE.PlaneGeometry(2, 2),
-            horizontalBlur,
+            horizontalBlur
         );
         blurQuad.position.z = -0.5;
         // rendering a bare mesh skips the scene's matrix update
@@ -51,7 +51,7 @@ const blur = (
     renderer: THREE.WebGLRenderer,
     target: THREE.WebGLRenderTarget,
     scratch: THREE.WebGLRenderTarget,
-    amount: number,
+    amount: number
 ) => {
     const quad = getBlurQuad();
     quad.material = horizontalBlur;
@@ -70,7 +70,7 @@ const blur = (
 export const addContactShadow = (
     renderer: THREE.WebGLRenderer,
     car: THREE.Object3D,
-    groundY: number,
+    groundY: number
 ) => {
     car.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(car);
@@ -90,7 +90,7 @@ export const addContactShadow = (
         depth / 2,
         -depth / 2,
         0,
-        size.y * HEIGHT_FACTOR,
+        size.y * HEIGHT_FACTOR
     );
     camera.position.set(center.x, groundY, center.z);
     camera.rotation.x = Math.PI / 2;
@@ -129,7 +129,7 @@ export const addContactShadow = (
     texture.needsUpdate = true;
 
     const geometry = new THREE.PlaneGeometry(width, depth).rotateX(
-        -Math.PI / 2,
+        -Math.PI / 2
     );
     const uv = geometry.getAttribute('uv');
     for (let i = 0; i < uv.count; i++) {
@@ -151,7 +151,7 @@ export const addContactShadow = (
     const world = new THREE.Matrix4().makeTranslation(
         center.x,
         groundY + LIFT,
-        center.z,
+        center.z
     );
     car.matrixWorld
         .clone()

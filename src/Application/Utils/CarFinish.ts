@@ -35,7 +35,7 @@ const getCarSpaceBox = (model: THREE.Object3D) => {
         const geometry = child.geometry as THREE.BufferGeometry;
         if (!geometry.boundingBox) geometry.computeBoundingBox();
         _box.copy(geometry.boundingBox!).applyMatrix4(
-            getCarSpaceMatrix(model, child),
+            getCarSpaceMatrix(model, child)
         );
         box.union(_box);
     });
@@ -45,7 +45,7 @@ const getCarSpaceBox = (model: THREE.Object3D) => {
 const isWindowMesh = (
     model: THREE.Object3D,
     mesh: THREE.Mesh,
-    carBox: THREE.Box3,
+    carBox: THREE.Box3
 ) => {
     const geometry = mesh.geometry as THREE.BufferGeometry;
     if (!geometry.boundingBox) geometry.computeBoundingBox();
@@ -59,7 +59,7 @@ const isWindowMesh = (
         ((center.y - carBox.min.y) / Math.max(carSize.y, 1e-6)) * 2 - 1;
     const length = Math.max(carSize.x, carSize.y, carSize.z);
     const bigSides = [size.x, size.y, size.z].filter(
-        (side) => side >= length * MIN_WINDOW_SIZE,
+        (side) => side >= length * MIN_WINDOW_SIZE
     ).length;
     return height > MIN_WINDOW_HEIGHT && bigSides >= 2;
 };
@@ -68,12 +68,12 @@ const isWindowMesh = (
 const readTriangle = (
     geometry: THREE.BufferGeometry,
     triangle: number,
-    matrix: THREE.Matrix4,
+    matrix: THREE.Matrix4
 ) => {
     const position = geometry.getAttribute('position');
     const index = geometry.getIndex();
     const vertices = [0, 1, 2].map((corner) =>
-        index ? index.getX(triangle * 3 + corner) : triangle * 3 + corner,
+        index ? index.getX(triangle * 3 + corner) : triangle * 3 + corner
     );
     _a.fromBufferAttribute(position, vertices[0]).applyMatrix4(matrix);
     _b.fromBufferAttribute(position, vertices[1]).applyMatrix4(matrix);
@@ -87,7 +87,7 @@ const classifyTriangle = (
     normal: THREE.Vector3,
     centroid: THREE.Vector3,
     carCenter: THREE.Vector3,
-    forwardSign: number,
+    forwardSign: number
 ): GlassZone => {
     if (normal.dot(_outward.subVectors(centroid, carCenter)) < 0) {
         normal.negate();
@@ -104,7 +104,7 @@ const buildGeometry = (source: THREE.BufferGeometry, vertices: number[]) => {
         const sourceAttribute = attribute as THREE.BufferAttribute;
         if ((sourceAttribute as any).isInterleavedBufferAttribute) return;
         const ArrayType = sourceAttribute.array.constructor as new (
-            length: number,
+            length: number
         ) =>
             | Float32Array
             | Uint32Array
@@ -121,7 +121,7 @@ const buildGeometry = (source: THREE.BufferGeometry, vertices: number[]) => {
         });
         geometry.setAttribute(
             name,
-            new THREE.BufferAttribute(array, size, sourceAttribute.normalized),
+            new THREE.BufferAttribute(array, size, sourceAttribute.normalized)
         );
     });
     geometry.computeBoundingBox();
@@ -132,7 +132,7 @@ const buildGeometry = (source: THREE.BufferGeometry, vertices: number[]) => {
 const createTintMaterial = (
     source: THREE.MeshStandardMaterial,
     tint: CarWindowTint,
-    opacity: number,
+    opacity: number
 ) => {
     const material = source.clone();
     material.map = null;
@@ -151,7 +151,7 @@ const createTintMaterial = (
 export const applyWindowTint = (
     model: THREE.Object3D,
     tint: CarWindowTint,
-    forwardSign: 1 | -1,
+    forwardSign: 1 | -1
 ) => {
     model.updateMatrixWorld(true);
     const carBox = getCarSpaceBox(model);
@@ -164,13 +164,13 @@ export const applyWindowTint = (
     const tintedMaterials = new Map<string, THREE.MeshStandardMaterial>();
     const materialFor = (
         source: THREE.MeshStandardMaterial,
-        zone: GlassZone,
+        zone: GlassZone
     ) => {
         const key = `${source.uuid}:${zone}`;
         if (!tintedMaterials.has(key)) {
             tintedMaterials.set(
                 key,
-                createTintMaterial(source, tint, opacityByZone[zone]),
+                createTintMaterial(source, tint, opacityByZone[zone])
             );
         }
         return tintedMaterials.get(key)!;
@@ -211,7 +211,7 @@ export const applyWindowTint = (
                 normal.normalize(),
                 _centroid,
                 carCenter,
-                forwardSign,
+                forwardSign
             );
             zoneVertices[zone].push(...vertices);
             zoneArea[zone] += area;
@@ -234,7 +234,7 @@ export const applyWindowTint = (
         mesh.material = materialFor(source, 'surround');
         const windshield = new THREE.Mesh(
             buildGeometry(geometry, zoneVertices.windshield),
-            materialFor(source, 'windshield'),
+            materialFor(source, 'windshield')
         );
         windshield.name = `${mesh.name}_windshield`;
         windshield.position.copy(mesh.position);

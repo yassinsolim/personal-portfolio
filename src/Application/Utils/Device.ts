@@ -4,7 +4,7 @@ export const isMobileDevice = () =>
     Boolean(
         window.matchMedia?.('(pointer: coarse)').matches ||
         window.matchMedia?.('(max-width: 820px)').matches ||
-        window.matchMedia?.('(max-height: 520px)').matches,
+        window.matchMedia?.('(max-height: 520px)').matches
     );
 
 // safari and firefox don't expose deviceMemory, so unknown has to count as
