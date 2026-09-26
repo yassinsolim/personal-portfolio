@@ -41,6 +41,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Window tint and repaints are data in `carOptions.ts` (`windowTint`, `paint`), applied by
   `Utils/CarFinish.ts` in both the site view and race mode. Opacity reads like film darkness
   (0.8 is about a 20% tint). Lamp lenses that share a glass material are skipped by height/size.
+- The floor is baked and unlit, so the car's floor shadow comes from `World/CarContactShadow.ts`:
+  rendered once per car from underneath, blurred, and kept as a child of the car model.
 - The room textures are baked lighting, so don't recolor them in an image editor: it leaves the
   old color around every UV island. Edit the colors in `scripts/recolor-room.py` and rerun it;
   it starts from Henry's original bakes (git history) and masks by the meshes' UV islands.
