@@ -14,6 +14,11 @@ const START_PAD_BLEND = 0.045;
 const START_PAD_FLAT_BLEND = 0.08;
 const START_PAD_BANK_BLEND = 0.12;
 const TRACK_LENGTH_SCALE = 0.475;
+// the source heights span ~560m (the real ring climbs ~300m) and the lap is
+// squeezed to 0.475 of its length, so raw heights gave 30-120% grades. this
+// keeps them near the real ring's 5-17%
+const TRACK_ELEVATION_SCALE = 0.3;
+const GROUND_PROBE_HEIGHT = 5000;
 const EDGE_MARKING_ELEVATION_OFFSET = 0.026;
 const CENTER_MARKING_ELEVATION_OFFSET = 0.028;
 
@@ -39,6 +44,9 @@ export default class NordschleifeTrack {
     visualCurve: THREE.CatmullRomCurve3;
     colliderCurve: THREE.CatmullRomCurve3;
     colliderRaycaster: THREE.Raycaster;
+    groundRaycaster: THREE.Raycaster;
+    groundProbe: THREE.Vector3;
+    groundDown: THREE.Vector3;
     debugColliderRayEnabled: boolean;
     debugRayLine: THREE.Line | null;
     debugRayPoints: THREE.Vector3[];
@@ -49,6 +57,11 @@ export default class NordschleifeTrack {
         this.resources = this.application.resources;
         this.scene = this.application.scene;
         this.colliderRaycaster = new THREE.Raycaster();
+        this.groundRaycaster = new THREE.Raycaster();
+        this.groundRaycaster.layers.set(COLLIDER_LAYER);
+        this.groundRaycaster.far = GROUND_PROBE_HEIGHT * 2;
+        this.groundProbe = new THREE.Vector3();
+        this.groundDown = new THREE.Vector3(0, -1, 0);
         this.debugRayLine = null;
         this.debugHitMarker = null;
         this.debugRayPoints = [new THREE.Vector3(), new THREE.Vector3()];
@@ -117,6 +130,7 @@ export default class NordschleifeTrack {
 
         points.forEach((point) => {
             point.x = center.x + (point.x - center.x) * TRACK_LENGTH_SCALE;
+            point.y = center.y + (point.y - center.y) * TRACK_ELEVATION_SCALE;
             point.z = center.z + (point.z - center.z) * TRACK_LENGTH_SCALE;
         });
         this.flattenStartPadElevation(points);
@@ -704,6 +718,27 @@ export default class NordschleifeTrack {
 
     getColliderMesh() {
         return this.colliderMesh;
+    }
+
+    // road height (and surface normal) under a point, for things that ride the
+    // track without their own physics, like ghost replays
+    sampleGround(x: number, z: number, normal?: THREE.Vector3) {
+        this.groundRaycaster.set(
+            this.groundProbe.set(x, GROUND_PROBE_HEIGHT, z),
+            this.groundDown
+        );
+        const hit = this.groundRaycaster.intersectObject(
+            this.colliderMesh,
+            false
+        )[0];
+        if (!hit) return null;
+        if (normal) {
+            normal
+                .copy(hit.face?.normal || this.groundDown)
+                .transformDirection(this.colliderMesh.matrixWorld);
+            if (normal.y < 0) normal.negate();
+        }
+        return hit.point.y;
     }
 
     getColliderLayer() {

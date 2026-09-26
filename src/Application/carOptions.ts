@@ -84,7 +84,6 @@ export const carOptions: CarOption[] = [
         },
         race: {
             visualForwardAxis: 'positiveZ',
-            groundOffsetMeters: -0.08,
             wheelNodeMap: {
                 frontLeft: ['rim_wheel_0'],
                 frontRight: ['rim_wheel_d_0'],

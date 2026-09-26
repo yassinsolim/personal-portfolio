@@ -64,6 +64,22 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `renderer.adaptive.reset()` (car change and race enter/exit already do) so load spikes don't
   read as a slow device. Check tuning changes with `node scripts/simulate-adaptive-resolution.mjs`.
 
+## Race Physics Notes (2026-09-26)
+- Ride height comes from real geometry (`getGeometricContactBottom`): the lowest vertex under
+  each wheel, or an axle's own rim/tire meshes for merged axles (AMG One). Detected wheel radii
+  often come from the rim or a merged axle; that floated the AMG One ~35 cm and sank the E92/M4
+  5-6 cm. Don't paper over placement with per-car `groundOffsetMeters`.
+- `followGround` tracks the road exactly while grounded and goes ballistic when the road drops
+  away faster than gravity (crests at speed). The old per-frame step cap (~5.4 m/s vertical)
+  made cars float downhill and sink uphill at speed.
+- Track heights are scaled by `TRACK_ELEVATION_SCALE` in `NordschleifeTrack.ts`. The source data
+  plus the 0.475 horizontal squeeze had made 30-120% grades. When track geometry changes, bump
+  `DEFAULT_LOBBY_PREFIX` in `MultiplayerService.ts`; ghost replays snap to the current road.
+- Drift authority fades above ~110 km/h and total yaw rate is capped by speed. At 190 km/h a
+  handbrake flick used to slide cars sideways at ~50 m/s and spin them at ~480 deg/s.
+- Measure changes with `scripts/race-physics-check.js` (paste into the console on
+  `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.
+
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
 - `npm run build` passes (with existing large asset warnings).
