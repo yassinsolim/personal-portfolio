@@ -16,6 +16,33 @@ const LAST_LOBBY_CODE_KEY = 'yassinverse:nordschleife:multiplayer:lastLobbyCode:
 
 type QualityMode = 'auto' | 'quality' | 'performance';
 
+const RENDER_MODES: { mode: QualityMode; label: string }[] = [
+    { mode: 'auto', label: 'Auto' },
+    { mode: 'quality', label: 'Quality' },
+    { mode: 'performance', label: 'Performance' },
+];
+
+const RenderModeButtons = ({
+    mode,
+    onChange,
+}: {
+    mode: QualityMode;
+    onChange: (mode: QualityMode) => void;
+}) => (
+    <>
+        {RENDER_MODES.map((option) => (
+            <button
+                key={option.mode}
+                type="button"
+                className={mode === option.mode ? 'active' : ''}
+                onClick={() => onChange(option.mode)}
+            >
+                {option.label}
+            </button>
+        ))}
+    </>
+);
+
 type HudState = {
     speedKph: number;
     gear: number;
@@ -618,6 +645,20 @@ const App = () => {
                         </select>
                     </div>
                     {!raceModeActive && (
+                        <div className="render-mode" data-prevent-click>
+                            <span>Render</span>
+                            <RenderModeButtons
+                                mode={qualityMode}
+                                onChange={handleQualityChange}
+                            />
+                            {qualityMode === 'auto' && renderScale ? (
+                                <span className="render-mode-scale">
+                                    {renderScale.toFixed(2)}x
+                                </span>
+                            ) : null}
+                        </div>
+                    )}
+                    {!raceModeActive && (
                         <div className="view-toggle" data-prevent-click>
                             <button
                                 type="button"
@@ -969,41 +1010,10 @@ const App = () => {
                                 ) : null}
                             </span>
                             <div className="race-quality-buttons">
-                                <button
-                                    type="button"
-                                    className={
-                                        qualityMode === 'auto' ? 'active' : ''
-                                    }
-                                    onClick={() => handleQualityChange('auto')}
-                                >
-                                    Auto
-                                </button>
-                                <button
-                                    type="button"
-                                    className={
-                                        qualityMode === 'quality'
-                                            ? 'active'
-                                            : ''
-                                    }
-                                    onClick={() =>
-                                        handleQualityChange('quality')
-                                    }
-                                >
-                                    Quality
-                                </button>
-                                <button
-                                    type="button"
-                                    className={
-                                        qualityMode === 'performance'
-                                            ? 'active'
-                                            : ''
-                                    }
-                                    onClick={() =>
-                                        handleQualityChange('performance')
-                                    }
-                                >
-                                    Performance
-                                </button>
+                                <RenderModeButtons
+                                    mode={qualityMode}
+                                    onChange={handleQualityChange}
+                                />
                             </div>
                         </div>
 

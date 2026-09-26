@@ -198,6 +198,36 @@ br {
     cursor: pointer;
 }
 
+.look-hint .render-mode {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    pointer-events: auto;
+}
+
+.look-hint .render-mode button {
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.look-hint .render-mode button.active {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.55);
+}
+
+.look-hint .render-mode-scale {
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+}
+
 .look-hint .view-toggle {
     margin-top: 6px;
     display: flex;
@@ -765,6 +795,7 @@ body.race-mode-touch #ui-app {
 
     .look-hint .multiplayer-row input,
     .look-hint .car-switcher select,
+    .look-hint .render-mode button,
     .look-hint .view-toggle button,
     .look-hint .race-toggle button,
     .look-hint .race-pause-toggle button,
