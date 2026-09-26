@@ -9,7 +9,15 @@ import screenVert from './Shaders/screen/vertex.glsl';
 // @ts-ignore
 import screenFrag from './Shaders/screen/fragment.glsl';
 import Time from './Utils/Time';
+import AdaptiveResolution from './Utils/AdaptiveResolution';
 import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
+
+type RenderMode = 'auto' | 'quality' | 'performance';
+
+const MIN_PIXEL_RATIO = 0.5;
+// once auto has to render below one pixel per css pixel, the extras (film
+// grain overlay, heavy drift smoke) switch off too
+const EFFECTS_MIN_PIXEL_RATIO = 1;
 
 export default class Renderer {
     application: Application;
@@ -24,13 +32,15 @@ export default class Renderer {
     instance: THREE.WebGLRenderer;
     cssInstance: CSS3DRenderer;
     raiseExposure: boolean;
-    qualityMode: 'quality' | 'performance';
+    renderMode: RenderMode;
+    adaptive: AdaptiveResolution;
+    lastFrameAt: number;
+    effectsLow: boolean;
+    raceActive: boolean;
     lowPowerDevice: boolean;
     mobileDevice: boolean;
     contextLost: boolean;
     contextLostOverlay: HTMLDivElement | null;
-    frameSamples: number[];
-    lastAdaptiveQualityMs: number;
     debugEnabled: boolean;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
@@ -44,19 +54,22 @@ export default class Renderer {
         this.cssScene = this.application.cssScene;
         this.overlayScene = this.application.overlayScene;
         this.camera = this.application.camera;
-        this.qualityMode = 'quality';
         this.mobileDevice = isMobileDevice();
         this.lowPowerDevice = isLowPowerDevice();
+        this.renderMode = 'auto';
+        this.adaptive = new AdaptiveResolution(
+            MIN_PIXEL_RATIO,
+            this.sizes.pixelRatio,
+            this.lowPowerDevice ? 1 : 1.5
+        );
+        this.lastFrameAt = 0;
+        this.effectsLow = false;
+        this.raceActive = false;
         this.contextLost = false;
         this.contextLostOverlay = null;
-        this.frameSamples = [];
-        this.lastAdaptiveQualityMs = 0;
         this.debugEnabled = new URLSearchParams(window.location.search).has(
             'debugGame'
         );
-        if (this.lowPowerDevice) {
-            this.qualityMode = 'performance';
-        }
 
         this.setInstance();
         this.setupQualityListeners();
@@ -75,9 +88,7 @@ export default class Renderer {
         // this.instance.toneMapping = THREE.ACESFilmicToneMapping;
         // this.instance.toneMappingExposure = 0.9;
         this.instance.setSize(this.sizes.width, this.sizes.height);
-        this.instance.setPixelRatio(
-            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
-        );
+        this.instance.setPixelRatio(this.getPixelRatio());
         this.instance.setClearColor(0x000000, 0.0);
 
         // Style
@@ -94,9 +105,7 @@ export default class Renderer {
             preserveDrawingBuffer: false,
         });
         this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
-        this.overlayInstance.setPixelRatio(
-            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
-        );
+        this.overlayInstance.setPixelRatio(this.getPixelRatio());
         this.overlayInstance.domElement.style.position = 'absolute';
         this.overlayInstance.domElement.style.top = '0px';
         this.overlayInstance.domElement.style.mixBlendMode = 'soft-light';
@@ -136,32 +145,71 @@ export default class Renderer {
         );
 
         this.overlayScene.add(this.overlay);
-        this.applyQualityMode();
+        this.applyEffects();
     }
 
     setupQualityListeners() {
         UIEventBus.on(
             'race:qualityChange',
-            (state: { mode?: 'quality' | 'performance' } | undefined) => {
-                const nextMode =
-                    state?.mode === 'performance' ? 'performance' : 'quality';
-                if (this.qualityMode === nextMode) return;
-                this.qualityMode = nextMode;
-                this.applyQualityMode();
-                this.resize();
+            (state: { mode?: RenderMode } | undefined) => {
+                const mode =
+                    state?.mode === 'quality' || state?.mode === 'performance'
+                        ? state.mode
+                        : 'auto';
+                if (this.renderMode === mode) {
+                    UIEventBus.dispatch('render:resolution', {
+                        mode,
+                        ratio: this.getPixelRatio(),
+                    });
+                    return;
+                }
+                this.renderMode = mode;
+                this.adaptive.reset();
+                this.applyPixelRatio();
+            }
+        );
+        // switching scenes spikes frame times, which isn't the steady load
+        // the resolution should follow
+        UIEventBus.on('carChange', () => this.adaptive.reset());
+        UIEventBus.on(
+            'raceMode:changed',
+            (state: { active?: boolean } | undefined) => {
+                const active = Boolean(state?.active);
+                if (active === this.raceActive) return;
+                this.raceActive = active;
+                this.adaptive.reset();
             }
         );
     }
 
-    getPixelRatioCap() {
-        if (this.qualityMode === 'performance') return 1;
-        if (this.mobileDevice) return 1.25;
-        return 1.5;
+    getPixelRatio() {
+        if (this.renderMode === 'quality') return this.sizes.pixelRatio;
+        if (this.renderMode === 'performance') {
+            return Math.min(this.sizes.pixelRatio, 1);
+        }
+        return this.adaptive.ratio;
     }
 
-    applyQualityMode() {
-        this.overlayInstance.domElement.style.opacity =
-            this.qualityMode === 'performance' ? '0.06' : '0.12';
+    applyPixelRatio() {
+        const ratio = this.getPixelRatio();
+        this.instance.setPixelRatio(ratio);
+        this.overlayInstance.setPixelRatio(ratio);
+        this.applyEffects();
+        UIEventBus.dispatch('render:resolution', {
+            mode: this.renderMode,
+            ratio,
+        });
+    }
+
+    applyEffects() {
+        const low =
+            this.renderMode === 'performance' ||
+            (this.renderMode === 'auto' &&
+                this.adaptive.ratio < EFFECTS_MIN_PIXEL_RATIO - 1e-6);
+        this.overlayInstance.domElement.style.display = low ? 'none' : '';
+        if (low === this.effectsLow) return;
+        this.effectsLow = low;
+        UIEventBus.dispatch('render:effects', { low });
     }
 
     setupContextLossHandlers(canvas: HTMLCanvasElement) {
@@ -195,50 +243,35 @@ export default class Renderer {
         this.contextLostOverlay = null;
     }
 
-    updateAdaptiveQuality() {
-        if (this.qualityMode === 'performance') return;
-        if (this.time.elapsed < 6000) return;
-        if (this.time.elapsed - this.lastAdaptiveQualityMs < 2500) return;
-
-        const frameMs = Math.max(1, this.time.delta);
-        this.frameSamples.push(frameMs);
-        if (this.frameSamples.length > 90) {
-            this.frameSamples.shift();
+    // time frames here instead of time.delta, which is clamped at 50ms
+    updateResolution() {
+        const now = performance.now();
+        const interval = this.lastFrameAt ? now - this.lastFrameAt : 0;
+        this.lastFrameAt = now;
+        if (this.renderMode !== 'auto' || !interval) return;
+        const ratio = this.adaptive.frame(interval, now);
+        if (ratio === null) return;
+        this.applyPixelRatio();
+        if (this.debugEnabled) {
+            console.info('[game-debug] resolution', {
+                ratio,
+                fps: Math.round(this.adaptive.fps * 10) / 10,
+            });
         }
-        if (this.frameSamples.length < 60) return;
-
-        const averageFrameMs =
-            this.frameSamples.reduce((sum, value) => sum + value, 0) /
-            this.frameSamples.length;
-        const averageFps = 1000 / averageFrameMs;
-        if (averageFps >= 42) return;
-
-        this.lastAdaptiveQualityMs = this.time.elapsed;
-        this.qualityMode = 'performance';
-        this.applyQualityMode();
-        this.resize();
-        UIEventBus.dispatch('race:qualityAutoDowngrade', {
-            averageFps,
-        });
     }
 
     resize() {
+        this.adaptive.setBounds(MIN_PIXEL_RATIO, this.sizes.pixelRatio);
+        this.adaptive.reset();
         this.instance.setSize(this.sizes.width, this.sizes.height);
-        this.instance.setPixelRatio(
-            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
-        );
-
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
-
         this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
-        this.overlayInstance.setPixelRatio(
-            Math.min(this.sizes.pixelRatio, this.getPixelRatioCap())
-        );
+        this.applyPixelRatio();
     }
 
     update() {
         if (this.contextLost) return;
-        this.updateAdaptiveQuality();
+        this.updateResolution();
         this.application.camera.instance.updateProjectionMatrix();
         if (this.uniforms) {
             this.uniforms.u_time.value = Math.sin(this.time.current * 0.01);
@@ -246,7 +279,12 @@ export default class Renderer {
 
         this.instance.render(this.scene, this.camera.instance);
         this.cssInstance.render(this.cssScene, this.camera.instance);
-        this.overlayInstance.render(this.overlayScene, this.camera.instance);
+        if (!this.effectsLow) {
+            this.overlayInstance.render(
+                this.overlayScene,
+                this.camera.instance
+            );
+        }
         this.overlay.position.copy(this.camera.instance.position);
 
         if (this.debugEnabled && this.time.elapsed % 1000 < this.time.delta) {
@@ -258,7 +296,8 @@ export default class Renderer {
                 geometries: this.instance.info.memory.geometries,
                 textures: this.instance.info.memory.textures,
                 pixelRatio: this.instance.getPixelRatio(),
-                qualityMode: this.qualityMode,
+                renderMode: this.renderMode,
+                measuredFps: Math.round(this.adaptive.fps * 10) / 10,
             });
         }
     }

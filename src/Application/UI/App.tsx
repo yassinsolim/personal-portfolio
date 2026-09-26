@@ -8,12 +8,13 @@ import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService'
 import './style.css';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
+const RENDER_MODE_KEY = 'yassinverse:renderMode';
 const VOLUME_KEY = 'yassinverse:masterVolume';
 const MUTE_KEY = 'yassinverse:muted';
 const MULTIPLAYER_NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 const LAST_LOBBY_CODE_KEY = 'yassinverse:nordschleife:multiplayer:lastLobbyCode:v1';
 
-type QualityMode = 'quality' | 'performance';
+type QualityMode = 'auto' | 'quality' | 'performance';
 
 type HudState = {
     speedKph: number;
@@ -64,10 +65,21 @@ const defaultMultiplayerState: MultiplayerState = {
 
 const getStoredQualityMode = (): QualityMode => {
     try {
-        const value = window.localStorage.getItem(QUALITY_MODE_KEY);
-        return value === 'performance' ? 'performance' : 'quality';
+        const value = window.localStorage.getItem(RENDER_MODE_KEY);
+        if (
+            value === 'auto' ||
+            value === 'quality' ||
+            value === 'performance'
+        ) {
+            return value;
+        }
+        // the old setting saved 'quality' on every visit, so only an explicit
+        // performance pick carries over
+        return window.localStorage.getItem(QUALITY_MODE_KEY) === 'performance'
+            ? 'performance'
+            : 'auto';
     } catch {
-        return 'quality';
+        return 'auto';
     }
 };
 
@@ -187,6 +199,7 @@ const App = () => {
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
         getStoredQualityMode()
     );
+    const [renderScale, setRenderScale] = useState<number | null>(null);
     const [volume, setVolume] = useState(() => getStoredVolume());
     const [muted, setMuted] = useState(() => getStoredMuted());
     const [hud, setHud] = useState<HudState>({
@@ -278,6 +291,13 @@ const App = () => {
             setGraphicsContextLost(true);
         });
 
+        eventBus.on(
+            'render:resolution',
+            (state: { ratio?: number } | undefined) => {
+                if (state?.ratio) setRenderScale(state.ratio);
+            }
+        );
+
         eventBus.on('graphics:contextRestored', () => {
             setGraphicsContextLost(false);
         });
@@ -332,7 +352,7 @@ const App = () => {
     useEffect(() => {
         eventBus.dispatch('race:qualityChange', { mode: qualityMode });
         try {
-            window.localStorage.setItem(QUALITY_MODE_KEY, qualityMode);
+            window.localStorage.setItem(RENDER_MODE_KEY, qualityMode);
         } catch (error) {
             return;
         }
@@ -940,8 +960,24 @@ const App = () => {
                         </div>
 
                         <div className="race-menu-row">
-                            <span>Render Mode</span>
+                            <span>
+                                Render Mode
+                                {qualityMode === 'auto' && renderScale ? (
+                                    <span className="race-quality-scale">
+                                        {renderScale.toFixed(2)}x
+                                    </span>
+                                ) : null}
+                            </span>
                             <div className="race-quality-buttons">
+                                <button
+                                    type="button"
+                                    className={
+                                        qualityMode === 'auto' ? 'active' : ''
+                                    }
+                                    onClick={() => handleQualityChange('auto')}
+                                >
+                                    Auto
+                                </button>
                                 <button
                                     type="button"
                                     className={

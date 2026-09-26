@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import Application from '../../Application';
 import UIEventBus from '../../UI/EventBus';
 import { randomRange } from '../../Utils/Random';
 
@@ -40,7 +41,7 @@ export default class DriftSmoke {
     particles: SmokeParticle[];
     texture: THREE.Texture;
     active: boolean;
-    qualityMode: 'quality' | 'performance';
+    lowQuality: boolean;
 
     constructor(parent: THREE.Object3D) {
         this.root = new THREE.Group();
@@ -51,13 +52,13 @@ export default class DriftSmoke {
         this.particles = [];
         this.texture = createSmokeTexture();
         this.active = false;
-        this.qualityMode = 'quality';
+        // the renderer decides: performance mode, or auto running below native res
+        this.lowQuality = new Application().renderer.effectsLow;
 
         UIEventBus.on(
-            'race:qualityChange',
-            (state: { mode?: 'quality' | 'performance' } | undefined) => {
-                this.qualityMode =
-                    state?.mode === 'performance' ? 'performance' : 'quality';
+            'render:effects',
+            (state: { low?: boolean } | undefined) => {
+                this.lowQuality = Boolean(state?.low);
             }
         );
     }
@@ -78,7 +79,7 @@ export default class DriftSmoke {
     }
 
     getParticleLimit() {
-        return this.qualityMode === 'performance'
+        return this.lowQuality
             ? PERFORMANCE_PARTICLE_LIMIT
             : QUALITY_PARTICLE_LIMIT;
     }

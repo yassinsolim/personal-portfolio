@@ -462,6 +462,12 @@ body.race-mode-touch #ui-app {
     gap: 8px;
 }
 
+.race-quality-scale {
+    margin-left: 8px;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+}
+
 .race-quality-buttons button.active {
     background: rgba(255, 255, 255, 0.22);
     border-color: rgba(255, 255, 255, 0.55);

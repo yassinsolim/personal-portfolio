@@ -58,6 +58,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `$env:PATH = "$(Resolve-Path .\\.tools\\<node-folder>);$env:PATH"`
 - Supabase runtime config (optional):
   - `static/config/racing.config.json` (template: `static/config/racing.config.example.json`)
+- Render Mode defaults to Auto: `Utils/AdaptiveResolution.ts` retunes the pixel ratio every second
+  to hold 60 fps (0.5x up to the screen's native ratio, capped at 2x). Below 1x it also turns off
+  the film grain overlay and heavy drift smoke. Anything that swaps the scene should call
+  `renderer.adaptive.reset()` (car change and race enter/exit already do) so load spikes don't
+  read as a slow device. Check tuning changes with `node scripts/simulate-adaptive-resolution.mjs`.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
