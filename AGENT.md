@@ -38,6 +38,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Camera near plane is 200 on purpose: at 10 those layers z-fight from the default views.
 - A shared `GLTFLoader` plugin sets `transmission = 0` on every material. Any transmissive
   material makes three re-render the whole scene into an offscreen target each frame.
+- Window tint and repaints are data in `carOptions.ts` (`windowTint`, `paint`), applied by
+  `Utils/CarFinish.ts` in both the site view and race mode. Opacity reads like film darkness
+  (0.8 is about a 20% tint). Lamp lenses that share a glass material are skipped by height/size.
+- The room textures are baked lighting, so don't recolor them in an image editor: it leaves the
+  old color around every UV island. Edit the colors in `scripts/recolor-room.py` and rerun it;
+  it starts from Henry's original bakes (git history) and masks by the meshes' UV islands.
 
 ## Runtime Notes
 - Requires Node 20.10 or newer (`engines` in `package.json`), Node 22 LTS recommended: webpack-cli 7
