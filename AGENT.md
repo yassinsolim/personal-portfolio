@@ -28,6 +28,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Resources: `src/Application/sources.ts`, `src/Application/Utils/Resources.ts`
 - Car options: `src/Application/carOptions.ts`
 
+## Model Pipeline
+- Original Sketchfab exports live in `models-src/` (not deployed). Web-ready copies are
+  written to the same relative path under `static/` by `npm run optimize:models [carId ...]`
+  (Draco geometry, WebP textures capped at 1024px). `GLTFLoader` has a Draco decoder and needs
+  `'wasm-unsafe-eval'` in the CSP for the wasm path; it falls back to the JS decoder otherwise.
+- Only simplify materials listed in `simplifyMaterialsByModel`. Stripes and decals sit <1mm
+  above the paint, so simplifying either layer makes the paint poke through.
+- Camera near plane is 200 on purpose: at 10 those layers z-fight from the default views.
+- A shared `GLTFLoader` plugin sets `transmission = 0` on every material. Any transmissive
+  material makes three re-render the whole scene into an offscreen target each frame.
+
 ## Runtime Notes
 - Local portable Node installed at `.tools/node-v18.20.4-win-x64`.
 - Use PATH prefix when running npm scripts:

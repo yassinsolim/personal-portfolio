@@ -1,9 +1,25 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import EventEmitter from './EventEmitter';
 import Loading from './Loading';
+import { disableTransmission } from './Transmission';
+
+// browsers without 'wasm-unsafe-eval' support in CSP block wasm entirely,
+// so draco has to fall back to its asm.js decoder there
+const canCompileWasm = () => {
+    if (typeof WebAssembly !== 'object') return false;
+    try {
+        new WebAssembly.Module(
+            new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+        );
+        return true;
+    } catch (error) {
+        return false;
+    }
+};
 
 export default class Resources extends EventEmitter {
     sources: Resource[];
@@ -54,8 +70,24 @@ export default class Resources extends EventEmitter {
     }
 
     setLoaders() {
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('draco/gltf/');
+        dracoLoader.setDecoderConfig({
+            type: canCompileWasm() ? 'wasm' : 'js',
+        });
+
+        const gltfLoader = new GLTFLoader();
+        gltfLoader.setDRACOLoader(dracoLoader);
+        gltfLoader.register(() => ({
+            name: 'yassin_disable_transmission',
+            afterRoot: (gltf: { scene: THREE.Group }) => {
+                disableTransmission(gltf.scene);
+                return null;
+            },
+        }));
+
         this.loaders = {
-            gltfLoader: new GLTFLoader(),
+            gltfLoader,
             textureLoader: new THREE.TextureLoader(),
             cubeTextureLoader: new THREE.CubeTextureLoader(),
             audioLoader: new THREE.AudioLoader(),

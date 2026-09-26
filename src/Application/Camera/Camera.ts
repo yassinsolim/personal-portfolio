@@ -141,10 +141,12 @@ export default class Camera extends EventEmitter {
     }
 
     setInstance() {
+        // near plane sets depth precision. car stripes/decals sit <1mm above the
+        // paint and z-fight at near=10. closest view (monitor) is ~1700 units away
         this.instance = new THREE.PerspectiveCamera(
             35,
             this.getAspect(),
-            10,
+            200,
             900000
         );
         this.currentKeyframe = CameraKey.LOADING;

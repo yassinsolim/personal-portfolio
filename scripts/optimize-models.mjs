@@ -1,0 +1,212 @@
+// usage: node scripts/optimize-models.mjs [--src models-src] [--out static] [carId|flipper ...]
+// reads the original sketchfab exports from --src and writes web-ready glbs to
+// --out at the same relative path, so carOptions model paths stay unchanged
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { NodeIO, PropertyType } from '@gltf-transform/core';
+import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import {
+    dedup,
+    draco,
+    getBounds,
+    prune,
+    simplifyPrimitive,
+    textureCompress,
+    weld,
+} from '@gltf-transform/functions';
+import { MeshoptSimplifier } from 'meshoptimizer';
+import draco3d from 'draco3dgltf';
+import sharp from 'sharp';
+import { carOptions } from '../src/Application/carOptions.ts';
+
+// max geometric deviation allowed when simplifying, in real world meters
+const SIMPLIFY_ERROR_METERS = 0.0003;
+const TEXTURE_MAX_SIZE = 1024;
+
+// simplification only runs on materials listed here. exterior stripes and
+// decals float <1mm above the paint, so simplifying either layer lets the
+// paint poke through. only list parts nothing else is layered on
+const simplifyMaterialsByModel = {
+    // four drilled discs are 620k of the car's 1.7M triangles
+    'mercedes-gt63s-edition-one': ['Brake Disc'],
+};
+
+const extraModels = [
+    {
+        id: 'flipper',
+        modelPath: 'models/Props/flipper_zero.glb',
+        // the prop is ~15cm long and only ever seen from across the desk
+        lengthMeters: 0.15,
+        simplifyAll: true,
+    },
+];
+
+const args = process.argv.slice(2);
+const readFlag = (flag, fallback) => {
+    const index = args.indexOf(flag);
+    if (index < 0) return fallback;
+    const value = args[index + 1];
+    args.splice(index, 2);
+    return value;
+};
+const srcRoot = readFlag('--src', 'models-src');
+const outRoot = readFlag('--out', 'static');
+
+const models = [
+    ...carOptions.map((car) => ({
+        id: car.id,
+        modelPath: car.modelPath,
+        lengthMeters: car.lengthMeters,
+        simplifyMaterials: simplifyMaterialsByModel[car.id] || [],
+    })),
+    ...extraModels,
+];
+const selected = args.length
+    ? models.filter((model) => args.includes(model.id))
+    : models;
+
+const io = new NodeIO()
+    .registerExtensions(ALL_EXTENSIONS)
+    .registerDependencies({
+        'draco3d.decoder': await draco3d.createDecoderModule(),
+        'draco3d.encoder': await draco3d.createEncoderModule(),
+    });
+
+const TRIANGLES = 4;
+
+const countTriangles = (document) => {
+    let triangles = 0;
+    for (const mesh of document.getRoot().listMeshes()) {
+        for (const prim of mesh.listPrimitives()) {
+            if (prim.getMode() !== TRIANGLES) continue;
+            const indices = prim.getIndices();
+            const count = indices
+                ? indices.getCount()
+                : prim.getAttribute('POSITION').getCount();
+            triangles += count / 3;
+        }
+    }
+    return triangles;
+};
+
+const maxScale = (matrix) =>
+    Math.max(
+        Math.hypot(matrix[0], matrix[1], matrix[2]),
+        Math.hypot(matrix[4], matrix[5], matrix[6]),
+        Math.hypot(matrix[8], matrix[9], matrix[10])
+    );
+
+// meshoptimizer's error is relative to each primitive's own extent, so convert
+// one absolute budget into a per primitive relative error. the largest world
+// scale among nodes sharing a mesh wins, keeping the strictest bound
+const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
+    const meshScales = new Map();
+    for (const node of document.getRoot().listNodes()) {
+        const mesh = node.getMesh();
+        if (!mesh) continue;
+        const scale = maxScale(node.getWorldMatrix());
+        meshScales.set(mesh, Math.max(meshScales.get(mesh) || 0, scale));
+    }
+
+    for (const [mesh, scale] of meshScales) {
+        if (!scale) continue;
+        for (const prim of mesh.listPrimitives()) {
+            if (prim.getMode() !== TRIANGLES) continue;
+            if (!shouldSimplify(prim)) continue;
+            const position = prim.getAttribute('POSITION');
+            if (!position) continue;
+            const min = position.getMin([]);
+            const max = position.getMax([]);
+            const extent = Math.max(
+                max[0] - min[0],
+                max[1] - min[1],
+                max[2] - min[2]
+            );
+            if (!extent) continue;
+            simplifyPrimitive(prim, {
+                simplifier: MeshoptSimplifier,
+                ratio: 0,
+                error: errorModelUnits / scale / extent,
+                lockBorder: true,
+            });
+        }
+    }
+};
+
+const modelLength = (document) => {
+    const scene =
+        document.getRoot().getDefaultScene() ||
+        document.getRoot().listScenes()[0];
+    const { min, max } = getBounds(scene);
+    return Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2]);
+};
+
+const formatMb = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
+
+await MeshoptSimplifier.ready;
+
+for (const model of selected) {
+    const input = path.join(srcRoot, model.modelPath);
+    const output = path.join(outRoot, model.modelPath);
+    const inputBytes = (await fs.stat(input)).size;
+    const started = Date.now();
+
+    const document = await io.read(input);
+    const trianglesBefore = countTriangles(document);
+    const unitsPerMeter = modelLength(document) / model.lengthMeters;
+
+    // only textures are deduped. merging meshes would make the four wheels
+    // share one geometry, and race mode animates them per corner
+    await document.transform(
+        dedup({ propertyTypes: [PropertyType.TEXTURE] }),
+        prune({ keepLeaves: true, keepExtras: true }),
+        weld()
+    );
+    const simplifyMaterials = new Set(model.simplifyMaterials || []);
+    if (model.simplifyAll || simplifyMaterials.size) {
+        simplifyByAbsoluteError(
+            document,
+            SIMPLIFY_ERROR_METERS * unitsPerMeter,
+            (prim) =>
+                model.simplifyAll ||
+                simplifyMaterials.has(prim.getMaterial()?.getName())
+        );
+    }
+    await document.transform(
+        prune({ keepLeaves: true, keepExtras: true }),
+        textureCompress({
+            encoder: sharp,
+            targetFormat: 'webp',
+            resize: [TEXTURE_MAX_SIZE, TEXTURE_MAX_SIZE],
+            slots: /^(?!normalTexture$).*/,
+            quality: 85,
+        }),
+        textureCompress({
+            encoder: sharp,
+            targetFormat: 'webp',
+            resize: [TEXTURE_MAX_SIZE, TEXTURE_MAX_SIZE],
+            slots: /^normalTexture$/,
+            quality: 95,
+        }),
+        draco({
+            method: 'edgebreaker',
+            quantizePosition: 16,
+            quantizeNormal: 12,
+            quantizeTexcoord: 14,
+            quantizeColor: 8,
+            quantizeGeneric: 12,
+        })
+    );
+
+    const trianglesAfter = countTriangles(document);
+    await fs.mkdir(path.dirname(output), { recursive: true });
+    await io.write(output, document);
+    const outputBytes = (await fs.stat(output)).size;
+
+    console.log(
+        `${model.id}: ${formatMb(inputBytes)} -> ${formatMb(outputBytes)}, ` +
+            `${Math.round(trianglesBefore).toLocaleString()} -> ` +
+            `${Math.round(trianglesAfter).toLocaleString()} triangles ` +
+            `(${((Date.now() - started) / 1000).toFixed(1)}s)`
+    );
+}
