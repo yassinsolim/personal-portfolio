@@ -8,12 +8,40 @@ import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService'
 import './style.css';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
+const RENDER_MODE_KEY = 'yassinverse:renderMode';
 const VOLUME_KEY = 'yassinverse:masterVolume';
 const MUTE_KEY = 'yassinverse:muted';
 const MULTIPLAYER_NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 const LAST_LOBBY_CODE_KEY = 'yassinverse:nordschleife:multiplayer:lastLobbyCode:v1';
 
-type QualityMode = 'quality' | 'performance';
+type QualityMode = 'auto' | 'quality' | 'performance';
+
+const RENDER_MODES: { mode: QualityMode; label: string }[] = [
+    { mode: 'auto', label: 'Auto' },
+    { mode: 'quality', label: 'Quality' },
+    { mode: 'performance', label: 'Performance' },
+];
+
+const RenderModeButtons = ({
+    mode,
+    onChange,
+}: {
+    mode: QualityMode;
+    onChange: (mode: QualityMode) => void;
+}) => (
+    <>
+        {RENDER_MODES.map((option) => (
+            <button
+                key={option.mode}
+                type="button"
+                className={mode === option.mode ? 'active' : ''}
+                onClick={() => onChange(option.mode)}
+            >
+                {option.label}
+            </button>
+        ))}
+    </>
+);
 
 type HudState = {
     speedKph: number;
@@ -64,10 +92,21 @@ const defaultMultiplayerState: MultiplayerState = {
 
 const getStoredQualityMode = (): QualityMode => {
     try {
-        const value = window.localStorage.getItem(QUALITY_MODE_KEY);
-        return value === 'performance' ? 'performance' : 'quality';
+        const value = window.localStorage.getItem(RENDER_MODE_KEY);
+        if (
+            value === 'auto' ||
+            value === 'quality' ||
+            value === 'performance'
+        ) {
+            return value;
+        }
+        // the old setting saved 'quality' on every visit, so only an explicit
+        // performance pick carries over
+        return window.localStorage.getItem(QUALITY_MODE_KEY) === 'performance'
+            ? 'performance'
+            : 'auto';
     } catch {
-        return 'quality';
+        return 'auto';
     }
 };
 
@@ -187,6 +226,7 @@ const App = () => {
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
         getStoredQualityMode()
     );
+    const [renderScale, setRenderScale] = useState<number | null>(null);
     const [volume, setVolume] = useState(() => getStoredVolume());
     const [muted, setMuted] = useState(() => getStoredMuted());
     const [hud, setHud] = useState<HudState>({
@@ -278,6 +318,13 @@ const App = () => {
             setGraphicsContextLost(true);
         });
 
+        eventBus.on(
+            'render:resolution',
+            (state: { ratio?: number } | undefined) => {
+                if (state?.ratio) setRenderScale(state.ratio);
+            }
+        );
+
         eventBus.on('graphics:contextRestored', () => {
             setGraphicsContextLost(false);
         });
@@ -332,7 +379,7 @@ const App = () => {
     useEffect(() => {
         eventBus.dispatch('race:qualityChange', { mode: qualityMode });
         try {
-            window.localStorage.setItem(QUALITY_MODE_KEY, qualityMode);
+            window.localStorage.setItem(RENDER_MODE_KEY, qualityMode);
         } catch (error) {
             return;
         }
@@ -597,6 +644,20 @@ const App = () => {
                             ))}
                         </select>
                     </div>
+                    {!raceModeActive && (
+                        <div className="render-mode" data-prevent-click>
+                            <span>Render</span>
+                            <RenderModeButtons
+                                mode={qualityMode}
+                                onChange={handleQualityChange}
+                            />
+                            {qualityMode === 'auto' && renderScale ? (
+                                <span className="render-mode-scale">
+                                    {renderScale.toFixed(2)}x
+                                </span>
+                            ) : null}
+                        </div>
+                    )}
                     {!raceModeActive && (
                         <div className="view-toggle" data-prevent-click>
                             <button
@@ -940,34 +1001,19 @@ const App = () => {
                         </div>
 
                         <div className="race-menu-row">
-                            <span>Render Mode</span>
+                            <span>
+                                Render Mode
+                                {qualityMode === 'auto' && renderScale ? (
+                                    <span className="race-quality-scale">
+                                        {renderScale.toFixed(2)}x
+                                    </span>
+                                ) : null}
+                            </span>
                             <div className="race-quality-buttons">
-                                <button
-                                    type="button"
-                                    className={
-                                        qualityMode === 'quality'
-                                            ? 'active'
-                                            : ''
-                                    }
-                                    onClick={() =>
-                                        handleQualityChange('quality')
-                                    }
-                                >
-                                    Quality
-                                </button>
-                                <button
-                                    type="button"
-                                    className={
-                                        qualityMode === 'performance'
-                                            ? 'active'
-                                            : ''
-                                    }
-                                    onClick={() =>
-                                        handleQualityChange('performance')
-                                    }
-                                >
-                                    Performance
-                                </button>
+                                <RenderModeButtons
+                                    mode={qualityMode}
+                                    onChange={handleQualityChange}
+                                />
                             </div>
                         </div>
 

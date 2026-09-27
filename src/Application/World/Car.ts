@@ -3,6 +3,8 @@ import Application from '../Application';
 import Resources from '../Utils/Resources';
 import UIEventBus from '../UI/EventBus';
 import { applyBmwM5GlassTint } from '../Utils/BmwM5GlassTint';
+import { applyCarFinish } from '../Utils/CarFinish';
+import { addContactShadow } from './CarContactShadow';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
 
@@ -164,6 +166,7 @@ export default class Car {
         this.applyEnvironment(car);
         this.applyTextureQuality(car);
         this.applyMaterialStyling(car, carOption);
+        applyCarFinish(car, carOption);
 
         car.updateMatrixWorld(true);
 
@@ -245,6 +248,7 @@ export default class Car {
                 child.receiveShadow = true;
             }
         });
+        addContactShadow(this.application.renderer.instance, car, groundY);
     }
 
     cloneMaterials(car: THREE.Object3D) {

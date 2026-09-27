@@ -38,6 +38,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Camera near plane is 200 on purpose: at 10 those layers z-fight from the default views.
 - A shared `GLTFLoader` plugin sets `transmission = 0` on every material. Any transmissive
   material makes three re-render the whole scene into an offscreen target each frame.
+- Window tint and repaints are data in `carOptions.ts` (`windowTint`, `paint`), applied by
+  `Utils/CarFinish.ts` in both the site view and race mode. Opacity reads like film darkness
+  (0.8 is about a 20% tint). Lamp lenses that share a glass material are skipped by height/size.
+- The floor is baked and unlit, so the car's floor shadow comes from `World/CarContactShadow.ts`:
+  rendered once per car from underneath, blurred, and kept as a child of the car model.
+- The room textures are baked lighting, so don't edit them in an image editor: it leaves the
+  old color around every UV island. Colors, the desk credits page, and the Yassin Co. labels
+  all live in `scripts/build-room-textures.py`; edit and rerun it. It starts from Henry's
+  original bakes (git history), masks by the meshes' UV islands, and writes 4k plus `_2k` copies.
+- `sources.ts` loads the `_2k` room textures on mobile and low power devices (`Utils/Device.ts`).
+  Unknown `deviceMemory` (Safari, Firefox) must not count as low memory.
 
 ## Runtime Notes
 - Requires Node 20.10 or newer (`engines` in `package.json`), Node 22 LTS recommended: webpack-cli 7
@@ -47,6 +58,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `$env:PATH = "$(Resolve-Path .\\.tools\\<node-folder>);$env:PATH"`
 - Supabase runtime config (optional):
   - `static/config/racing.config.json` (template: `static/config/racing.config.example.json`)
+- Render Mode defaults to Auto: `Utils/AdaptiveResolution.ts` retunes the pixel ratio every second
+  to hold 60 fps (0.5x up to the screen's native ratio, capped at 2x). Below 1x it also turns off
+  the film grain overlay and heavy drift smoke. Anything that swaps the scene should call
+  `renderer.adaptive.reset()` (car change and race enter/exit already do) so load spikes don't
+  read as a slow device. Check tuning changes with `node scripts/simulate-adaptive-resolution.mjs`.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
