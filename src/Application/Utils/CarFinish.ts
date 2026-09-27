@@ -241,6 +241,8 @@ export const applyWindowTint = (
         windshield.quaternion.copy(mesh.quaternion);
         windshield.scale.copy(mesh.scale);
         windshield.renderOrder = mesh.renderOrder;
+        windshield.castShadow = mesh.castShadow;
+        windshield.receiveShadow = mesh.receiveShadow;
         mesh.parent?.add(windshield);
     });
 };

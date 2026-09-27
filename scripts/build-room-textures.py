@@ -309,9 +309,9 @@ def barcode(draw, box, color, unit):
     x0, y0, x1, y1 = box
     x = x0
     while x < x1:
-        width = rng.choice((1, 1, 2, 3)) * unit
+        width = rng.choice((1, 1, 2, 3)) * unit  # NOSONAR seeded so the barcode art rebuilds the same
         draw.rectangle((x, y0, min(x + width, x1), y1), fill=color)
-        x += width + rng.choice((1, 1, 2)) * unit
+        x += width + rng.choice((1, 1, 2)) * unit  # NOSONAR
 
 
 LABEL_BG = (16, 16, 18)
