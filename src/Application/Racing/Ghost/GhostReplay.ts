@@ -475,21 +475,9 @@ export default class GhostReplay {
                 nextGhost = pivot;
             }
         }
-        if (preparedModel) {
-            this.ghostRideHeight =
-                Number(preparedModel.userData.raceRideHeight) || 0;
-        } else {
-            // the stand-in isn't set on its wheels, so lift it by its own
-            // bottom until the real car finishes loading
-            nextGhost.updateMatrixWorld(true);
-            const bottom = new THREE.Box3().setFromObject(nextGhost).min.y;
-            this.ghostRideHeight = Number.isFinite(bottom) ? -bottom : 0;
-            this.loadPreparedModel?.(ghostCarId).then((model) => {
-                if (model && this.ghostCarId === ghostCarId) {
-                    this.setGhostCar(ghostCarId);
-                }
-            });
-        }
+        this.ghostRideHeight = preparedModel
+            ? Number(preparedModel.userData.raceRideHeight) || 0
+            : this.groundStandIn(nextGhost, ghostCarId);
 
         const previousGhost = this.ghostMesh;
         this.root.add(nextGhost);
@@ -498,6 +486,19 @@ export default class GhostReplay {
         this.ghostMesh = nextGhost;
         this.root.remove(previousGhost);
         this.disposeGhostOverrides(previousOverrides);
+    }
+
+    // the stand-in isn't set on its wheels, so it rides on its own bottom
+    // until the real car finishes loading and gets swapped in
+    groundStandIn(standIn: THREE.Object3D, carId: string) {
+        this.loadPreparedModel?.(carId).then((model) => {
+            if (model && this.ghostCarId === carId) {
+                this.setGhostCar(carId);
+            }
+        });
+        standIn.updateMatrixWorld(true);
+        const bottom = new THREE.Box3().setFromObject(standIn).min.y;
+        return Number.isFinite(bottom) ? -bottom : 0;
     }
 
     sampleAt(timeMs: number, samples: GhostSample[]) {
