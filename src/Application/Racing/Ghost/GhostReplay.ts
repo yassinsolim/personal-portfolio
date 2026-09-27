@@ -37,6 +37,7 @@ type GhostTelemetry = {
 };
 
 type PreparedGhostModelProvider = (carId: string) => THREE.Group | null;
+type PreparedGhostModelLoader = (carId: string) => Promise<THREE.Group | null>;
 type GhostGroundSampler = (
     x: number,
     z: number,
@@ -49,6 +50,9 @@ export default class GhostReplay {
     ghostMaterialOverrides: THREE.Material[];
     resources: Application['resources'];
     getPreparedModel: PreparedGhostModelProvider | null;
+    loadPreparedModel: PreparedGhostModelLoader | null;
+    ghostCarId: string | null;
+    ghostIsStandIn: boolean;
     fallbackGeometry: THREE.BoxGeometry;
     fallbackMaterial: THREE.MeshBasicMaterial;
     playbackSamples: GhostSample[];
@@ -73,11 +77,15 @@ export default class GhostReplay {
     constructor(
         parent: THREE.Object3D,
         getPreparedModel: PreparedGhostModelProvider | null = null,
-        sampleGround: GhostGroundSampler | null = null
+        sampleGround: GhostGroundSampler | null = null,
+        loadPreparedModel: PreparedGhostModelLoader | null = null
     ) {
         const app = new Application();
         this.resources = app.resources;
         this.getPreparedModel = getPreparedModel;
+        this.loadPreparedModel = loadPreparedModel;
+        this.ghostCarId = null;
+        this.ghostIsStandIn = false;
         this.sampleGround = sampleGround;
         this.ghostRideHeight = 0;
         this.groundNormal = new THREE.Vector3();
@@ -118,6 +126,10 @@ export default class GhostReplay {
 
     setActive(active: boolean) {
         this.active = active;
+        // the car may have finished loading while the race was closed
+        if (active && this.ghostIsStandIn && this.ghostCarId) {
+            this.setGhostCar(this.ghostCarId);
+        }
         this.root.visible = active && this.getActivePlaybackSamples().length > 1;
         if (!active) {
             this.recording = false;
@@ -424,7 +436,9 @@ export default class GhostReplay {
         this.ghostMaterialOverrides = [];
 
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
-        const preparedModel = this.getPreparedModel?.(option?.id || carId) || null;
+        const ghostCarId = option?.id || carId;
+        this.ghostCarId = ghostCarId;
+        const preparedModel = this.getPreparedModel?.(ghostCarId) || null;
         const gltf = !preparedModel && option
             ? this.resources.items.gltfModel[option.resourceName]
             : null;
@@ -432,7 +446,7 @@ export default class GhostReplay {
 
         let nextGhost: THREE.Object3D = this.buildFallbackGhostMesh();
         if (scene) {
-            const clone = scene.clone(true);
+            const clone = this.cloneGhostScene(scene);
             clone.name = 'race-ghost-car';
 
             if (!preparedModel) {
@@ -469,7 +483,8 @@ export default class GhostReplay {
         }
         this.ghostRideHeight = preparedModel
             ? Number(preparedModel.userData.raceRideHeight) || 0
-            : 0;
+            : this.groundStandIn(nextGhost, ghostCarId);
+        this.ghostIsStandIn = !preparedModel;
 
         const previousGhost = this.ghostMesh;
         this.root.add(nextGhost);
@@ -478,6 +493,31 @@ export default class GhostReplay {
         this.ghostMesh = nextGhost;
         this.root.remove(previousGhost);
         this.disposeGhostOverrides(previousOverrides);
+    }
+
+    // clone() deep copies userData through json and the wheel rig holds whole
+    // meshes, so it's left off the clone like the remote cars do
+    cloneGhostScene(scene: THREE.Object3D) {
+        const wheelRig = scene.userData.raceWheelRig;
+        delete scene.userData.raceWheelRig;
+        try {
+            return scene.clone(true);
+        } finally {
+            if (wheelRig) scene.userData.raceWheelRig = wheelRig;
+        }
+    }
+
+    // the stand-in isn't set on its wheels, so it rides on its own bottom
+    // until the real car finishes loading and gets swapped in
+    groundStandIn(standIn: THREE.Object3D, carId: string) {
+        this.loadPreparedModel?.(carId).then((model) => {
+            if (model && this.ghostCarId === carId) {
+                this.setGhostCar(carId);
+            }
+        });
+        standIn.updateMatrixWorld(true);
+        const bottom = new THREE.Box3().setFromObject(standIn).min.y;
+        return Number.isFinite(bottom) ? -bottom : 0;
     }
 
     sampleAt(timeMs: number, samples: GhostSample[]) {

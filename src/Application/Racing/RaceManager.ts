@@ -142,7 +142,8 @@ export default class RaceManager {
         this.ghostReplay = new GhostReplay(
             this.raceRoot,
             (carId) => this.vehicle.getPreparedModel(carId),
-            (x, z, normal) => this.track.sampleGround(x, z, normal)
+            (x, z, normal) => this.track.sampleGround(x, z, normal),
+            (carId) => this.vehicle.ensurePreparedModel(carId)
         );
         this.remoteSmoke = new DriftSmoke(this.raceRoot);
         this.remoteSmoke.root.name = 'race-remote-drift-smoke-root';
