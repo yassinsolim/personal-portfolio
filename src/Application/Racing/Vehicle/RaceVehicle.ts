@@ -125,16 +125,6 @@ const BMW_E92_RIM_SILVER = new THREE.Color(0xd3d8de);
 const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
 const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
 const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
-const GT63_DECAL_HINTS = [
-    'stripe',
-    'decal',
-    'livery',
-    'edition',
-    'mizo',
-    'satin metallic blue',
-    'satin metallic red',
-    'satin metallic dark',
-];
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =
@@ -2893,21 +2883,9 @@ export default class RaceVehicle {
             child.castShadow = false;
             child.receiveShadow = true;
 
-            if (
-                child.material &&
-                !Array.isArray(child.material)
-            ) {
-                const material = child.material as THREE.MeshStandardMaterial;
-                this.applyTextureQuality(material);
-            }
-
-            if (carId === MERCEDES_GT63S_EDITION_ONE_ID) {
-                this.applyGt63DecalDepthFix(child);
-                return;
-            }
-
             if (!child.material || Array.isArray(child.material)) return;
             const material = child.material as THREE.MeshStandardMaterial;
+            this.applyTextureQuality(material);
             if (envMap) {
                 material.envMap = envMap;
                 material.envMapIntensity = 0.9;
@@ -2940,28 +2918,6 @@ export default class RaceVehicle {
             map.anisotropy = anisotropy;
             map.needsUpdate = true;
         });
-    }
-
-    applyGt63DecalDepthFix(mesh: THREE.Mesh) {
-        if (!mesh.material || Array.isArray(mesh.material)) {
-            return;
-        }
-        const material = mesh.material as THREE.MeshStandardMaterial;
-        const materialName = (material.name || '').toLowerCase();
-        const meshName = (mesh.name || '').toLowerCase();
-        const isDecalLike = GT63_DECAL_HINTS.some(
-            (hint) => materialName.includes(hint) || meshName.includes(hint)
-        );
-        if (!isDecalLike) {
-            return;
-        }
-
-        material.polygonOffset = true;
-        material.polygonOffsetFactor = -4;
-        material.polygonOffsetUnits = -8;
-        material.depthWrite = false;
-        material.needsUpdate = true;
-        mesh.renderOrder = 4;
     }
 
     applyRaceMaterialStyling(model: THREE.Object3D, carId: string) {

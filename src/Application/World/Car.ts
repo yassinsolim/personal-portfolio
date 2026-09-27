@@ -27,16 +27,6 @@ const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
 const MOBILE_MAX_WIDTH = 768;
 const MOBILE_CAR_BACK_SHIFT = 0.12;
 const WHEEL_SILVER = new THREE.Color(0xcfd3da);
-const GT63_DECAL_HINTS = [
-    'stripe',
-    'decal',
-    'livery',
-    'edition',
-    'mizo',
-    'satin metallic blue',
-    'satin metallic red',
-    'satin metallic dark',
-];
 
 export default class Car {
     application: Application;
@@ -171,12 +161,9 @@ export default class Car {
         );
         car.scale.setScalar(scale);
         car.rotation.copy(this.getCarRotation(carOption));
-        if (carOption.id !== MERCEDES_GT63S_EDITION_ONE_ID) {
-            this.applyEnvironment(car);
-        }
+        this.applyEnvironment(car);
         this.applyTextureQuality(car);
         this.applyMaterialStyling(car, carOption);
-        this.applyGt63DecalDepthFix(car, carOption);
 
         car.updateMatrixWorld(true);
 
@@ -396,40 +383,6 @@ export default class Car {
                 map.anisotropy = anisotropy;
                 map.needsUpdate = true;
             });
-        });
-    }
-
-    applyGt63DecalDepthFix(car: THREE.Object3D, carOption: CarOption) {
-        if (carOption.id !== MERCEDES_GT63S_EDITION_ONE_ID) {
-            return;
-        }
-
-        car.traverse((child) => {
-            if (
-                !(child instanceof THREE.Mesh) ||
-                !child.material ||
-                Array.isArray(child.material)
-            ) {
-                return;
-            }
-
-            const material = child.material as THREE.MeshStandardMaterial;
-            const materialName = (material.name || '').toLowerCase();
-            const meshName = (child.name || '').toLowerCase();
-            const isDecalLike = GT63_DECAL_HINTS.some(
-                (hint) =>
-                    materialName.includes(hint) || meshName.includes(hint)
-            );
-            if (!isDecalLike) {
-                return;
-            }
-
-            material.polygonOffset = true;
-            material.polygonOffsetFactor = -4;
-            material.polygonOffsetUnits = -8;
-            material.depthWrite = false;
-            material.needsUpdate = true;
-            child.renderOrder = 4;
         });
     }
 

@@ -1,11 +1,15 @@
 {
     "repository": "#",
     "license": "UNLICENSED",
+    "engines": {
+        "node": ">=20.10.0"
+    },
     "scripts": {
         "prebuild": "node scripts/write-racing-config.js",
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
         "export:glb": "EXPORT_SCENE=1 npm run dev",
+        "optimize:models": "node scripts/optimize-models.mjs",
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",
@@ -50,10 +54,16 @@
     },
     "devDependencies": {
         "@babel/preset-typescript": "^7.16.7",
+        "@gltf-transform/core": "^4.5.0",
+        "@gltf-transform/extensions": "^4.5.0",
+        "@gltf-transform/functions": "^4.5.0",
         "@types/react": "^17.0.43",
         "@types/react-dom": "^17.0.14",
         "@types/stats.js": "^0.17.0",
         "@types/three": "^0.138.0",
-        "playwright": "^1.58.2"
+        "draco3dgltf": "^1.5.7",
+        "meshoptimizer": "^1.3.0",
+        "playwright": "^1.58.2",
+        "sharp": "^0.35.4"
     }
 }
