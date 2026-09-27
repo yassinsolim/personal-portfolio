@@ -37,6 +37,7 @@ type GhostTelemetry = {
 };
 
 type PreparedGhostModelProvider = (carId: string) => THREE.Group | null;
+type PreparedGhostModelLoader = (carId: string) => Promise<THREE.Group | null>;
 type GhostGroundSampler = (
     x: number,
     z: number,
@@ -49,6 +50,8 @@ export default class GhostReplay {
     ghostMaterialOverrides: THREE.Material[];
     resources: Application['resources'];
     getPreparedModel: PreparedGhostModelProvider | null;
+    loadPreparedModel: PreparedGhostModelLoader | null;
+    ghostCarId: string | null;
     fallbackGeometry: THREE.BoxGeometry;
     fallbackMaterial: THREE.MeshBasicMaterial;
     playbackSamples: GhostSample[];
@@ -73,11 +76,14 @@ export default class GhostReplay {
     constructor(
         parent: THREE.Object3D,
         getPreparedModel: PreparedGhostModelProvider | null = null,
-        sampleGround: GhostGroundSampler | null = null
+        sampleGround: GhostGroundSampler | null = null,
+        loadPreparedModel: PreparedGhostModelLoader | null = null
     ) {
         const app = new Application();
         this.resources = app.resources;
         this.getPreparedModel = getPreparedModel;
+        this.loadPreparedModel = loadPreparedModel;
+        this.ghostCarId = null;
         this.sampleGround = sampleGround;
         this.ghostRideHeight = 0;
         this.groundNormal = new THREE.Vector3();
@@ -424,7 +430,9 @@ export default class GhostReplay {
         this.ghostMaterialOverrides = [];
 
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
-        const preparedModel = this.getPreparedModel?.(option?.id || carId) || null;
+        const ghostCarId = option?.id || carId;
+        this.ghostCarId = ghostCarId;
+        const preparedModel = this.getPreparedModel?.(ghostCarId) || null;
         const gltf = !preparedModel && option
             ? this.resources.items.gltfModel[option.resourceName]
             : null;
@@ -467,9 +475,21 @@ export default class GhostReplay {
                 nextGhost = pivot;
             }
         }
-        this.ghostRideHeight = preparedModel
-            ? Number(preparedModel.userData.raceRideHeight) || 0
-            : 0;
+        if (preparedModel) {
+            this.ghostRideHeight =
+                Number(preparedModel.userData.raceRideHeight) || 0;
+        } else {
+            // the stand-in isn't set on its wheels, so lift it by its own
+            // bottom until the real car finishes loading
+            nextGhost.updateMatrixWorld(true);
+            const bottom = new THREE.Box3().setFromObject(nextGhost).min.y;
+            this.ghostRideHeight = Number.isFinite(bottom) ? -bottom : 0;
+            this.loadPreparedModel?.(ghostCarId).then((model) => {
+                if (model && this.ghostCarId === ghostCarId) {
+                    this.setGhostCar(ghostCarId);
+                }
+            });
+        }
 
         const previousGhost = this.ghostMesh;
         this.root.add(nextGhost);
