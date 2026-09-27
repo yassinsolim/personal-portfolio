@@ -37,6 +37,11 @@ type GhostTelemetry = {
 };
 
 type PreparedGhostModelProvider = (carId: string) => THREE.Group | null;
+type GhostGroundSampler = (
+    x: number,
+    z: number,
+    normal: THREE.Vector3
+) => number | null;
 
 export default class GhostReplay {
     root: THREE.Group;
@@ -58,14 +63,27 @@ export default class GhostReplay {
     lastSampleAtMs: number;
     externalReplay: GhostLapReplay | null;
     lastCompletedLapReplay: GhostLapReplay | null;
+    sampleGround: GhostGroundSampler | null;
+    ghostRideHeight: number;
+    groundNormal: THREE.Vector3;
+    ghostForward: THREE.Vector3;
+    ghostSide: THREE.Vector3;
+    ghostBasis: THREE.Matrix4;
 
     constructor(
         parent: THREE.Object3D,
-        getPreparedModel: PreparedGhostModelProvider | null = null
+        getPreparedModel: PreparedGhostModelProvider | null = null,
+        sampleGround: GhostGroundSampler | null = null
     ) {
         const app = new Application();
         this.resources = app.resources;
         this.getPreparedModel = getPreparedModel;
+        this.sampleGround = sampleGround;
+        this.ghostRideHeight = 0;
+        this.groundNormal = new THREE.Vector3();
+        this.ghostForward = new THREE.Vector3();
+        this.ghostSide = new THREE.Vector3();
+        this.ghostBasis = new THREE.Matrix4();
 
         this.root = new THREE.Group();
         this.root.name = 'race-ghost-root';
@@ -344,6 +362,32 @@ export default class GhostReplay {
 
         this.ghostMesh.position.set(sample.x, sample.y, sample.z);
         this.ghostMesh.quaternion.set(sample.qx, sample.qy, sample.qz, sample.qw);
+        this.snapGhostToRoad(sample);
+    }
+
+    // replays keep their line but take height and tilt from the road as it is
+    // now, so laps recorded before a track change don't float or sink
+    snapGhostToRoad(sample: { x: number; z: number }) {
+        if (!this.sampleGround || !this.ghostRideHeight) return;
+        const groundY = this.sampleGround(
+            sample.x,
+            sample.z,
+            this.groundNormal
+        );
+        if (groundY === null) return;
+
+        const forward = this.ghostForward
+            .set(0, 0, 1)
+            .applyQuaternion(this.ghostMesh.quaternion)
+            .projectOnPlane(this.groundNormal);
+        if (forward.lengthSq() < 1e-8) return;
+        forward.normalize();
+        const side = this.ghostSide
+            .crossVectors(this.groundNormal, forward)
+            .normalize();
+        this.ghostBasis.makeBasis(side, this.groundNormal, forward);
+        this.ghostMesh.quaternion.setFromRotationMatrix(this.ghostBasis);
+        this.ghostMesh.position.y = groundY + this.ghostRideHeight;
     }
 
     buildFallbackGhostMesh() {
@@ -414,7 +458,18 @@ export default class GhostReplay {
                 }
             });
             nextGhost = clone;
+            if (preparedModel) {
+                // a prepared model sits on its wheels through its own offset,
+                // so the replayed pose goes on a pivot instead of the model
+                const pivot = new THREE.Group();
+                pivot.name = 'race-ghost-car';
+                pivot.add(clone);
+                nextGhost = pivot;
+            }
         }
+        this.ghostRideHeight = preparedModel
+            ? Number(preparedModel.userData.raceRideHeight) || 0
+            : 0;
 
         const previousGhost = this.ghostMesh;
         this.root.add(nextGhost);

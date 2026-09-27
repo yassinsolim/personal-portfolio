@@ -30,13 +30,23 @@ const LOW_SPEED_STEER_BOOST = 2.05;
 const LOW_SPEED_STEER_BOOST_FADE_MPS = 24;
 const LOW_SPEED_STEER_RESPONSE_BOOST = 1.9;
 const DRIFT_FULL_SPEED_MPS = 23;
+const DRIFT_FADE_START_MPS = 30;
+const DRIFT_FADE_END_MPS = 70;
+const DRIFT_HIGH_SPEED_AUTHORITY = 0.3;
+const DRIFT_MAX_LATERAL_MPS = 16;
+// full steering lock at 300 km/h is ~1.12 rad/s, so the floor never clips
+// normal cornering
+const YAW_RATE_LATERAL_ACCEL = 70;
+const YAW_RATE_LIMIT_MIN = 1.2;
+const YAW_RATE_LIMIT_MAX = 3.5;
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
-const LOW_SPEED_GROUNDING_BLEND_SPEED_MPS = 10;
-const LOW_SPEED_GROUNDING_LERP_MIN = 3.5;
-const LOW_SPEED_GROUNDING_LERP_MAX = 30;
-const LOW_SPEED_GROUNDING_MAX_STEP_MIN = 0.006;
-const LOW_SPEED_GROUNDING_MAX_STEP_MAX = 0.09;
+const MAX_SINGLE_WHEEL_RADIUS = 0.6;
+// the collider is 5m panels, so the road has to drop this far under the car's
+// ballistic path before a crest counts as a jump, or every panel edge hops
+const CREST_LAUNCH_TOLERANCE = 0.06;
+const MAX_GROUND_FOLLOW_GRADE = 1.2;
+const GROUND_FOLLOW_STEP_ALLOWANCE = 0.25;
 const WHEEL_PROBE_CLEARANCE_BIAS = 0;
 const MAX_WHEEL_ANTI_SINK_LIFT = 0.018;
 const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MIN = 0.7;
@@ -44,7 +54,9 @@ const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MAX = 4.8;
 const SUSPENSION_TRAVEL_METERS = 0.42;
 const SURFACE_NORMAL_BLEND_SPEED_MPS = 16;
 const SURFACE_NORMAL_LERP_MIN = 1.2;
-const SURFACE_NORMAL_LERP_MAX = 4.8;
+// the normal blend and the body slerp stack, so both need to be quick at speed
+// or the body trails the road's pitch and wheels sink or lift on grade changes
+const SURFACE_NORMAL_LERP_MAX = 12;
 const SURFACE_FORWARD_BLEND_SPEED_MPS = 18;
 const SURFACE_FORWARD_LERP_MIN = 4.5;
 const SURFACE_FORWARD_LERP_MAX = 9.5;
@@ -242,6 +254,7 @@ export default class RaceVehicle {
     driftAmount: number;
     slipRatio: number;
     verticalVelocity: number;
+    stepStartY: number;
     yaw: number;
     steerAngle: number;
     steerVisualAngle: number;
@@ -343,6 +356,7 @@ export default class RaceVehicle {
         this.driftAmount = 0;
         this.slipRatio = 0;
         this.verticalVelocity = 0;
+        this.stepStartY = 0;
         this.yaw = 0;
         this.steerAngle = 0;
         this.steerVisualAngle = 0;
@@ -602,12 +616,10 @@ export default class RaceVehicle {
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
 
         const bbox = new THREE.Box3().setFromObject(model);
-        const wheelBottom =
-            carId === AMG_ONE_ID
-                ? this.getTireContactBottom(model) || this.getWheelContactBottom(wheelRig)
-                : this.getWheelContactBottom(wheelRig) ||
-                  this.getTireContactBottom(model);
-        const contactBottom = wheelBottom ?? bbox.min.y;
+        const contactBottom =
+            this.getGeometricContactBottom(model, wheelRig) ??
+            this.getWheelContactBottom(wheelRig) ??
+            bbox.min.y;
         model.position.set(
             0,
             -rideHeight - contactBottom + (option?.race.groundOffsetMeters || 0),
@@ -917,41 +929,101 @@ export default class RaceVehicle {
         return minBottom;
     }
 
-    getTireContactBottom(model: THREE.Object3D) {
-        let minBottom = Infinity;
-        const bottom = new THREE.Vector3();
-
+    // lowest real geometry under each wheel. detected radii often come from the
+    // rim or a merged axle, which floated or sank whole cars by several cm
+    getGeometricContactBottom(model: THREE.Object3D, wheels: WheelRig[]) {
         model.updateMatrixWorld(true);
-        model.traverse((child) => {
-            if (!(child instanceof THREE.Mesh)) return;
-            if (!child.visible) return;
-            const name = (child.name || '').toLowerCase();
-            const materialNames = Array.isArray(child.material)
-                ? child.material.map((material) => material?.name || '').join(' ')
-                : child.material?.name || '';
-            const haystack = `${name} ${materialNames}`.toLowerCase();
-            const tireLike =
-                haystack.includes('tire') ||
-                haystack.includes('tyre') ||
-                haystack.includes('rubber') ||
-                haystack.includes('tread');
-            if (!tireLike) return;
+        const box = new THREE.Box3();
+        const point = new THREE.Vector3();
+        const bottoms: number[] = [];
+        const lowestVertex = (object: THREE.Object3D) => {
+            let min = Infinity;
+            object.traverse((child) => {
+                if (!(child instanceof THREE.Mesh) || !child.visible) return;
+                const position = child.geometry?.getAttribute('position');
+                if (!position) return;
+                for (let i = 0; i < position.count; i++) {
+                    point
+                        .fromBufferAttribute(position, i)
+                        .applyMatrix4(child.matrixWorld);
+                    min = Math.min(min, point.y);
+                }
+            });
+            return min;
+        };
 
-            const box = new THREE.Box3().setFromObject(child);
-            if (box.isEmpty()) return;
-            bottom.set(
-                (box.min.x + box.max.x) * 0.5,
-                box.min.y,
-                (box.min.z + box.max.z) * 0.5
+        const columns: {
+            x: number;
+            z: number;
+            top: number;
+            halfX: number;
+            halfZ: number;
+            min: number;
+        }[] = [];
+        wheels.forEach((wheel) => {
+            if (!(wheel.radius > 0)) return;
+            if (wheel.radius > MAX_SINGLE_WHEEL_RADIUS) {
+                // a merged axle (amg one): a column there would span the whole
+                // underbody, so use the axle's own rim and tire meshes
+                const min = Math.min(
+                    lowestVertex(wheel.object),
+                    ...wheel.linkedVisuals.map((linked) =>
+                        lowestVertex(linked.object)
+                    )
+                );
+                if (Number.isFinite(min)) bottoms.push(min);
+                return;
+            }
+            // rig centers are scaled model space, not rotated with the model
+            const center = wheel.localCenter
+                .clone()
+                .applyQuaternion(model.quaternion);
+            columns.push({
+                x: center.x,
+                z: center.z,
+                top: center.y,
+                halfX: wheel.radius * 1.2,
+                halfZ: wheel.radius * 0.35,
+                min: Infinity,
+            });
+        });
+
+        model.traverse((child) => {
+            if (!columns.length) return;
+            if (!(child instanceof THREE.Mesh) || !child.visible) return;
+            const position = child.geometry?.getAttribute('position');
+            if (!position) return;
+            box.setFromObject(child);
+            const near = columns.filter(
+                (column) =>
+                    box.min.y < column.top &&
+                    box.max.x >= column.x - column.halfX &&
+                    box.min.x <= column.x + column.halfX &&
+                    box.max.z >= column.z - column.halfZ &&
+                    box.min.z <= column.z + column.halfZ
             );
-            model.worldToLocal(bottom);
-            if (bottom.y < minBottom) {
-                minBottom = bottom.y;
+            if (!near.length) return;
+            for (let i = 0; i < position.count; i++) {
+                point
+                    .fromBufferAttribute(position, i)
+                    .applyMatrix4(child.matrixWorld);
+                near.forEach((column) => {
+                    if (
+                        point.y < column.min &&
+                        Math.abs(point.x - column.x) <= column.halfX &&
+                        Math.abs(point.z - column.z) <= column.halfZ
+                    ) {
+                        column.min = point.y;
+                    }
+                });
             }
         });
 
-        if (!Number.isFinite(minBottom)) return null;
-        return minBottom;
+        columns.forEach((column) => {
+            if (Number.isFinite(column.min)) bottoms.push(column.min);
+        });
+        if (bottoms.length < 2) return null;
+        return bottoms.reduce((sum, value) => sum + value, 0) / bottoms.length;
     }
 
     getWheelSpinCenter(node: THREE.Object3D, box: THREE.Box3) {
@@ -3597,6 +3669,9 @@ export default class RaceVehicle {
             this.postRecoveryCheckpointLockout - dt
         );
         this.safeCheckpointTimer += dt;
+        // updatePosition moves along the surface plane, but height comes from
+        // grounding (or the ballistic path), which works from here
+        this.stepStartY = this.position.y;
 
         this.input.update(dt);
         const controls = this.input.getState();
@@ -3799,8 +3874,24 @@ export default class RaceVehicle {
         const driftHandbrakeNorm = THREE.MathUtils.clamp((handbrake - 0.18) / 0.82, 0, 1);
         const driftThrottleNorm = THREE.MathUtils.clamp((throttle - 0.15) / 0.85, 0, 1);
         const driftInputNorm = Math.min(driftHandbrakeNorm, driftThrottleNorm);
+        // drift fades out at high speed. at 190 km/h a handbrake flick used to
+        // slide cars sideways at almost their forward speed and spin them at
+        // 300-480 deg/s
+        const highSpeedDrift = THREE.MathUtils.lerp(
+            1,
+            DRIFT_HIGH_SPEED_AUTHORITY,
+            THREE.MathUtils.smoothstep(
+                speed,
+                DRIFT_FADE_START_MPS,
+                DRIFT_FADE_END_MPS
+            )
+        );
         const driftTarget = usesRwdDriftTuning
-            ? driftSpeedNorm * driftSteerNorm * driftInputNorm * driftCapability
+            ? driftSpeedNorm *
+              driftSteerNorm *
+              driftInputNorm *
+              driftCapability *
+              highSpeedDrift
             : 0;
         const driftBuildRate =
             THREE.MathUtils.lerp(1.4, 3.1, driftTarget) *
@@ -3831,7 +3922,11 @@ export default class RaceVehicle {
                 driftSlipTarget,
                 driftSlipLerp
             );
-            yawRate += steer * (0.35 + this.driftAmount * 1.15) * driftPower;
+            yawRate +=
+                steer *
+                (0.35 + this.driftAmount * 1.15) *
+                driftPower *
+                highSpeedDrift;
         }
 
         const baseLateralGrip = usesRwdDriftTuning
@@ -3851,9 +3946,12 @@ export default class RaceVehicle {
             0,
             THREE.MathUtils.clamp(deltaSeconds * damping, 0, 1)
         );
-        const maxLateralSpeed = Math.max(
-            2.2,
-            speed * THREE.MathUtils.lerp(0.45, 1.12, this.driftAmount)
+        const maxLateralSpeed = Math.min(
+            DRIFT_MAX_LATERAL_MPS,
+            Math.max(
+                2.2,
+                speed * THREE.MathUtils.lerp(0.45, 1.12, this.driftAmount)
+            )
         );
         this.lateralSpeed = THREE.MathUtils.clamp(
             this.lateralSpeed,
@@ -3865,14 +3963,25 @@ export default class RaceVehicle {
         const rearSlipYaw =
             (-this.lateralSpeed /
                 Math.max(1.2, wheelBase * 0.78)) *
-            THREE.MathUtils.lerp(0.06, 0.24, this.driftAmount);
+            THREE.MathUtils.lerp(0.06, 0.24, this.driftAmount) *
+            highSpeedDrift;
         yawRate += rearSlipYaw;
 
         const counterSteer =
             -Math.sign(this.lateralSpeed) *
             Math.min(1.4, Math.abs(this.lateralSpeed) * 0.078) *
-            (1 - this.driftAmount * 0.45);
+            (1 - this.driftAmount * 0.45) *
+            highSpeedDrift;
         yawRate += counterSteer;
+
+        // the slide terms stack on top of steering, so bound the total by speed:
+        // donuts still spin fast, a slide at 200 km/h can't become a violent spin
+        const yawLimit = THREE.MathUtils.clamp(
+            YAW_RATE_LATERAL_ACCEL / Math.max(speed, 1),
+            YAW_RATE_LIMIT_MIN,
+            YAW_RATE_LIMIT_MAX
+        );
+        yawRate = THREE.MathUtils.clamp(yawRate, -yawLimit, yawLimit);
 
         this.yaw += yawRate * deltaSeconds;
     }
@@ -4137,6 +4246,46 @@ export default class RaceVehicle {
         return contacts;
     }
 
+    // stays on the road while it can. when the road drops away faster than
+    // gravity can pull the car down (a crest at speed) it goes ballistic, and
+    // lands where the road catches up
+    followGround(targetY: number, deltaSeconds: number, wasGrounded: boolean) {
+        if (deltaSeconds <= 0) {
+            this.position.y = targetY;
+            this.verticalVelocity = 0;
+            this.grounded = true;
+            this.airborneTime = 0;
+            return true;
+        }
+
+        const startY = this.stepStartY;
+        const fallVelocity = this.verticalVelocity - GRAVITY * deltaSeconds;
+        const fallY = startY + fallVelocity * deltaSeconds;
+        const leavesRoad =
+            wasGrounded && targetY < fallY - CREST_LAUNCH_TOLERANCE;
+        const stillFlying = !wasGrounded && fallY > targetY;
+        if (leavesRoad || stillFlying) {
+            this.grounded = false;
+            this.verticalVelocity = fallVelocity;
+            this.position.y = fallY;
+            this.airborneTime += deltaSeconds;
+            return false;
+        }
+
+        // a sudden jump in the target is a bad hit, not a slope
+        const maxRise =
+            Math.abs(this.speedMps) * deltaSeconds * MAX_GROUND_FOLLOW_GRADE +
+            GROUND_FOLLOW_STEP_ALLOWANCE;
+        const nextY = Math.min(targetY, startY + maxRise);
+        this.verticalVelocity = wasGrounded
+            ? (nextY - startY) / deltaSeconds
+            : 0;
+        this.position.y = nextY;
+        this.grounded = true;
+        this.airborneTime = 0;
+        return true;
+    }
+
     groundToCollider(deltaSeconds: number) {
         this.tmpVectorA.copy(this.position).add(new THREE.Vector3(0, RAYCAST_HEIGHT, 0));
         this.tmpVectorB.set(0, -1, 0);
@@ -4158,9 +4307,6 @@ export default class RaceVehicle {
                 compression: 1,
             });
             const physicalContacts = contacts.filter((contact) => !contact.predictive);
-            this.wheelContactCount = physicalContacts.length;
-            this.grounded = true;
-            this.airborneTime = 0;
             const wheelTargets = physicalContacts.map(
                 (contact) =>
                     contact.hit.point.y + this.rideHeight + WHEEL_PROBE_CLEARANCE_BIAS
@@ -4175,51 +4321,12 @@ export default class RaceVehicle {
                 MAX_WHEEL_ANTI_SINK_LIFT
             );
             const targetGroundY = centerTargetY + antiSinkLift;
-            if (!wasGrounded || deltaSeconds <= 0) {
-                this.position.y = targetGroundY;
-            } else {
-                const speedFactor = THREE.MathUtils.clamp(
-                    Math.abs(this.speedMps) / LOW_SPEED_GROUNDING_BLEND_SPEED_MPS,
-                    0,
-                    1
-                );
-                const groundLerp = THREE.MathUtils.clamp(
-                    deltaSeconds *
-                        THREE.MathUtils.lerp(
-                            LOW_SPEED_GROUNDING_LERP_MIN,
-                            LOW_SPEED_GROUNDING_LERP_MAX,
-                            speedFactor
-                        ),
-                    0,
-                    1
-                );
-                const smoothedTargetY = THREE.MathUtils.lerp(
-                    this.position.y,
-                    targetGroundY,
-                    groundLerp
-                );
-                const clearanceDebt = Math.max(0, targetGroundY - this.position.y);
-                const maxStepPerFrame =
-                    THREE.MathUtils.lerp(
-                        LOW_SPEED_GROUNDING_MAX_STEP_MIN,
-                        LOW_SPEED_GROUNDING_MAX_STEP_MAX,
-                        speedFactor
-                    ) + Math.min(MAX_WHEEL_ANTI_SINK_LIFT, clearanceDebt);
-                const maxStep =
-                    maxStepPerFrame *
-                    THREE.MathUtils.clamp(deltaSeconds * 60, 0.2, 2.5);
-                const nextDeltaY = THREE.MathUtils.clamp(
-                    smoothedTargetY - this.position.y,
-                    -maxStep,
-                    maxStep
-                );
-                this.position.y += nextDeltaY;
-
-                if (Math.abs(targetGroundY - this.position.y) <= 0.0015) {
-                    this.position.y = targetGroundY;
-                }
+            if (!this.followGround(targetGroundY, deltaSeconds, wasGrounded)) {
+                this.wheelContactCount = 0;
+                this.suspensionCompression = [0, 0, 0, 0];
+                return;
             }
-            this.verticalVelocity = 0;
+            this.wheelContactCount = physicalContacts.length;
 
             const frontHits: GroundContact[] = [];
             const rearHits: GroundContact[] = [];
@@ -4313,7 +4420,10 @@ export default class RaceVehicle {
         this.suspensionCompression = [0, 0, 0, 0];
         this.airborneTime += deltaSeconds;
         this.verticalVelocity -= GRAVITY * deltaSeconds;
-        this.position.y += this.verticalVelocity * deltaSeconds;
+        if (deltaSeconds > 0) {
+            this.position.y =
+                this.stepStartY + this.verticalVelocity * deltaSeconds;
+        }
         this.tmpVectorC.copy(this.forward).setY(0);
         if (this.tmpVectorC.lengthSq() > 1e-8) {
             this.tmpVectorC
@@ -4432,7 +4542,7 @@ export default class RaceVehicle {
             1
         );
         const rotLerp = THREE.MathUtils.clamp(
-            deltaSeconds * THREE.MathUtils.lerp(5, 10, rotationSpeedFactor),
+            deltaSeconds * THREE.MathUtils.lerp(5, 16, rotationSpeedFactor),
             0,
             1
         );

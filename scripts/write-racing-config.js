@@ -25,7 +25,7 @@ const config = {
         'nordschleife_ghost_replays',
     lobbyChannelPrefix:
         first(process.env.RACING_LOBBY_CHANNEL_PREFIX) ||
-        'nordschleife_lobby_v1',
+        'nordschleife_lobby_v2',
 };
 
 if (!config.supabaseUrl || !config.supabaseAnonKey) {
