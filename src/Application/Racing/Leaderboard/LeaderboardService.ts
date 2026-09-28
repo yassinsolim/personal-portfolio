@@ -1,5 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import LocalLeaderboard, { LeaderboardEntry } from './LocalLeaderboard';
+import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
 
@@ -78,6 +79,8 @@ export default class LeaderboardService {
     }
 
     async loadSupabaseConfig() {
+        // multiplayer tests run offline, laps stay local
+        if (mockRealtimeEnabled()) return;
         const controller = new AbortController();
         const timeout = setTimeout(
             () => controller.abort(),
