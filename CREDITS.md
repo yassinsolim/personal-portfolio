@@ -20,6 +20,12 @@
   - Source: procedural Web Audio synthesis at runtime (no third-party audio samples)
   - License: project-owned synthesis logic
 
+- Race visuals (September 2026): sky, forest, terrain, armco, gantry, smoke, sparks, skid marks
+  - Source: generated at runtime in project code (canvas textures, procedural tree geometry).
+    The sky uses three.js's `Sky` object (MIT, part of three.js)
+  - Third-party asset usage: none
+  - License: project-owned implementation code and generated runtime content
+
 - Race stabilization realism pass (February 8, 2026)
   - Added wind/road/tire layers, drift smoke, and edge markings using procedural/runtime-generated content
   - Third-party asset usage: none added in this pass

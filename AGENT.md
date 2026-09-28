@@ -116,6 +116,29 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
 - `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
 
+## Race Visuals Notes (2026-09-27)
+- `Racing/Visuals/RaceVisuals.ts` owns race mode's look: sky, sun and fog (`RaceAtmosphere`), the
+  land (`RaceTerrain`), the forest (`RaceForest`), armco, posts and the start gantry
+  (`RaceTrackside`), sparks and skid marks, and the post chain (`RacePostProcessing`). On enter it
+  swaps in AgX tone mapping, the sky environment and the fog, and restores them on exit. The room
+  lights are hidden while racing (`RaceManager.setLobbyObjectsVisible`).
+- The renderer draws through `Renderer.setSceneRenderer(render, resize, maxPixelRatio)` while
+  racing. The grain overlay and the monitor's CSS layer are skipped then.
+- Presets live in `Visuals/qualityPresets.ts` with their budgets. Auto means balanced on a
+  capable GPU and performance on weak or software ones (`detectGpuTier`), and it also drops to
+  performance once the adaptive resolution goes under 1x. Performance has no post chain and no
+  sun shadows. Change a preset there, not in the systems.
+- Everything is procedural (canvas textures, generated trees), no image or model files. Trees:
+  near ones are real geometry (`treeGeometry.ts`, cards on `foliageTextures.ts`'s atlas), refilled
+  per tree from a 60 m grid when the camera moves 6 m. Far ones are billboards baked from the same
+  geometry. Both fade by tree distance with the same dither, so there's no pop. Shadow casters are
+  a separate set on `TREE_SHADOW_LAYER`, which only the sun's shadow camera renders.
+- The sky shader is clamped (`SKY_MAX`) so the sun disc doesn't flood the bloom. Race car models
+  get their own material copies, so race paint tweaks don't leak into the room car.
+- Measure with `scripts/race-playtest.mjs --mode auto|quality|performance`. Worst case proxies:
+  `--swgl` (SwiftShader) and `--cpu-throttle 4`. `--profile` times the main per frame calls and
+  `hitchLog` in the result lists slow frames with their context.
+
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
 - `npm run build` passes (with existing large asset warnings).

@@ -7,18 +7,86 @@ const MOUSE_SENSITIVITY_X = 0.0022;
 const MOUSE_SENSITIVITY_Y = 0.0016;
 const MIN_PITCH = -0.35;
 const MAX_PITCH = 0.28;
-const BASE_FOV = 48;
-const MAX_FOV = 62;
-const MIN_CAMERA_DISTANCE = 11.4;
-const MAX_CAMERA_DISTANCE = 21;
-const SHAKE_SPEED_START = 22;
-const RACE_CAMERA_NEAR = 0.18;
-const RACE_CAMERA_FAR = 20000;
-const DRIFT_SHAKE_SCALE = 0.5;
-const CLOSE_CAMERA_NEAR = 0.32;
-const CAMERA_BODY_CLEARANCE = 2.8;
-const CAMERA_BODY_CLEARANCE_SMOOTH = 2.6;
+const RACE_CAMERA_NEAR = 0.1;
+const RACE_CAMERA_FAR = 16000;
 const POINTER_LOCK_PENDING_TIMEOUT_MS = 650;
+// mouse look drifts back behind the car after this long without input
+const LOOK_RETURN_DELAY_S = 1.4;
+const REFERENCE_CAR_LENGTH = 4.7;
+
+type CameraView = {
+    name: string;
+    distance: number;
+    height: number;
+    lookHeight: number;
+    lookAhead: number;
+    fov: number;
+    // how far the view swings toward the direction of travel in a slide
+    slideFollow: number;
+    mounted: boolean;
+};
+
+// chase is low and close so the road streams past, far shows more of the
+// car, bumper sits on the nose
+const VIEWS: CameraView[] = [
+    {
+        name: 'chase',
+        distance: 6.3,
+        height: 1.85,
+        lookHeight: 1.05,
+        lookAhead: 5.5,
+        fov: 62,
+        slideFollow: 0.42,
+        mounted: false,
+    },
+    {
+        name: 'far',
+        distance: 9.4,
+        height: 2.9,
+        lookHeight: 1.25,
+        lookAhead: 7.5,
+        fov: 58,
+        slideFollow: 0.32,
+        mounted: false,
+    },
+    {
+        name: 'bumper',
+        distance: -0.2,
+        height: 0.72,
+        lookHeight: 0.62,
+        lookAhead: 20,
+        fov: 70,
+        slideFollow: 0,
+        mounted: true,
+    },
+];
+const VIEW_STORAGE_KEY = 'yassinverse:nordschleife:cameraView:v1';
+
+// critically damped spring toward a target, frame rate independent
+const spring = (
+    value: number,
+    velocity: number,
+    target: number,
+    omega: number,
+    dt: number
+): [number, number] => {
+    const x = omega * dt;
+    const decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
+    const change = value - target;
+    const temp = (velocity + omega * change) * dt;
+    const nextVelocity = (velocity - omega * temp) * decay;
+    const nextValue = target + (change + temp) * decay;
+    return [nextValue, nextVelocity];
+};
+
+// smooth noise for shake: a few detuned sines, cheap and never repeats in play
+const wobble = (time: number, seed: number) =>
+    Math.sin(time * 1.9 + seed) * 0.5 +
+    Math.sin(time * 4.3 + seed * 2.1) * 0.3 +
+    Math.sin(time * 9.7 + seed * 3.7) * 0.2;
+
+const wrapAngle = (angle: number) =>
+    Math.atan2(Math.sin(angle), Math.cos(angle));
 
 export default class RaceChaseCamera {
     application: Application;
@@ -29,19 +97,34 @@ export default class RaceChaseCamera {
     pointerLockRequestPending: boolean;
     yawOffset: number;
     pitchOffset: number;
-    smoothPosition: THREE.Vector3;
-    smoothLookAt: THREE.Vector3;
+    lookIdle: number;
+    viewIndex: number;
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
-    shakeTime: number;
-    tmpUp: THREE.Vector3;
+    time: number;
+    initialized: boolean;
+    heading: number;
+    headingVelocity: number;
+    distance: number;
+    distanceVelocity: number;
+    height: number;
+    heightVelocity: number;
+    fov: number;
+    fovVelocity: number;
+    lookY: number;
+    lookYVelocity: number;
+    impactShake: number;
+    lastImpact: number;
+    shakeOffset: THREE.Vector3;
     tmpForward: THREE.Vector3;
     tmpSide: THREE.Vector3;
-    tmpOffset: THREE.Vector3;
     tmpAnchor: THREE.Vector3;
-    tmpToCamera: THREE.Vector3;
+    tmpPosition: THREE.Vector3;
+    tmpLook: THREE.Vector3;
+    tmpUp: THREE.Vector3;
     keyDownHandler: (event: KeyboardEvent) => void;
+    viewKeyHandler: (event: KeyboardEvent) => void;
     mouseDownHandler: (event: MouseEvent) => void;
     mouseMoveHandler: (event: MouseEvent) => void;
     pointerLockChangeHandler: () => void;
@@ -57,22 +140,48 @@ export default class RaceChaseCamera {
         this.pointerLocked = false;
         this.pointerLockRequestPending = false;
         this.yawOffset = 0;
-        this.pitchOffset = 0.1;
-
-        this.smoothPosition = new THREE.Vector3();
-        this.smoothLookAt = new THREE.Vector3();
+        this.pitchOffset = 0;
+        this.lookIdle = 0;
+        this.viewIndex = this.readStoredView();
         this.defaultFov = this.application.camera.instance.fov;
         this.defaultNear = this.application.camera.instance.near;
         this.defaultFar = this.application.camera.instance.far;
-        this.shakeTime = 0;
-
-        this.tmpUp = new THREE.Vector3();
+        this.time = 0;
+        this.initialized = false;
+        this.heading = 0;
+        this.headingVelocity = 0;
+        this.distance = VIEWS[0].distance;
+        this.distanceVelocity = 0;
+        this.height = VIEWS[0].height;
+        this.heightVelocity = 0;
+        this.fov = VIEWS[0].fov;
+        this.fovVelocity = 0;
+        this.lookY = 0;
+        this.lookYVelocity = 0;
+        this.impactShake = 0;
+        this.lastImpact = 0;
+        this.shakeOffset = new THREE.Vector3();
         this.tmpForward = new THREE.Vector3();
         this.tmpSide = new THREE.Vector3();
-        this.tmpOffset = new THREE.Vector3();
         this.tmpAnchor = new THREE.Vector3();
-        this.tmpToCamera = new THREE.Vector3();
+        this.tmpPosition = new THREE.Vector3();
+        this.tmpLook = new THREE.Vector3();
+        this.tmpUp = new THREE.Vector3();
         this.pointerLockPendingTimeoutId = null;
+
+        this.viewKeyHandler = (event: KeyboardEvent) => {
+            if (!this.active || this.paused || event.repeat) return;
+            if (event.code !== 'KeyC') return;
+            const target = event.target as HTMLElement | null;
+            const tag = (target?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select')
+                return;
+            this.cycleView();
+        };
+        document.addEventListener('keydown', this.viewKeyHandler);
+        UIEventBus.on('race:cycleCamera', () => {
+            if (this.active) this.cycleView();
+        });
 
         this.keyDownHandler = (event: KeyboardEvent) => {
             if (!this.active) return;
@@ -103,6 +212,7 @@ export default class RaceChaseCamera {
         this.mouseMoveHandler = (event: MouseEvent) => {
             if (!this.active || !this.pointerLocked) return;
 
+            this.lookIdle = 0;
             this.yawOffset -= event.movementX * MOUSE_SENSITIVITY_X;
             this.pitchOffset += event.movementY * MOUSE_SENSITIVITY_Y;
             this.pitchOffset = THREE.MathUtils.clamp(
@@ -162,11 +272,11 @@ export default class RaceChaseCamera {
             if (!this.active || this.paused) return;
             this.requestPointerLock();
         });
-
     }
 
     requestPointerLock() {
-        if (!this.active || this.paused || this.pointerLockRequestPending) return;
+        if (!this.active || this.paused || this.pointerLockRequestPending)
+            return;
         const canvas = this.application.renderer.instance.domElement;
         if (
             !canvas ||
@@ -231,7 +341,9 @@ export default class RaceChaseCamera {
             error instanceof Error ? error.message : String(error)
         ).toLowerCase();
         return (
-            message.includes('exited the lock before this request was completed') ||
+            message.includes(
+                'exited the lock before this request was completed'
+            ) ||
             message.includes('user has exited the lock') ||
             message.includes('request is not allowed') ||
             message.includes('aborted') ||
@@ -253,34 +365,68 @@ export default class RaceChaseCamera {
         this.pointerLockPendingTimeoutId = null;
     }
 
+    readStoredView() {
+        try {
+            const stored = Number(
+                window.localStorage.getItem(VIEW_STORAGE_KEY)
+            );
+            return Number.isInteger(stored) &&
+                stored >= 0 &&
+                stored < VIEWS.length
+                ? stored
+                : 0;
+        } catch {
+            return 0;
+        }
+    }
+
+    cycleView() {
+        this.viewIndex = (this.viewIndex + 1) % VIEWS.length;
+        this.initialized = false;
+        try {
+            window.localStorage.setItem(
+                VIEW_STORAGE_KEY,
+                String(this.viewIndex)
+            );
+        } catch {
+            // not saved, still switches
+        }
+        UIEventBus.dispatch('race:cameraView', {
+            view: VIEWS[this.viewIndex].name,
+        });
+    }
+
+    getView() {
+        return VIEWS[this.viewIndex];
+    }
+
     setActive(active: boolean) {
         this.active = active;
+        const camera = this.application.camera.instance;
         if (active) {
-            this.shakeTime = 0;
-            this.application.camera.instance.near = RACE_CAMERA_NEAR;
-            this.application.camera.instance.far = RACE_CAMERA_FAR;
-            this.application.camera.instance.fov = BASE_FOV;
-            this.application.camera.instance.updateProjectionMatrix();
+            this.time = 0;
+            this.initialized = false;
+            camera.near = RACE_CAMERA_NEAR;
+            camera.far = RACE_CAMERA_FAR;
+            camera.fov = this.getView().fov;
+            camera.updateProjectionMatrix();
             return;
         }
 
-        if (!active) {
-            this.exitPointerLock();
-            this.pointerLocked = false;
-            this.pointerLockRequestPending = false;
-            this.clearPointerLockPendingTimeout();
-            this.yawOffset = 0;
-            this.pitchOffset = 0.1;
-            this.shakeTime = 0;
-            this.application.camera.instance.near = this.defaultNear;
-            this.application.camera.instance.far = this.defaultFar;
-            this.application.camera.instance.fov = this.defaultFov;
-            this.application.camera.instance.updateProjectionMatrix();
-            UIEventBus.dispatch('race:inputReset', {
-                source: 'setInactive',
-            });
-            UIEventBus.dispatch('race:pointerLockChanged', { locked: false });
-        }
+        this.exitPointerLock();
+        this.pointerLocked = false;
+        this.pointerLockRequestPending = false;
+        this.clearPointerLockPendingTimeout();
+        this.yawOffset = 0;
+        this.pitchOffset = 0;
+        camera.near = this.defaultNear;
+        camera.far = this.defaultFar;
+        camera.fov = this.defaultFov;
+        camera.updateProjectionMatrix();
+        UIEventBus.dispatch('race:inputReset', {
+            source: 'setInactive',
+        });
+        UIEventBus.dispatch('race:pointerLockChanged', { locked: false });
     }
 
     setPaused(paused: boolean) {
@@ -292,137 +438,233 @@ export default class RaceChaseCamera {
             UIEventBus.dispatch('race:inputReset', {
                 source: 'setPaused',
             });
-            this.application.camera.instance.fov = BASE_FOV;
-            this.application.camera.instance.updateProjectionMatrix();
         }
     }
 
-
     update(deltaSeconds: number) {
         if (!this.active) return;
+        const dt = Math.min(0.05, Math.max(0, deltaSeconds));
+        const camera = this.application.camera.instance;
+        const vehicle = this.vehicle;
+        const telemetry = vehicle.getTelemetry();
+        const view = this.getView();
+        this.time += dt;
 
-        const telemetry = this.vehicle.getTelemetry();
-        const speed = Math.abs(telemetry.speedMps);
+        const speed = Math.hypot(vehicle.speedMps, vehicle.lateralSpeed);
+        const size = vehicle.bodySize.z / REFERENCE_CAR_LENGTH;
+        const carYaw = vehicle.yaw;
+        const travelYaw =
+            speed > 3
+                ? Math.atan2(vehicle.velocity.x, vehicle.velocity.z)
+                : carYaw;
+        // mouse look settles back behind the car when you let go
+        this.lookIdle += dt;
+        if (!this.pointerLocked || this.lookIdle > LOOK_RETURN_DELAY_S) {
+            const settle = Math.min(1, dt * 2.5);
+            this.yawOffset += (0 - this.yawOffset) * settle;
+            this.pitchOffset += (0 - this.pitchOffset) * settle;
+        }
 
-        this.tmpForward
+        this.tmpUp.set(0, 1, 0);
+        const anchor = this.tmpAnchor.copy(vehicle.position);
+
+        if (view.mounted) {
+            this.updateMounted(view, carYaw, anchor, size, speed, dt);
+            return;
+        }
+
+        // the camera heading lags the car's, and leans toward where the car is
+        // actually going in a slide, so you see its side
+        const slide = Math.min(1, speed / 12) * view.slideFollow;
+        const targetHeading =
+            carYaw + wrapAngle(travelYaw - carYaw) * slide + this.yawOffset;
+        if (!this.initialized) this.heading = targetHeading;
+        const headingError = wrapAngle(this.heading - targetHeading);
+        [this.heading, this.headingVelocity] = spring(
+            targetHeading + headingError,
+            this.headingVelocity,
+            targetHeading,
+            5.2,
+            dt
+        );
+
+        // hard acceleration pulls the car away a little, braking brings it close
+        const surge = -telemetry.longitudinalG * 0.55;
+        const followOffset = vehicle.getCameraFollowDistanceOffset() * 0.25;
+        const targetDistance =
+            view.distance * size +
+            followOffset +
+            surge +
+            Math.min(1.2, speed * 0.012);
+        const targetHeight = view.height * (0.85 + size * 0.15) + speed * 0.002;
+        if (!this.initialized) {
+            this.distance = targetDistance;
+            this.height = targetHeight;
+            this.fov = view.fov;
+            this.lookY = anchor.y;
+        }
+        [this.distance, this.distanceVelocity] = spring(
+            this.distance,
+            this.distanceVelocity,
+            targetDistance,
+            4.5,
+            dt
+        );
+        [this.height, this.heightVelocity] = spring(
+            this.height,
+            this.heightVelocity,
+            targetHeight,
+            6,
+            dt
+        );
+        // the look point rides the car but damps its bumps
+        [this.lookY, this.lookYVelocity] = spring(
+            this.lookY,
+            this.lookYVelocity,
+            anchor.y,
+            14,
+            dt
+        );
+
+        const pitch = this.pitchOffset;
+        const forward = this.tmpForward.set(
+            Math.sin(this.heading),
+            0,
+            Math.cos(this.heading)
+        );
+        const position = this.tmpPosition
+            .copy(anchor)
+            .addScaledVector(forward, -this.distance * Math.cos(pitch))
+            .setY(this.lookY + this.height + this.distance * Math.sin(pitch));
+        const look = this.tmpLook
+            .copy(anchor)
+            .addScaledVector(forward, view.lookAhead * size)
+            .setY(this.lookY + view.lookHeight);
+
+        // never under the ground
+        const ground = vehicle.track.sampleGround(position.x, position.z);
+        if (ground !== null && position.y < ground + 0.55) {
+            position.y = ground + 0.55;
+        }
+
+        this.applyShake(position, look, telemetry, speed, dt);
+        this.applyFov(view, telemetry, speed, dt);
+        this.initialized = true;
+        camera.position.copy(position);
+        camera.lookAt(look);
+        this.applyRoll(camera, telemetry);
+    }
+
+    // bumper cam: fixed to the nose, only the shake and fov move
+    updateMounted(
+        view: CameraView,
+        carYaw: number,
+        anchor: THREE.Vector3,
+        size: number,
+        speed: number,
+        dt: number
+    ) {
+        const camera = this.application.camera.instance;
+        const vehicle = this.vehicle;
+        const telemetry = vehicle.getTelemetry();
+        const up = this.tmpUp
+            .set(0, 1, 0)
+            .applyQuaternion(vehicle.carPivot.quaternion);
+        const forward = this.tmpForward
             .set(0, 0, 1)
-            .applyQuaternion(telemetry.quaternion)
+            .applyQuaternion(vehicle.carPivot.quaternion)
             .normalize();
-        this.tmpUp.set(0, 1, 0).applyQuaternion(telemetry.quaternion).normalize();
-        this.tmpSide.crossVectors(this.tmpUp, this.tmpForward).normalize();
+        const nose = vehicle.bodySize.z * 0.5 + view.distance;
+        const position = this.tmpPosition
+            .copy(anchor)
+            .addScaledVector(forward, nose)
+            .addScaledVector(up, view.height - vehicle.rideHeight);
+        const look = this.tmpLook
+            .copy(position)
+            .addScaledVector(forward, view.lookAhead)
+            .addScaledVector(up, view.lookHeight - view.height);
+        if (!this.initialized) this.fov = view.fov;
+        this.applyShake(position, look, telemetry, speed, dt, 0.35);
+        this.applyFov(view, telemetry, speed, dt);
+        this.initialized = true;
+        camera.position.copy(position);
+        camera.up.copy(up);
+        camera.lookAt(look);
+        camera.up.set(0, 1, 0);
+        void carYaw;
+        void size;
+    }
 
-        this.tmpForward.applyAxisAngle(this.tmpUp, this.yawOffset).normalize();
-
-        this.tmpAnchor.copy(this.vehicle.getCameraAnchor());
-        const followDistanceOffset = this.vehicle.getCameraFollowDistanceOffset();
-        const minDistance = MIN_CAMERA_DISTANCE + followDistanceOffset;
-        const maxDistance = MAX_CAMERA_DISTANCE + followDistanceOffset;
-
-        const armDistance = THREE.MathUtils.clamp(
-            9.4 + speed * 0.12 + followDistanceOffset,
-            minDistance,
-            maxDistance
+    // speed widens the view, hard acceleration kicks it out a bit more
+    applyFov(
+        view: CameraView,
+        telemetry: ReturnType<RaceVehicle['getTelemetry']>,
+        speed: number,
+        dt: number
+    ) {
+        const camera = this.application.camera.instance;
+        const speedKick =
+            Math.pow(Math.min(1, Math.max(0, (speed - 12) / 80)), 1.3) * 13;
+        const accelKick = Math.max(0, telemetry.longitudinalG) * 3.5;
+        const target = this.paused
+            ? view.fov
+            : view.fov + speedKick + accelKick;
+        [this.fov, this.fovVelocity] = spring(
+            this.fov,
+            this.fovVelocity,
+            target,
+            5,
+            dt
         );
-        const armHeight = THREE.MathUtils.clamp(4 + speed * 0.03, 4, 8);
+        camera.fov = this.fov;
+        camera.updateProjectionMatrix();
+    }
 
-        this.tmpOffset
-            .copy(this.tmpForward)
-            .multiplyScalar(-armDistance)
-            .addScaledVector(this.tmpUp, armHeight)
-            .applyAxisAngle(this.tmpSide, this.pitchOffset);
-
-        const targetPosition = this.tmpAnchor.clone().add(this.tmpOffset);
-        const targetLookAt = this.tmpAnchor
-            .clone()
-            .addScaledVector(this.tmpForward, 9 + speed * 0.06)
-            .addScaledVector(this.tmpUp, 1.2);
-
-        this.tmpToCamera.subVectors(targetPosition, this.tmpAnchor);
-        const distance = this.tmpToCamera.length();
-        if (distance > 0.0001) {
-            this.tmpToCamera.normalize();
-            const safeDistance = Math.max(
-                minDistance,
-                this.vehicle.getCameraBodyRadius() + CAMERA_BODY_CLEARANCE
-            );
-            const clampedDistance = THREE.MathUtils.clamp(
-                distance,
-                safeDistance,
-                maxDistance
-            );
-            targetPosition.copy(this.tmpAnchor).addScaledVector(
-                this.tmpToCamera,
-                clampedDistance
+    // shake from speed, the surface, and hits. never fed back into the springs
+    applyShake(
+        position: THREE.Vector3,
+        look: THREE.Vector3,
+        telemetry: ReturnType<RaceVehicle['getTelemetry']>,
+        speed: number,
+        dt: number,
+        scale = 1
+    ) {
+        if (this.paused) return;
+        if (telemetry.impact > this.lastImpact + 0.5) {
+            this.impactShake = Math.min(
+                1,
+                this.impactShake + telemetry.impact * 0.08
             );
         }
-
-        const smoothFactor = THREE.MathUtils.clamp(deltaSeconds * 8, 0, 1);
-        this.smoothPosition.lerp(targetPosition, smoothFactor);
-        this.smoothLookAt.lerp(targetLookAt, smoothFactor);
-
-        this.tmpToCamera.subVectors(this.smoothPosition, this.tmpAnchor);
-        const smoothDistance = this.tmpToCamera.length();
-        const minSafeDistance = Math.max(
-            minDistance,
-            this.vehicle.getCameraBodyRadius() + CAMERA_BODY_CLEARANCE_SMOOTH
+        this.lastImpact = telemetry.impact;
+        this.impactShake = Math.max(0, this.impactShake - dt * 2.4);
+        const fast = Math.max(0, (speed - 42) / 45);
+        const kerb = telemetry.onKerb ? Math.min(1, speed / 25) : 0;
+        const grass = telemetry.onGrass ? Math.min(1, speed / 20) : 0;
+        const amount =
+            (fast * 0.018 +
+                kerb * 0.03 +
+                grass * 0.05 +
+                this.impactShake * 0.16) *
+            scale;
+        if (amount < 0.0005) return;
+        const t = this.time;
+        const rate = 1 + kerb * 2.5;
+        this.shakeOffset.set(
+            wobble(t * 3.1 * rate, 1.3) * amount,
+            wobble(t * 3.7 * rate, 4.1) * amount * 0.8,
+            wobble(t * 2.3 * rate, 7.7) * amount * 0.4
         );
-        if (smoothDistance > 0.0001 && smoothDistance < minSafeDistance) {
-            this.tmpToCamera.normalize();
-            this.smoothPosition
-                .copy(this.tmpAnchor)
-                .addScaledVector(this.tmpToCamera, minSafeDistance);
-        }
+        position.add(this.shakeOffset);
+        look.addScaledVector(this.shakeOffset, 0.4);
+    }
 
-        const closeFollow = THREE.MathUtils.clamp(
-            (smoothDistance - minSafeDistance) / 4,
-            0,
-            1
-        );
-        this.application.camera.instance.near = THREE.MathUtils.lerp(
-            CLOSE_CAMERA_NEAR,
-            RACE_CAMERA_NEAR,
-            closeFollow
-        );
-
-        const targetFov = this.paused
-            ? BASE_FOV
-            : THREE.MathUtils.lerp(
-                  BASE_FOV,
-                  MAX_FOV,
-                  THREE.MathUtils.clamp((speed - 20) / 120, 0, 1)
-              );
-        this.application.camera.instance.fov = THREE.MathUtils.lerp(
-            this.application.camera.instance.fov,
-            targetFov,
-            THREE.MathUtils.clamp(deltaSeconds * 5.5, 0, 1)
-        );
-        this.application.camera.instance.updateProjectionMatrix();
-
-        this.shakeTime += deltaSeconds * (1 + speed * 0.045);
-        const speedShake = THREE.MathUtils.clamp(
-            (speed - SHAKE_SPEED_START) / 105,
-            0,
-            1
-        );
-        const driftShake = THREE.MathUtils.clamp(telemetry.driftIntensity, 0, 1);
-        const shakeAmount =
-            (speedShake * 0.085 + driftShake * 0.055) *
-            DRIFT_SHAKE_SCALE *
-            (this.paused ? 0 : 1);
-        if (shakeAmount > 0.0001) {
-            const shakeSide =
-                Math.sin(this.shakeTime * 17.4) * shakeAmount * 0.42;
-            const shakeUp =
-                Math.sin(this.shakeTime * 23.8 + 0.7) * shakeAmount * 0.28;
-            this.smoothPosition
-                .addScaledVector(this.tmpSide, shakeSide)
-                .addScaledVector(this.tmpUp, shakeUp);
-            this.smoothLookAt
-                .addScaledVector(this.tmpSide, shakeSide * 0.45)
-                .addScaledVector(this.tmpUp, shakeUp * 0.3);
-        }
-
-        this.application.camera.instance.position.copy(this.smoothPosition);
-        this.application.camera.instance.lookAt(this.smoothLookAt);
+    // a hint of lean with cornering load, so turns feel like they have weight
+    applyRoll(
+        camera: THREE.PerspectiveCamera,
+        telemetry: ReturnType<RaceVehicle['getTelemetry']>
+    ) {
+        const lean = Math.max(-1, Math.min(1, telemetry.lateralG)) * 0.012;
+        camera.rotateZ(-lean);
     }
 }
