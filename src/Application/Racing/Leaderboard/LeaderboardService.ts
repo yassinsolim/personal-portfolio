@@ -13,8 +13,12 @@ type SupabaseConfig = {
 const DEFAULT_TABLE = 'nordschleife_leaderboard';
 const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
 const CONFIG_URL = '/config/racing.config.json';
-const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v1';
+const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v2';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
+// laps from the tire model and the 16 m road aren't comparable with the old
+// ones, so new rows carry this tag on car_id and the board only reads tagged
+// rows. old rows stay in the table. no schema change needed
+const SEASON_TAG = '@v2';
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -139,6 +143,7 @@ export default class LeaderboardService {
             const { data, error } = await this.supabase
                 .from(this.tableName)
                 .select('id,name,lap_time_ms,car_id,created_at')
+                .like('car_id', `%${SEASON_TAG}`)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
 
@@ -196,7 +201,7 @@ export default class LeaderboardService {
                 .insert({
                     name: safeName,
                     lap_time_ms: safeLapTimeMs,
-                    car_id: safeCarId,
+                    car_id: `${safeCarId}${SEASON_TAG}`,
                 })
                 .select('id,name,lap_time_ms,car_id,created_at')
                 .single();
@@ -354,7 +359,8 @@ export default class LeaderboardService {
     }
 
     sanitizeCarId(carId: string) {
-        return carOptionsById[carId] ? carId : defaultCarId;
+        const base = String(carId || '').split('@')[0];
+        return carOptionsById[base] ? base : defaultCarId;
     }
 
     sanitizeGhostReplay(
@@ -439,7 +445,7 @@ export default class LeaderboardService {
                     {
                         lap_id: safeLapId,
                         lap_time_ms: safeReplay.lapTimeMs,
-                        car_id: safeReplay.carId,
+                        car_id: `${safeReplay.carId}${SEASON_TAG}`,
                         samples: safeReplay.samples,
                     },
                     { onConflict: 'lap_id' }

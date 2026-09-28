@@ -111,11 +111,11 @@ if (!skip.has('physics')) {
 if (!skip.has('stress')) {
     await run(
         'drift200',
-        `__race(['bmw-e92-m3', 'amg-c63s-coupe'], 16, { scenario: 'drift', atKph: 200 })`
+        `__race(['amg-c63s-coupe', 'bmw-f90-m5-competition'], 22, { scenario: 'drift', atKph: 200 })`
     );
     await run(
         'slalom220',
-        `__race(['bmw-e92-m3', 'amg-one'], 16, { scenario: 'slalom', atKph: 220 })`
+        `__race(['amg-one', 'bmw-m8-competition-coupe'], 22, { scenario: 'slalom', atKph: 220 })`
     );
 }
 if (!skip.has('drive')) {

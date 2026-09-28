@@ -8,6 +8,10 @@
 //   await __race(['bmw-e92-m3', 'amg-one'], 30)
 //   await __race(['bmw-e92-m3'], 16, { scenario: 'drift', atKph: 200 })
 // gaps are in cm, positive means the lowest wheel is above the road.
+//
+// the autopilot brakes for corners (options.latG, default 75% of the car's
+// tire grip up to 0.95 g), since the
+// cars have real grip limits now. options.throttle holds a fixed throttle.
 
 (function () {
     const waitFor = (fn, ms = 40000) =>
@@ -19,6 +23,9 @@
                 setTimeout(poll, 200);
             })();
         });
+
+    const THREE_clamp = (value, min, max) =>
+        value < min ? min : value > max ? max : value;
 
     const percentile = (values, p) => {
         if (!values.length) return null;
@@ -60,6 +67,48 @@
         const N = 8000;
         const pts = curve.getSpacedPoints(N);
         const sampleSpacing = curve.getLength() / N;
+        // corner speed limit from the curvature over the next braking window
+        const curvatureAt = (i) => {
+            const a = pts[(i - 4 + N) % N];
+            const b = pts[i % N];
+            const c = pts[(i + 4) % N];
+            const h1 = Math.atan2(b.x - a.x, b.z - a.z);
+            const h2 = Math.atan2(c.x - b.x, c.z - b.z);
+            let dh = h2 - h1;
+            dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+            return Math.abs(dh) / (4 * sampleSpacing);
+        };
+        const signedCurvature = (i) => {
+            const a = pts[(i - 4 + N) % N];
+            const b = pts[i % N];
+            const c = pts[(i + 4) % N];
+            const h1 = Math.atan2(b.x - a.x, b.z - a.z);
+            const h2 = Math.atan2(c.x - b.x, c.z - b.z);
+            let dh = h2 - h1;
+            dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+            return dh / (4 * sampleSpacing);
+        };
+        const targetSpeedAt = (index, speed) => {
+            const grip = v.physics ? v.physics.spec.tireGrip : 1.15;
+            const g = (options.latG ?? Math.min(0.95, grip * 0.75)) * 9.81;
+            const brake = (options.brakeG ?? 0.95) * 9.81;
+            const window = Math.round(
+                Math.max(40, (speed * speed) / (2 * brake) + speed) /
+                    sampleSpacing
+            );
+            let limit = Infinity;
+            for (let k = 0; k < window; k += 3) {
+                const corner = Math.sqrt(
+                    g / Math.max(1e-5, curvatureAt(index + k))
+                );
+                // can still brake from here to that corner
+                const reachable = Math.sqrt(
+                    corner * corner + 2 * brake * k * sampleSpacing
+                );
+                limit = Math.min(limit, reachable);
+            }
+            return limit;
+        };
         const nearestIndex = (pos, hint) => {
             let best = hint;
             let bestD = Infinity;
@@ -203,6 +252,10 @@
             const yawRates = [];
             let airborne = 0;
             let offTrack = 0;
+            let barrierSteps = 0;
+            let barrierHits = 0;
+            const barrierLog = [];
+            let wasOnBarrier = false;
             let maxSpeed = 0;
             let hint = -1;
             const prevUp = new V3(0, 1, 0).applyQuaternion(
@@ -235,11 +288,32 @@
                 );
                 let delta = targetYaw - v.yaw;
                 delta = Math.atan2(Math.sin(delta), Math.cos(delta));
+                // heading error with yaw rate damping against the path's own
+                // turn rate, so it holds a line instead of weaving
+                const pathTurn =
+                    speed *
+                    signedCurvature(hint + ahead) *
+                    (options.damping === false ? 0 : 1);
+                const yawRateNow = v.physics ? v.physics.yawRate : 0;
                 controls.steer = Math.max(
                     -1,
-                    Math.min(1, delta * 4 * steerSign)
+                    Math.min(
+                        1,
+                        (delta * 3 - (yawRateNow - pathTurn) * 0.8) * steerSign
+                    )
                 );
-                controls.throttle = options.throttle ?? 1;
+                if (options.throttle !== undefined) {
+                    controls.throttle = options.throttle;
+                    controls.brake = 0;
+                } else {
+                    const target = targetSpeedAt(hint, speed);
+                    controls.throttle = speed < target ? 1 : 0;
+                    controls.brake = THREE_clamp(
+                        (speed - target - 1) / 6,
+                        0,
+                        1
+                    );
+                }
                 controls.handbrake = 0;
                 // stress scenarios once the car is fast
                 if (
@@ -289,6 +363,25 @@
                 maxSpeed = Math.max(maxSpeed, speed * 3.6);
                 if (!v.grounded) airborne++;
                 if (near.dist > 18) offTrack++;
+                const onBarrier = Boolean(v.barrierContact);
+                if (onBarrier) barrierSteps++;
+                if (onBarrier && !wasOnBarrier) {
+                    barrierHits++;
+                    if (barrierLog.length < 8) {
+                        barrierLog.push({
+                            t: +(s / 60).toFixed(2),
+                            kph: Math.round(speed * 3.6),
+                            at: Math.round(
+                                v.trackFrame ? v.trackFrame.distance : 0
+                            ),
+                            lateral: +(
+                                v.trackFrame ? v.trackFrame.lateral : 0
+                            ).toFixed(1),
+                            side: v.barrierContact,
+                        });
+                    }
+                }
+                wasOnBarrier = onBarrier;
                 const gaps = cornerGaps().filter((g) => g !== null);
                 if (gaps.length) {
                     gapsAll.push(Math.max(...gaps));
@@ -312,6 +405,7 @@
                         lat: +v.lateralSpeed.toFixed(2),
                         grounded: v.grounded,
                         drift: +v.driftAmount.toFixed(2),
+                        barrier: v.barrierContact || 0,
                     });
                 }
                 prevYaw = v.yaw;
@@ -347,6 +441,12 @@
                 ).toFixed(1),
                 offTrackPct: +(
                     (100 * offTrack) /
+                    Math.max(1, steps - 60)
+                ).toFixed(1),
+                barrierHits,
+                barrierLog,
+                barrierPct: +(
+                    (100 * barrierSteps) /
                     Math.max(1, steps - 60)
                 ).toFixed(1),
                 tiltJitterDegP99: +(percentile(jitter, 0.99) || 0).toFixed(2),

@@ -33,6 +33,24 @@ export type CarPerformanceReference = {
     url: string;
 };
 
+// power and torque are the published figures (the One's combined torque
+// isn't published, so that one is a tuning value). the rest are tuning values
+// picked so each car lands near its 0-100 and top speed below
+export type CarPhysicsConfig = {
+    powerKw: number;
+    powerRpm: number;
+    torqueNm: number;
+    torqueRpm: number;
+    weightFront: number;
+    cgHeight: number;
+    tireGrip: number;
+    cdA: number;
+    clA?: number;
+    frontTorqueShare?: number;
+    shiftTime: number;
+    launchRpm: number;
+};
+
 export type CarRaceConfig = {
     visualForwardAxis?: 'positiveZ' | 'negativeZ';
     visualYawOffsetDeg?: number;
@@ -64,6 +82,7 @@ export type CarRaceConfig = {
     steerRateHigh: number;
     maxSteerAngleDeg: number;
     brakeDecel: number;
+    physics: CarPhysicsConfig;
     references: CarPerformanceReference[];
 };
 
@@ -107,6 +126,20 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.65,
             maxSteerAngleDeg: 34,
             brakeDecel: 44,
+            physics: {
+                powerKw: 782,
+                powerRpm: 9000,
+                torqueNm: 680,
+                torqueRpm: 3500,
+                weightFront: 0.42,
+                cgHeight: 0.42,
+                tireGrip: 1.32,
+                cdA: 0.8,
+                clA: 1.2,
+                frontTorqueShare: 0.3,
+                shiftTime: 0.08,
+                launchRpm: 4500,
+            },
             references: [
                 {
                     label: 'Mercedes-AMG ONE Technical Data',
@@ -160,6 +193,18 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.58,
             maxSteerAngleDeg: 35,
             brakeDecel: 40,
+            physics: {
+                powerKw: 309,
+                powerRpm: 8300,
+                torqueNm: 400,
+                torqueRpm: 3900,
+                weightFront: 0.52,
+                cgHeight: 0.48,
+                tireGrip: 1.15,
+                cdA: 0.72,
+                shiftTime: 0.15,
+                launchRpm: 4200,
+            },
             references: [
                 {
                     label: 'BMW Group M3 Coupe Press Data',
@@ -199,6 +244,18 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.5,
             maxSteerAngleDeg: 34,
             brakeDecel: 42,
+            physics: {
+                powerKw: 373,
+                powerRpm: 6800,
+                torqueNm: 610,
+                torqueRpm: 5200,
+                weightFront: 0.54,
+                cgHeight: 0.5,
+                tireGrip: 1.12,
+                cdA: 0.72,
+                shiftTime: 0.2,
+                launchRpm: 3500,
+            },
             references: [
                 {
                     label: 'Car and Driver C63 AMG 507 Test',
@@ -244,6 +301,18 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.56,
             maxSteerAngleDeg: 33,
             brakeDecel: 43,
+            physics: {
+                powerKw: 375,
+                powerRpm: 6250,
+                torqueNm: 700,
+                torqueRpm: 2000,
+                weightFront: 0.54,
+                cgHeight: 0.5,
+                tireGrip: 1.18,
+                cdA: 0.72,
+                shiftTime: 0.14,
+                launchRpm: 3000,
+            },
             references: [
                 {
                     label: 'Car and Driver 2019 AMG C63 Specs',
@@ -287,6 +356,18 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.62,
             maxSteerAngleDeg: 34,
             brakeDecel: 41,
+            physics: {
+                powerKw: 317,
+                powerRpm: 7300,
+                torqueNm: 550,
+                torqueRpm: 1850,
+                weightFront: 0.52,
+                cgHeight: 0.48,
+                tireGrip: 1.2,
+                cdA: 0.7,
+                shiftTime: 0.12,
+                launchRpm: 3200,
+            },
             references: [
                 {
                     label: 'Car and Driver 2015 BMW M4 Info',
@@ -334,6 +415,19 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.55,
             maxSteerAngleDeg: 34,
             brakeDecel: 43,
+            physics: {
+                powerKw: 460,
+                powerRpm: 6000,
+                torqueNm: 750,
+                torqueRpm: 1800,
+                weightFront: 0.54,
+                cgHeight: 0.52,
+                tireGrip: 1.15,
+                cdA: 0.75,
+                frontTorqueShare: 0.35,
+                shiftTime: 0.15,
+                launchRpm: 3000,
+            },
             references: [
                 {
                     label: 'BMW M5 Competition Technical Data',
@@ -381,6 +475,19 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.55,
             maxSteerAngleDeg: 34,
             brakeDecel: 43,
+            physics: {
+                powerKw: 460,
+                powerRpm: 6000,
+                torqueNm: 750,
+                torqueRpm: 1800,
+                weightFront: 0.53,
+                cgHeight: 0.5,
+                tireGrip: 1.2,
+                cdA: 0.72,
+                frontTorqueShare: 0.35,
+                shiftTime: 0.15,
+                launchRpm: 3000,
+            },
             references: [
                 {
                     label: 'BMW M8 Competition Coupe Technical Data',
@@ -437,6 +544,19 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.46,
             maxSteerAngleDeg: 32,
             brakeDecel: 44,
+            physics: {
+                powerKw: 470,
+                powerRpm: 6500,
+                torqueNm: 900,
+                torqueRpm: 2500,
+                weightFront: 0.55,
+                cgHeight: 0.53,
+                tireGrip: 1.15,
+                cdA: 0.78,
+                frontTorqueShare: 0.4,
+                shiftTime: 0.14,
+                launchRpm: 3000,
+            },
             references: [
                 {
                     label: 'Car and Driver 2020 AMG GT63 S Specs',
@@ -482,6 +602,19 @@ export const carOptions: CarOption[] = [
             steerRateHigh: 1.46,
             maxSteerAngleDeg: 33,
             brakeDecel: 39,
+            physics: {
+                powerKw: 254,
+                powerRpm: 6000,
+                torqueNm: 542,
+                torqueRpm: 2000,
+                weightFront: 0.58,
+                cgHeight: 0.58,
+                tireGrip: 1.0,
+                cdA: 0.75,
+                frontTorqueShare: 0.45,
+                shiftTime: 0.3,
+                launchRpm: 2400,
+            },
             references: [
                 {
                     label: 'Car and Driver 2023 Toyota Crown Tested',

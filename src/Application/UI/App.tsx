@@ -5,6 +5,10 @@ import InterfaceUI from './components/InterfaceUI';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
+import {
+    readAssistSettings,
+    type AssistPreset,
+} from '../Racing/Vehicle/assists';
 import './style.css';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
@@ -20,6 +24,12 @@ const RENDER_MODES: { mode: QualityMode; label: string }[] = [
     { mode: 'auto', label: 'Auto' },
     { mode: 'quality', label: 'Quality' },
     { mode: 'performance', label: 'Performance' },
+];
+
+const ASSIST_OPTIONS: { preset: AssistPreset; label: string }[] = [
+    { preset: 'standard', label: 'Standard' },
+    { preset: 'sport', label: 'Sport' },
+    { preset: 'off', label: 'Off' },
 ];
 
 const RenderModeButtons = ({
@@ -251,6 +261,7 @@ const App = () => {
     const [rotateHint, setRotateHint] = useState(false);
     const [graphicsContextLost, setGraphicsContextLost] = useState(false);
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
+    const [assists, setAssists] = useState(() => readAssistSettings());
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -331,6 +342,11 @@ const App = () => {
 
         eventBus.on('race:debugStats', (stats: DebugStats) => {
             setDebugStats(stats);
+        });
+
+        // the vehicle stores the choice, this just mirrors it
+        eventBus.on('race:assists', () => {
+            window.setTimeout(() => setAssists(readAssistSettings()), 0);
         });
 
         eventBus.dispatch('race:requestLeaderboard', {});
@@ -1016,6 +1032,61 @@ const App = () => {
                                 />
                             </div>
                         </div>
+
+                        <div className="race-menu-row">
+                            <span>Assists</span>
+                            <div className="race-quality-buttons">
+                                {ASSIST_OPTIONS.map((option) => (
+                                    <button
+                                        key={option.preset}
+                                        type="button"
+                                        className={
+                                            assists.preset === option.preset
+                                                ? 'active'
+                                                : ''
+                                        }
+                                        onClick={() =>
+                                            eventBus.dispatch('race:assists', {
+                                                preset: option.preset,
+                                            })
+                                        }
+                                    >
+                                        {option.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="race-menu-row">
+                            <span>Gearbox</span>
+                            <div className="race-quality-buttons">
+                                {[true, false].map((auto) => (
+                                    <button
+                                        key={auto ? 'auto' : 'manual'}
+                                        type="button"
+                                        className={
+                                            assists.autoGears === auto
+                                                ? 'active'
+                                                : ''
+                                        }
+                                        onClick={() =>
+                                            eventBus.dispatch('race:assists', {
+                                                autoGears: auto,
+                                            })
+                                        }
+                                    >
+                                        {auto ? 'Auto' : 'Manual (Q / E)'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <p className="race-menu-controls">
+                            W / S or arrows: throttle, brake (hold S to reverse).
+                            A / D: steer. Space: handbrake. R: back on track. T:
+                            restart lap. Gamepad: triggers, left stick, A handbrake,
+                            Y reset.
+                        </p>
 
                         <div className="race-menu-actions">
                             <button type="button" onClick={handleResumeRace}>
