@@ -111,7 +111,7 @@ export type GpuTier = 'high' | 'low';
 
 // software rasterizers and old mobile or integrated parts get the light preset
 const WEAK_GPU =
-    /swiftshader|llvmpipe|softpipe|software|microsoft basic|mali-[t4]|adreno \(tm\) [3-5]\d\d|powervr|intel\(r\) (hd|uhd) graphics [1-6]?\d{2,3}\b|intel.*hd graphics$/i;
+    /swiftshader|llvmpipe|softpipe|software|microsoft basic|mali-[t4]|adreno \(tm\) [3-5]\d\d|powervr|intel\(r\) (?:hd|uhd) graphics [1-6]?\d{2,3}\b|(?:intel.*hd graphics$)/i;
 
 export const detectGpuTier = (
     gl: WebGLRenderingContext | WebGL2RenderingContext

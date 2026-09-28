@@ -74,14 +74,15 @@ const decode = (context: BaseAudioContext, data: ArrayBuffer) =>
             settled = true;
             reject(error);
         };
+        // old webkit returns nothing and only calls back
+        let result: Promise<AudioBuffer> | undefined;
         try {
-            const result = context.decodeAudioData(data, done, fail);
-            if (result && typeof result.then === 'function') {
-                result.then(done, fail);
-            }
+            result = context.decodeAudioData(data, done, fail);
         } catch (error) {
             fail(error);
+            return;
         }
+        result?.then(done, fail);
     });
 
 export default class AudioBank {

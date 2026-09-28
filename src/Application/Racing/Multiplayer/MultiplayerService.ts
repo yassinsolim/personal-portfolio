@@ -3,7 +3,7 @@ import { createMockRealtime, mockRealtimeEnabled } from './mockRealtime';
 import { decodeLook, encodeLook, sanitizeLook, STOCK_LOOK } from '../Garage/garage';
 import type { CarLook } from '../Garage/garage';
 import { carOptionsById, defaultCarId } from '../../carOptions';
-import { randomInt } from '../../Utils/Random';
+import { randomFloat01, randomInt } from '../../Utils/Random';
 import type { LeaderboardEntry } from '../Leaderboard/LocalLeaderboard';
 
 type SupabaseConfig = {
@@ -167,10 +167,10 @@ const simulateNetwork = (channel: RealtimeChannel) => {
     if (!sim) return;
     const send = channel.send.bind(channel);
     channel.send = ((message: Parameters<RealtimeChannel['send']>[0], opts?: Parameters<RealtimeChannel['send']>[1]) => {
-        if (message.type === 'broadcast' && Math.random() < sim.loss) {
+        if (message.type === 'broadcast' && randomFloat01() < sim.loss) {
             return Promise.resolve('ok');
         }
-        const delay = sim.lag + Math.random() * sim.jitter;
+        const delay = sim.lag + randomFloat01() * sim.jitter;
         if (delay <= 0) return send(message, opts);
         return new Promise((resolve) => {
             window.setTimeout(() => resolve(send(message, opts)), delay);
