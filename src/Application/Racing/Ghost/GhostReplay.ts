@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import Application from '../../Application';
+import { legacyColor } from '../../Utils/LegacyColor';
 
 const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v1';
 const SAMPLE_INTERVAL_MS = 45;
@@ -99,7 +100,7 @@ export default class GhostReplay {
 
         this.fallbackGeometry = new THREE.BoxGeometry(2.1, 1.2, 4.4);
         this.fallbackMaterial = new THREE.MeshBasicMaterial({
-            color: 0x6fe7ff,
+            color: legacyColor(0x6fe7ff),
             transparent: true,
             opacity: 0.3,
             depthWrite: false,

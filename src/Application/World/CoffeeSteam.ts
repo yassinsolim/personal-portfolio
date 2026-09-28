@@ -39,7 +39,12 @@ export default class CoffeeSteam {
                 uTime: { value: 0 },
                 uTimeFrequency: { value: 0.001 },
                 uUvFrequency: { value: new THREE.Vector2(3, 5) },
-                uColor: { value: new THREE.Color(this.model.color) },
+                uColor: {
+                    value: new THREE.Color().setStyle(
+                        this.model.color,
+                        THREE.LinearSRGBColorSpace
+                    ),
+                },
             },
         });
 

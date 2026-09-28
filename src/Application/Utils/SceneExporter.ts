@@ -35,6 +35,7 @@ const exportSceneToGLB = (
                         reject(error);
                     }
                 },
+                (error) => reject(error),
                 exportOptions
             );
         } catch (error) {

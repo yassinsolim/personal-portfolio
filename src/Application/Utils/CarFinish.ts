@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { CarOption, CarPaint, CarWindowTint } from '../carOptions';
+import { setLegacyHex } from './LegacyColor';
 
 type GlassZone = 'windshield' | 'surround';
 
@@ -137,7 +138,7 @@ const createTintMaterial = (
     const material = source.clone();
     material.map = null;
     material.alphaMap = null;
-    material.color.setHex(tint.color ?? DEFAULT_TINT_COLOR);
+    setLegacyHex(material.color, tint.color ?? DEFAULT_TINT_COLOR);
     material.metalness = 0;
     material.roughness = 0.02;
     material.envMapIntensity = 0.5;
@@ -259,7 +260,7 @@ export const applyPaint = (model: THREE.Object3D, paint: CarPaint) => {
         // beamng exports carry vertex color paint masks (magenta on the e92
         // bumper and trunk) that tint a solid repaint
         material.vertexColors = false;
-        material.color.setHex(paint.color);
+        setLegacyHex(material.color, paint.color);
         material.metalness = paint.metalness;
         material.roughness = paint.roughness;
         if (

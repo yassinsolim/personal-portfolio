@@ -7,6 +7,11 @@ import { applyCarFinish } from '../Utils/CarFinish';
 import { addContactShadow } from './CarContactShadow';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
+import {
+    LEGACY_LIGHT_SCALE,
+    legacyColor,
+    setLegacyHex,
+} from '../Utils/LegacyColor';
 
 const BASE_CAR_SCALE = 27;
 const CAR_POSITION = new THREE.Vector3(-2400, 0, -7600);
@@ -16,10 +21,10 @@ const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
 const BMW_M8_COMPETITION_COUPE_ID = 'bmw-m8-competition-coupe';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
-const BODY_BLUE = new THREE.Color(0x050f2f);
-const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const TOYOTA_CROWN_GRAY = new THREE.Color(0x8f9296);
+const BODY_BLUE = legacyColor(0x050f2f);
+const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);
+const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = legacyColor(0x040924);
+const TOYOTA_CROWN_GRAY = legacyColor(0x8f9296);
 const TOYOTA_CROWN_SCALE = 0.95;
 const TOYOTA_CROWN_ROTATION_OFFSET = Math.PI / 2;
 const TOYOTA_CROWN_POSITION_OFFSET = new THREE.Vector3(400, 0, 0);
@@ -28,7 +33,7 @@ const TOYOTA_CROWN_FORWARD_SHIFT = -0.5;
 const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
 const MOBILE_MAX_WIDTH = 768;
 const MOBILE_CAR_BACK_SHIFT = 0.12;
-const WHEEL_SILVER = new THREE.Color(0xcfd3da);
+const WHEEL_SILVER = legacyColor(0xcfd3da);
 
 export default class Car {
     application: Application;
@@ -342,7 +347,7 @@ export default class Car {
             this.resources.items.cubeTexture.environmentMapTexture ||
             undefined;
         if (!envMap) return;
-        envMap.encoding = THREE.sRGBEncoding;
+        envMap.colorSpace = THREE.SRGBColorSpace;
         car.traverse((child) => {
             if (
                 child instanceof THREE.Mesh &&
@@ -476,7 +481,7 @@ export default class Car {
                     material.metalness = 0.1;
                     material.roughness = 0.35;
                 } else if (windowNames.some((n) => name.includes(n))) {
-                    material.color.setHex(0x000000);
+                    setLegacyHex(material.color, 0x000000);
                     material.metalness = 0.2;
                     material.roughness = 0.12;
                     material.opacity = 0.45;
@@ -491,7 +496,7 @@ export default class Car {
                     material.roughness = 0.1;
                     material.envMapIntensity = 1.5;
                 } else if (tireNames.some((n) => name.includes(n))) {
-                    material.color.setHex(0x111111);
+                    setLegacyHex(material.color, 0x111111);
                     material.metalness = 0.05;
                     material.roughness = 0.9;
                 } else if (silverTrimNames.some((n) => name.includes(n))) {
@@ -521,14 +526,24 @@ export default class Car {
     }
 
     addLights() {
-        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x2a2a2a, 0.55);
+        const hemiLight = new THREE.HemisphereLight(
+            0xffffff,
+            legacyColor(0x2a2a2a),
+            0.55 * LEGACY_LIGHT_SCALE
+        );
         hemiLight.position.set(0, 6000, 0);
 
-        const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        const keyLight = new THREE.DirectionalLight(
+            0xffffff,
+            LEGACY_LIGHT_SCALE
+        );
         keyLight.position.set(8000, 11000, 5500);
         keyLight.target.position.set(0, 0, 0);
 
-        const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        const rimLight = new THREE.DirectionalLight(
+            0xffffff,
+            0.4 * LEGACY_LIGHT_SCALE
+        );
         rimLight.position.set(-9000, 7000, -5000);
         rimLight.target.position.set(0, 0, -2000);
 

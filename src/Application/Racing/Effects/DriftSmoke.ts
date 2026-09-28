@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../../Application';
 import UIEventBus from '../../UI/EventBus';
 import { randomRange } from '../../Utils/Random';
+import { legacyColor } from '../../Utils/LegacyColor';
 
 type SmokeParticle = {
     sprite: THREE.Sprite;
@@ -100,7 +101,7 @@ export default class DriftSmoke {
             opacity: THREE.MathUtils.lerp(0.2, 0.55, intensity),
             depthWrite: false,
             depthTest: true,
-            color: new THREE.Color(0xbec3c8),
+            color: legacyColor(0xbec3c8),
         });
 
         const sprite = new THREE.Sprite(material);

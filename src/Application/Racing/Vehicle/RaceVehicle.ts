@@ -14,6 +14,7 @@ import {
     type CarRaceConfig,
     type DrivetrainType,
 } from '../../carOptions';
+import { legacyColor } from '../../Utils/LegacyColor';
 
 const SPAWN_T = 0.003;
 const MAX_REVERSE_SPEED_KPH = 34;
@@ -47,6 +48,7 @@ const MAX_SINGLE_WHEEL_RADIUS = 0.6;
 const CREST_LAUNCH_TOLERANCE = 0.06;
 const MAX_GROUND_FOLLOW_GRADE = 1.2;
 const GROUND_FOLLOW_STEP_ALLOWANCE = 0.25;
+const MAX_GROUND_VERTICAL_SPEED = 25;
 const WHEEL_PROBE_CLEARANCE_BIAS = 0;
 const MAX_WHEEL_ANTI_SINK_LIFT = 0.018;
 const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MIN = 0.7;
@@ -133,11 +135,11 @@ const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
     '523_refl_black_0_1',
     '539_refl_black_0_1',
 ];
-const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
-const BMW_E92_RIM_SILVER = new THREE.Color(0xd3d8de);
-const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
+const AMG_ONE_RACE_BLUE = legacyColor(0x050f2f);
+const BMW_E92_RIM_SILVER = legacyColor(0xd3d8de);
+const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);
+const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = legacyColor(0x040924);
+const TOYOTA_CROWN_SILVER = legacyColor(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =
@@ -4277,8 +4279,13 @@ export default class RaceVehicle {
             Math.abs(this.speedMps) * deltaSeconds * MAX_GROUND_FOLLOW_GRADE +
             GROUND_FOLLOW_STEP_ALLOWANCE;
         const nextY = Math.min(targetY, startY + maxRise);
+        // the road can't throw the car faster than this, whatever the step
         this.verticalVelocity = wasGrounded
-            ? (nextY - startY) / deltaSeconds
+            ? THREE.MathUtils.clamp(
+                  (nextY - startY) / deltaSeconds,
+                  -MAX_GROUND_VERTICAL_SPEED,
+                  MAX_GROUND_VERTICAL_SPEED
+              )
             : 0;
         this.position.y = nextY;
         this.grounded = true;

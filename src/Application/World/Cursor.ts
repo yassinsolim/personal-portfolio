@@ -16,7 +16,7 @@ export default class Cursor {
 
         // create a cursor as a circle
         const cursor = new THREE.Mesh(
-            new THREE.SphereBufferGeometry(2000, 32),
+            new THREE.SphereGeometry(2000, 32),
             new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 side: THREE.DoubleSide,

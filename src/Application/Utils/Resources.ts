@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import {
+    DRACO_GLTF_CONFIG,
+    DRACOLoader,
+} from 'three/examples/jsm/loaders/DRACOLoader.js';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import EventEmitter from './EventEmitter';
@@ -72,11 +75,15 @@ export default class Resources extends EventEmitter {
     }
 
     setLoaders() {
+        // webpack emits the decoders that ship with three, so they can't drift
+        // out of sync with the loader again. the glTF build is the smaller
+        // wasm, but only the default paths include the asm.js fallback
         const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('draco/gltf/');
-        dracoLoader.setDecoderConfig({
-            type: canCompileWasm() ? 'wasm' : 'js',
-        });
+        if (canCompileWasm()) {
+            dracoLoader.setDecoderPath(DRACO_GLTF_CONFIG);
+        } else {
+            dracoLoader.setDecoderConfig({ type: 'js' });
+        }
 
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
@@ -116,7 +123,7 @@ export default class Resources extends EventEmitter {
                 this.loaders.textureLoader.load(
                     source.path,
                     (file) => {
-                        file.encoding = THREE.sRGBEncoding;
+                        file.colorSpace = THREE.SRGBColorSpace;
                         this.sourceLoaded(source, file);
                     },
                     undefined,
