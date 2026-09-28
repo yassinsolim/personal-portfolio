@@ -166,4 +166,37 @@ export default class TrackField {
         target.index = best;
         return target;
     }
+
+    // how far the nearest sample is that sits at least `apart` samples away
+    // along the lap from `index`: another stretch of road, like the far side
+    // of a hairpin. Infinity if there's none within reach
+    distanceToOther(
+        x: number,
+        z: number,
+        index: number,
+        apart: number,
+        reach = 2
+    ) {
+        const cx = Math.floor(x / CELL);
+        const cz = Math.floor(z / CELL);
+        let bestDistance = Infinity;
+        for (let dz = -reach; dz <= reach; dz++) {
+            for (let dx = -reach; dx <= reach; dx++) {
+                const list = this.cells.get(this.cellKey(cx + dx, cz + dz));
+                if (!list) continue;
+                for (let k = 0; k < list.length; k++) {
+                    const i = list[k];
+                    const along = Math.abs(i - index);
+                    if (Math.min(along, this.count - along) < apart) continue;
+                    const ddx = this.points[i * 3] - x;
+                    const ddz = this.points[i * 3 + 2] - z;
+                    bestDistance = Math.min(
+                        bestDistance,
+                        ddx * ddx + ddz * ddz
+                    );
+                }
+            }
+        }
+        return Math.sqrt(bestDistance);
+    }
 }

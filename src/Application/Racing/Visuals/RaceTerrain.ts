@@ -1,18 +1,35 @@
 import * as THREE from 'three';
 import type NordschleifeTrack from '../Track/NordschleifeTrack';
+import { VERGE_DROP } from '../Track/NordschleifeTrack';
 import TrackField, { fbm, type TrackNearest } from './TrackField';
+import RoadClearance, { CARVE_DEPTH, TriangleIndex } from './RoadClearance';
 import { createGrassTexture } from './proceduralTextures';
 
 // ground around the track: the real eifel from the dem, blended into the road
 // near it. the grid stays under the road and verges, and a skirt strip runs
-// from each barrier down onto the grid so there's never a gap or a cliff
+// from each barrier down onto the grid so there's never a gap or a cliff.
+// every surface is carved under the road (RoadClearance) before it's drawn,
+// scripts/test/terrain-road.test.mjs checks that for every quality
 const MARGIN = 850;
 const SKIRT_COLUMNS = [0, 2.5, 7, 15, 27, 44];
 const SKIRT_TUCK = 0.3;
-const UNDER_ROAD = 1.4;
+const UNDER_ROAD = CARVE_DEPTH;
 const DETAIL_METERS = 7;
+// the skirt's outer columns sit on every third ribbon station
+const SKIRT_STRIDE = 3;
+// another stretch of the lap closer than this (and at least CROWD_ALONG away
+// along it) can be under this skirt, so the skirt there gets carved too
+const CROWD_REACH = 70;
+const CROWD_ALONG = 100;
 
 export type TerrainQuality = 'high' | 'low';
+// every quality the game builds, tests walk them all
+export const TERRAIN_QUALITIES: TerrainQuality[] = ['high', 'low'];
+// grid cell per quality, meters
+export const GROUND_CELL: Record<TerrainQuality, number> = {
+    high: 24,
+    low: 56,
+};
 
 const smoothstep = (edge0: number, edge1: number, x: number) => {
     const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
@@ -33,6 +50,17 @@ export default class RaceTerrain {
     skirt: THREE.Group;
     material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
     barrier: number;
+    clearance: RoadClearance;
+    // the carved ground grid, for lookups while the skirt is built
+    grid: {
+        positions: Float32Array;
+        cols: number;
+        rows: number;
+        cell: number;
+    };
+    skirtSurface: { positions: Float32Array; index: ArrayLike<number> } | null =
+        null;
+    private skirtLookup: TriangleIndex | null = null;
     private nearest: TrackNearest;
 
     constructor(
@@ -42,6 +70,7 @@ export default class RaceTerrain {
     ) {
         this.track = track;
         this.field = new TrackField(track, MARGIN);
+        this.clearance = new RoadClearance(track);
         this.nearest = { distance: 0, roadY: 0, index: -1 };
         this.barrier = track.getVergeHalfWidth(0.5);
         this.root = new THREE.Group();
@@ -61,7 +90,7 @@ export default class RaceTerrain {
                   })
                 : // weak gpus: the vertex colors alone, no detail texture
                   new THREE.MeshLambertMaterial({ vertexColors: true });
-        this.ground = this.buildGround(quality === 'high' ? 24 : 56);
+        this.ground = this.buildGround(GROUND_CELL[quality]);
         this.skirt = this.buildSkirt();
         this.root.add(this.ground);
         this.root.add(this.skirt);
@@ -109,6 +138,61 @@ export default class RaceTerrain {
         return h > cap ? h - (h - cap) * push : h;
     }
 
+    // the top of the ground as it's drawn, grid or skirt. trees stand on
+    // this, heightAt can be under the skirt or over the pushed grid
+    groundAt(x: number, z: number) {
+        const grid = this.groundGridAt(x, z);
+        if (!this.skirtSurface) return grid;
+        this.skirtLookup ??= new TriangleIndex(
+            this.skirtSurface.positions,
+            this.skirtSurface.index,
+            undefined,
+            16
+        );
+        return Math.max(grid, this.skirtLookup.heightAt(x, z));
+    }
+
+    // the drawn grid's height at a point, triangle by triangle like it's
+    // rendered (the carve and the push make it differ from heightAt)
+    groundGridAt(x: number, z: number) {
+        const { positions, cols, rows, cell } = this.grid;
+        const fx = Math.min(
+            cols - 1.001,
+            Math.max(0, (x - this.field.minX) / cell)
+        );
+        const fz = Math.min(
+            rows - 1.001,
+            Math.max(0, (z - this.field.minZ) / cell)
+        );
+        const col = Math.floor(fx);
+        const row = Math.floor(fz);
+        const u = fx - col;
+        const v = fz - row;
+        const a = row * cols + col;
+        const y = (i: number) => positions[i * 3 + 1];
+        if (u + v <= 1)
+            return y(a) * (1 - u - v) + y(a + 1) * u + y(a + cols) * v;
+        return (
+            y(a + cols + 1) * (u + v - 1) +
+            y(a + 1) * (1 - v) +
+            y(a + cols) * (1 - u)
+        );
+    }
+
+    // how readily a grid vertex takes the carve, by its distance from the
+    // road: freely under the road and skirt, hardly at all where it's in view
+    carveMobility(distance: number) {
+        return (
+            1 -
+            0.95 *
+                smoothstep(
+                    this.barrier + 24,
+                    this.barrier + SKIRT_COLUMNS[SKIRT_COLUMNS.length - 1],
+                    distance
+                )
+        );
+    }
+
     colorAt(x: number, z: number, target: THREE.Color) {
         const variation = fbm(x * 0.012 + 3.3, z * 0.012 - 1.1, 3);
         const patches = fbm(x * 0.0035 - 9.2, z * 0.0035 + 4.4, 2);
@@ -131,6 +215,7 @@ export default class RaceTerrain {
         const positions = new Float32Array(cols * rows * 3);
         const colors = new Float32Array(cols * rows * 3);
         const uvs = new Float32Array(cols * rows * 2);
+        const mobility = new Float32Array(cols * rows);
         const color = new THREE.Color();
         for (let row = 0; row < rows; row++) {
             for (let col = 0; col < cols; col++) {
@@ -138,6 +223,7 @@ export default class RaceTerrain {
                 const x = field.minX + col * cell;
                 const z = field.minZ + row * cell;
                 const y = this.gridHeightAt(x, z);
+                mobility[i] = this.carveMobility(this.nearest.distance);
                 positions[i * 3] = x;
                 positions[i * 3 + 1] = y;
                 positions[i * 3 + 2] = z;
@@ -179,9 +265,24 @@ export default class RaceTerrain {
             for (let col = 0; col < cols - 1; col++, k += 6)
                 quad(all, k, row, col);
         }
-        // normals over the whole grid so tiles meet without seams
+        // normals over the whole grid so tiles meet without seams, taken
+        // before the carve so it only moves hidden ground, not the shading
         geometry.setIndex(new THREE.BufferAttribute(all, 1));
         geometry.computeVertexNormals();
+        // the push above keeps most of the grid under the road, but a big
+        // cell reaches past it and the karussell's bank drops the inside
+        // below the centerline. the carve covers both, on the triangles as
+        // they're drawn
+        this.clearance.carveGrid(
+            positions,
+            cols,
+            rows,
+            cell,
+            field.minX,
+            field.minZ,
+            mobility
+        );
+        this.grid = { positions, cols, rows, cell };
 
         // tiles share the vertex buffers and only differ in index, so each can
         // be frustum culled on its own
@@ -226,17 +327,30 @@ export default class RaceTerrain {
         return group;
     }
 
-    // from the barrier line out onto the terrain, on the same banked frame as
-    // the road ribbons so the inner edge meets the verge exactly
+    // from the barrier line out onto the terrain, on the same banked frames
+    // as the road ribbons. the inner edge takes every ribbon station, so it
+    // is the verge's outer edge exactly (no gap, and no overlap to flicker).
+    // the outer columns take every SKIRT_STRIDE-th station, and the first
+    // strip is stitched between the two
     buildSkirt() {
         const track = this.track;
         const curve = track.visualCurve;
-        const samples = Math.round(track.length / 5);
-        const columns = SKIRT_COLUMNS.length;
-        const positions: number[] = [];
-        const colors: number[] = [];
-        const uvs: number[] = [];
-        const indices: number[] = [];
+        const stations = track.getRibbonSamples();
+        const rings = Math.ceil(stations / SKIRT_STRIDE);
+        const outer = SKIRT_COLUMNS.length - 1;
+        const reach = SKIRT_COLUMNS[outer];
+        const perSide = stations + 1 + (rings + 1) * outer;
+        const positions = new Float32Array(perSide * 2 * 3);
+        const colors = new Float32Array(perSide * 2 * 3);
+        const uvs = new Float32Array(perSide * 2 * 2);
+        // the inner edge is shared with the verge, so the carve can't move it
+        const mobility = new Float32Array(perSide * 2).fill(1);
+        // outer end vertex, and the height that tucks it under the drawn grid
+        const tucks: number[] = [];
+        const ringStation = (j: number) => Math.min(stations, j * SKIRT_STRIDE);
+        const edgeVertex = (side: number, s: number) => side * perSide + s;
+        const ringVertex = (side: number, j: number, c: number) =>
+            side * perSide + stations + 1 + j * outer + c - 1;
         const point = new THREE.Vector3();
         const tangent = new THREE.Vector3();
         const normal = new THREE.Vector3();
@@ -245,12 +359,22 @@ export default class RaceTerrain {
         const edge = new THREE.Vector3();
         const flat = new THREE.Vector3();
         const color = new THREE.Color();
-        let vertex = 0;
-        [1, -1].forEach((sign) => {
+        const write = (v: number, x: number, y: number, z: number) => {
+            positions[v * 3] = x;
+            positions[v * 3 + 1] = y;
+            positions[v * 3 + 2] = z;
+            this.colorAt(x, z, color);
+            colors[v * 3] = color.r;
+            colors[v * 3 + 1] = color.g;
+            colors[v * 3 + 2] = color.b;
+            uvs[v * 2] = x / DETAIL_METERS;
+            uvs[v * 2 + 1] = z / DETAIL_METERS;
+        };
+        [1, -1].forEach((sign, sideIndex) => {
             previousSide.set(1, 0, 0);
-            const start = vertex;
-            for (let i = 0; i <= samples; i++) {
-                const t = i / samples;
+            for (let s = 0; s <= stations; s++) {
+                // same t and frame sequence as createRibbonGeometry
+                const t = (((s / stations) % 1) + 1) % 1;
                 track.getRibbonFrame(
                     curve,
                     t,
@@ -263,50 +387,66 @@ export default class RaceTerrain {
                 const vergeHalf = track.getVergeHalfWidth(t);
                 edge.copy(point)
                     .addScaledVector(side, sign * vergeHalf)
-                    .addScaledVector(normal, -0.012);
+                    .addScaledVector(normal, -VERGE_DROP);
+                const inner = edgeVertex(sideIndex, s);
+                write(inner, edge.x, edge.y, edge.z);
+                mobility[inner] = 0;
+                if (s % SKIRT_STRIDE !== 0 && s !== stations) continue;
+                const j = s === stations ? rings : s / SKIRT_STRIDE;
                 flat.set(side.x, 0, side.z).normalize().multiplyScalar(sign);
-                for (let c = 0; c < columns; c++) {
+                for (let c = 1; c <= outer; c++) {
                     const out = SKIRT_COLUMNS[c];
                     const x = edge.x + flat.x * out;
                     const z = edge.z + flat.z * out;
-                    let y = edge.y;
-                    if (c > 0) {
-                        const ground = this.heightAt(x, z) - SKIRT_TUCK;
-                        const blend = smoothstep(
-                            0,
-                            SKIRT_COLUMNS[columns - 1],
-                            out
-                        );
-                        y = edge.y + (ground - edge.y) * blend;
-                    }
-                    positions.push(x, y, z);
-                    this.colorAt(x, z, color);
-                    colors.push(color.r, color.g, color.b);
-                    uvs.push(x / DETAIL_METERS, z / DETAIL_METERS);
+                    const ground = this.heightAt(x, z) - SKIRT_TUCK;
+                    const blend = smoothstep(0, reach, out);
+                    const v = ringVertex(sideIndex, j, c);
+                    write(v, x, edge.y + (ground - edge.y) * blend, z);
+                    if (c === outer)
+                        tucks.push(v, this.groundGridAt(x, z) - SKIRT_TUCK);
                 }
             }
-            for (let i = 0; i < samples; i++) {
-                for (let c = 0; c < columns - 1; c++) {
-                    const a = start + i * columns + c;
-                    const b = a + 1;
-                    const d = a + columns;
-                    const e = d + 1;
-                    indices.push(a, d, b, b, d, e);
-                }
-            }
-            vertex = start + (samples + 1) * columns;
         });
+
+        // triangles per side and ring, in lap order
+        const index: number[] = [];
+        const segmentStart: number[] = [];
+        for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+            for (let j = 0; j < rings; j++) {
+                segmentStart.push(index.length / 3);
+                const s0 = ringStation(j);
+                const s1 = ringStation(j + 1);
+                const mid = s0 + Math.floor((s1 - s0) / 2);
+                const r0 = ringVertex(sideIndex, j, 1);
+                const r1 = ringVertex(sideIndex, j + 1, 1);
+                for (let s = s0; s < s1; s++) {
+                    if (s === mid) index.push(r0, edgeVertex(sideIndex, s), r1);
+                    index.push(
+                        edgeVertex(sideIndex, s),
+                        edgeVertex(sideIndex, s + 1),
+                        s < mid ? r0 : r1
+                    );
+                }
+                for (let c = 1; c < outer; c++) {
+                    const a = ringVertex(sideIndex, j, c);
+                    const b = a + 1;
+                    const d = ringVertex(sideIndex, j + 1, c);
+                    const e = d + 1;
+                    index.push(a, d, b, b, d, e);
+                }
+            }
+        }
+        segmentStart.push(index.length / 3);
+
         const geometry = new THREE.BufferGeometry();
-        geometry.setIndex(indices);
+        geometry.setIndex(index);
         geometry.setAttribute(
             'position',
-            new THREE.Float32BufferAttribute(positions, 3)
+            new THREE.BufferAttribute(positions, 3)
         );
-        geometry.setAttribute(
-            'color',
-            new THREE.Float32BufferAttribute(colors, 3)
-        );
-        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+        // normals from the shape before the tuck and the carve, like the grid
         geometry.computeVertexNormals();
         // both sides wind the same way in their own frame, so make every
         // normal face up
@@ -323,40 +463,83 @@ export default class RaceTerrain {
                 );
             }
         }
+        // the far end tucks under the grid as it's drawn, so it never ends in
+        // a ledge over pushed or carved ground
+        for (let k = 0; k < tucks.length; k += 2) {
+            const v = tucks[k];
+            positions[v * 3 + 1] = Math.min(positions[v * 3 + 1], tucks[k + 1]);
+        }
+        // where another stretch of the lap comes close (the karussell's way
+        // in and out), the skirt can reach over that road, so carve it there
+        const frames = track.getSampleCount();
+        const apart = Math.round((CROWD_ALONG / track.length) * frames);
+        const crowded = new Uint8Array(rings);
+        for (let j = 0; j < rings; j++) {
+            const f = Math.round((ringStation(j) / stations) * frames) % frames;
+            const near = this.field.distanceToOther(
+                track.framePoints[f * 3],
+                track.framePoints[f * 3 + 2],
+                f,
+                apart
+            );
+            if (near > CROWD_REACH) continue;
+            for (let k = j - 2; k <= j + 2; k++)
+                crowded[(k + rings) % rings] = 1;
+        }
+        // crowding goes both ways, so the other road's samples are all at
+        // crowded stations too
+        const carve: number[] = [];
+        const mask = new Uint8Array(stations);
+        for (let j = 0; j < rings; j++) {
+            if (!crowded[j]) continue;
+            mask.fill(1, ringStation(j), ringStation(j + 1));
+            for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+                const segment = sideIndex * rings + j;
+                for (
+                    let t = segmentStart[segment];
+                    t < segmentStart[segment + 1];
+                    t++
+                )
+                    carve.push(t);
+            }
+        }
+        this.clearance.carveTriangles(positions, index, mobility, carve, mask);
+
+        this.skirtSurface = { positions, index: geometry.getIndex()!.array };
+        this.skirtLookup = null;
         // cut along the lap so only the stretch in view is drawn. the chunks
         // share the vertex buffers and only differ in index
         const material = this.material.clone();
         material.side = THREE.DoubleSide;
         const group = new THREE.Group();
         group.name = 'race-terrain-skirt';
-        const all = geometry.getIndex()!.array;
-        const perRing = (columns - 1) * 6;
-        const sideLength = samples * perRing;
-        const perChunk = Math.ceil(samples / SKIRT_CHUNKS);
+        const perChunk = Math.ceil(rings / SKIRT_CHUNKS);
         const box = new THREE.Box3();
         const corner = new THREE.Vector3();
         for (let chunk = 0; chunk < SKIRT_CHUNKS; chunk++) {
-            const r0 = chunk * perChunk;
-            const r1 = Math.min(samples, r0 + perChunk);
-            if (r1 <= r0) break;
-            const index: number[] = [];
+            const j0 = chunk * perChunk;
+            const j1 = Math.min(rings, j0 + perChunk);
+            if (j1 <= j0) break;
+            const part: number[] = [];
             box.makeEmpty();
-            for (let side = 0; side < 2; side++) {
-                const from = side * sideLength + r0 * perRing;
-                const to = side * sideLength + r1 * perRing;
+            for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+                const from = segmentStart[sideIndex * rings + j0] * 3;
+                const to = segmentStart[sideIndex * rings + j1] * 3;
                 for (let k = from; k < to; k++) {
-                    index.push(all[k]);
-                    box.expandByPoint(corner.fromArray(positions, all[k] * 3));
+                    part.push(index[k]);
+                    box.expandByPoint(
+                        corner.fromArray(positions, index[k] * 3)
+                    );
                 }
             }
-            const part = new THREE.BufferGeometry();
+            const piece = new THREE.BufferGeometry();
             ['position', 'normal', 'color', 'uv'].forEach((name) =>
-                part.setAttribute(name, geometry.getAttribute(name))
+                piece.setAttribute(name, geometry.getAttribute(name))
             );
-            part.setIndex(index);
-            part.boundingBox = box.clone();
-            part.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
-            const mesh = new THREE.Mesh(part, material);
+            piece.setIndex(part);
+            piece.boundingBox = box.clone();
+            piece.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+            const mesh = new THREE.Mesh(piece, material);
             mesh.name = `race-terrain-skirt-${chunk}`;
             mesh.receiveShadow = true;
             group.add(mesh);
