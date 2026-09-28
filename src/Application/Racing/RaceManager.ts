@@ -8,6 +8,7 @@ import LapTimer from './Lap/LapTimer';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
+import type { RemoteCarAudioState } from './Audio/CarAudio';
 import GhostReplay from './Ghost/GhostReplay';
 import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
@@ -31,6 +32,11 @@ type MultiplayerActionPayload = {
 const MAX_VEHICLE_SUBSTEP_SECONDS = 1 / 60;
 const MAX_FRAME_DELTA_SECONDS = 0.05;
 const MAX_PHYSICS_STEPS_PER_FRAME = 4;
+const AUDIO_LISTENER_POSITION = new THREE.Vector3();
+const AUDIO_LISTENER_FORWARD = new THREE.Vector3();
+const AUDIO_LISTENER_UP = new THREE.Vector3();
+const AUDIO_LISTENER_QUAT = new THREE.Quaternion();
+const AUDIO_REMOTE_POSITION = new THREE.Vector3();
 
 type RemoteLinkedWheelVisual = {
     object: THREE.Object3D;
@@ -1021,6 +1027,47 @@ export default class RaceManager {
         this.remoteSmoke.update(deltaSeconds);
     }
 
+    // the camera is the listener; ghost and multiplayer cars are placed in 3d
+    updateWorldAudio(deltaSeconds: number) {
+        const camera = this.application.camera.instance;
+        camera.getWorldPosition(AUDIO_LISTENER_POSITION);
+        camera.getWorldDirection(AUDIO_LISTENER_FORWARD);
+        camera.getWorldQuaternion(AUDIO_LISTENER_QUAT);
+        AUDIO_LISTENER_UP.set(0, 1, 0).applyQuaternion(AUDIO_LISTENER_QUAT);
+        const remotes: RemoteCarAudioState[] = [];
+        const state = this.multiplayer.getState();
+        state.players.forEach((player) => {
+            const visual = this.remoteVehicles.get(player.sessionId);
+            if (!visual) return;
+            const p = visual.root.getWorldPosition(AUDIO_REMOTE_POSITION);
+            remotes.push({
+                id: player.sessionId,
+                carId: visual.carId,
+                position: { x: p.x, y: p.y, z: p.z },
+                speedKph: player.speedKph,
+            });
+        });
+        const ghostCarId = this.ghostReplay.ghostCarId || this.ghostReplay.carId;
+        if (this.ghostReplay.root.visible && ghostCarId && ghostCarId !== 'unknown') {
+            const p = this.ghostReplay.ghostMesh.getWorldPosition(AUDIO_REMOTE_POSITION);
+            remotes.push({
+                id: 'ghost',
+                carId: ghostCarId,
+                position: { x: p.x, y: p.y, z: p.z },
+                ghost: true,
+            });
+        }
+        this.engineAudio.updateWorld(
+            {
+                position: AUDIO_LISTENER_POSITION,
+                forward: AUDIO_LISTENER_FORWARD,
+                up: AUDIO_LISTENER_UP,
+            },
+            remotes,
+            deltaSeconds
+        );
+    }
+
     update() {
         this.multiplayer.update();
         if (!this.active) {
@@ -1067,19 +1114,7 @@ export default class RaceManager {
 
             const telemetry = this.vehicle.getTelemetry();
             const lapWasRunning = this.lapRunning;
-            this.engineAudio.update(
-                {
-                    rpm: telemetry.rpm,
-                    throttle: telemetry.throttle,
-                    speedMps: telemetry.speedMps,
-                    carId: telemetry.carId,
-                    gear: telemetry.gear,
-                    slipRatio: telemetry.slipRatio,
-                    driftIntensity: telemetry.driftIntensity,
-                    drivetrain: telemetry.drivetrain,
-                },
-                delta
-            );
+            this.engineAudio.update(telemetry, delta);
             const lapUpdate = this.lapTimer.update(
                 nowMs,
                 telemetry.position,
@@ -1134,16 +1169,7 @@ export default class RaceManager {
         } else {
             const telemetry = this.vehicle.getTelemetry();
             this.engineAudio.update(
-                {
-                    rpm: telemetry.rpm,
-                    throttle: 0,
-                    speedMps: telemetry.speedMps,
-                    carId: telemetry.carId,
-                    gear: telemetry.gear,
-                    slipRatio: telemetry.slipRatio,
-                    driftIntensity: 0,
-                    drivetrain: telemetry.drivetrain,
-                },
+                { ...telemetry, throttle: 0, driftIntensity: 0 },
                 delta
             );
         }
@@ -1151,6 +1177,7 @@ export default class RaceManager {
         this.ghostReplay.update(delta);
         this.chaseCamera.update(delta);
         this.visuals.update(delta);
+        this.updateWorldAudio(delta);
 
         if (nowMs - this.lastHudDispatchMs > 75) {
             this.lastHudDispatchMs = nowMs;
