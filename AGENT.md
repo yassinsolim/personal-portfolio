@@ -116,6 +116,18 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
 - `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
 
+## Transition Notes (2026-09-28)
+- `World/RaceTransition.ts` (main bundle): click the room car (hover shows a pointer and starts
+  building the race world, which blocks the main thread for most of a second). The car rocks,
+  the camera flies behind it, the room's last frame is kept as an overlay while the race starts
+  and compiles its shaders, then a circle opens from the car with a glowing rim.
+- The race world reveal is `Visuals/reveal.ts`: every track, terrain, trackside and forest
+  material gets a distance cut and an edge glow (`uRevealRadius`, huge when idle), and trees grow
+  up out of the ground as the wave passes. Events: `race:transitionReveal`, `race:transitionSkip`.
+- Any key or click skips. Focus is taken back from the monitor's iframe on start, or keys would
+  never reach the page. Only drawn objects count for the car click; the hidden race world is in
+  the scene too.
+
 ## Drift Notes (2026-09-28)
 - Sport assists include the drift assist (`VehiclePhysics.updateDrift`): once the rear is out
   past ~7 degrees it holds a slide at the angle the steering picks (straight ~17, full into the

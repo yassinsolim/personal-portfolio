@@ -9,6 +9,7 @@ import CoffeeSteam from './CoffeeSteam';
 import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
 import Car from './Car';
+import RaceTransition from './RaceTransition';
 import Flipper from './Flipper';
 import UIEventBus from '../UI/EventBus';
 import type RaceManager from '../Racing/RaceManager';
@@ -31,6 +32,7 @@ export default class World {
     coffeeSteam: CoffeeSteam;
     cursor: Cursor;
     car: Car;
+    raceTransition: RaceTransition;
     flipper: Flipper;
     raceManager: RaceManager | null;
     raceManagerLoading: Promise<RaceManager> | null;
@@ -53,6 +55,7 @@ export default class World {
             this.monitorScreen = new MonitorScreen();
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
+            this.raceTransition = new RaceTransition();
             this.flipper = new Flipper();
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();

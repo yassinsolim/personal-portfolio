@@ -18,6 +18,12 @@ import RaceForest from './RaceForest';
 import RaceTrackside from './RaceTrackside';
 import Sparks from '../Effects/Sparks';
 import SkidMarks from '../Effects/SkidMarks';
+import {
+    applyReveal,
+    applyRevealTo,
+    createRevealUniforms,
+    type RevealUniforms,
+} from './reveal';
 
 // everything race mode looks like: sky and light, the land around the road,
 // sparks and skid marks, and the post chain it all renders through. the room
@@ -25,6 +31,8 @@ import SkidMarks from '../Effects/SkidMarks';
 const EXPOSURE = 0.95;
 // the sky probe is bright, at full strength it washes the woods out
 const ENVIRONMENT_INTENSITY = 0.6;
+const REVEAL_SECONDS = 3.2;
+const REVEAL_DISTANCE = 2600;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -53,6 +61,9 @@ export default class RaceVisuals {
         environment: THREE.Texture | null;
         environmentIntensity: number;
     } | null;
+    reveal: RevealUniforms;
+    revealPending: boolean;
+    revealTime: number;
     private wheelContact: THREE.Vector3;
     private wheelUp: THREE.Vector3;
     private away: THREE.Vector3;
@@ -99,6 +110,24 @@ export default class RaceVisuals {
         this.away = new THREE.Vector3();
         // the smoke is lit by the low sun plus the sky
         this.light = new THREE.Color(1.25, 1.12, 1.0);
+
+        // the homepage transition: the ring builds out from the car
+        this.reveal = createRevealUniforms();
+        this.revealPending = false;
+        this.revealTime = -1;
+        applyRevealTo(track.root, this.reveal);
+        applyRevealTo(this.terrain.root, this.reveal);
+        applyReveal(this.forest.nearMaterial, this.reveal, 'instanced');
+        applyReveal(this.forest.impostorMaterial, this.reveal, 'billboard');
+        applyRevealTo(this.trackside.root, this.reveal);
+        UIEventBus.on('race:transitionReveal', () => {
+            this.revealPending = true;
+        });
+        UIEventBus.on('race:transitionSkip', () => {
+            this.revealPending = false;
+            this.revealTime = -1;
+            this.reveal.uRevealRadius.value = 1e9;
+        });
 
         UIEventBus.on(
             'render:effects',
@@ -223,9 +252,30 @@ export default class RaceVisuals {
         return Math.min(1, Math.max(0, slide, spin));
     }
 
+    // radius eases out from the car to past the fog over REVEAL_SECONDS
+    updateReveal(deltaSeconds: number) {
+        if (this.revealPending) {
+            this.revealPending = false;
+            this.revealTime = 0;
+            this.reveal.uRevealCenter.value.copy(this.vehicle.position);
+        }
+        if (this.revealTime < 0) return;
+        this.revealTime += deltaSeconds;
+        // slow near the car so the wave is seen building the road around
+        // it, then racing out to the horizon
+        const t = Math.min(1, this.revealTime / REVEAL_SECONDS);
+        this.reveal.uRevealRadius.value =
+            4 + Math.pow(t, 2.4) * REVEAL_DISTANCE;
+        if (t >= 1) {
+            this.revealTime = -1;
+            this.reveal.uRevealRadius.value = 1e9;
+        }
+    }
+
     update(deltaSeconds: number) {
         if (!this.active) return;
         const vehicle = this.vehicle;
+        this.updateReveal(deltaSeconds);
         this.atmosphere.follow(vehicle.position);
         this.forest.update(
             this.application.camera.instance,

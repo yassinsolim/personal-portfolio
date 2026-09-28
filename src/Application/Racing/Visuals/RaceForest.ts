@@ -278,6 +278,7 @@ export default class RaceForest {
                     capacity
                 );
                 visible.name = `race-forest-near-${r}-${k}`;
+                visible.raycast = () => {};
                 visible.count = 0;
                 visible.frustumCulled = false;
                 visible.castShadow = false;
@@ -293,6 +294,7 @@ export default class RaceForest {
                     capacity
                 );
                 caster.name = `race-forest-shadow-${r}-${k}`;
+                caster.raycast = () => {};
                 caster.count = 0;
                 caster.frustumCulled = false;
                 caster.castShadow = true;
@@ -430,6 +432,8 @@ export default class RaceForest {
         geometry.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
         const mesh = new THREE.Mesh(geometry, this.impostorMaterial);
         mesh.name = `race-forest-far-${index}`;
+        // corner offsets aren't world positions, a raycast would hit nonsense
+        mesh.raycast = () => {};
         mesh.castShadow = false;
         mesh.receiveShadow = false;
         this.impostorMeshes.push(mesh);
