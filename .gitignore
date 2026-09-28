@@ -15,3 +15,7 @@ exports/
 # Environment variables
 .env
 .env.local
+
+# raw recordings for the race audio build (scripts/audio/fetch_sources.py)
+audio-src/
+__pycache__/

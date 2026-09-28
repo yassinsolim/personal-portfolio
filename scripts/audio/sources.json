@@ -1,0 +1,56 @@
+{
+  "_note": "raw recordings the race audio is cut from. fetch_sources.py downloads them into audio-src/ (gitignored). only processed loops ship.",
+  "sonniss_license": "https://sonniss.com/gdc-bundle-license/",
+  "files": {
+    "pp-bmw-m4-2014/t4_onboard_engine.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20BMW%20M4%202014/BMW_M4_t4_Onbrd_Drive_Gearshifts_Engine_Center_DPA4061.wav",
+      "title": "BMW M4 2014, onboard drive with gearshifts, engine mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-bmw-m4-2014/t7_ext_idle_blips_steady.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20BMW%20M4%202014/BMW_M4_t7_Ext_Start_Idle_Blips_Steady_in_Netural_Off_XY_RSM191.wav",
+      "title": "BMW M4 2014, exterior start, idle, blips, steady rpm in neutral",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-amg-c63-2009/t3_ext_start_fast_away.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Mercedes%20AMG%20C63%202009/Mercedes_C63_t3_Ext_Start_Fast_Away_Up_Reverse_Stop_Away_By_Up_Stop_Off_Wide_AB_MKH8060.wav",
+      "title": "Mercedes AMG C63 2009, exterior start, fast away, by",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-amg-c63-2009/t1_onboard_engine.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Mercedes%20AMG%20C63%202009/Mercedes_C63_t1_Onbrd_Start_Slow_Drive_Stop_Reverse_Stop_Drive_Stop_Off_Engine_B.wav",
+      "title": "Mercedes AMG C63 2009, onboard slow drive, engine mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-amg-gtr-2018/t13_ext_fast_away.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2019/individual/Pole%20Position%20-%20Mercedes%20AMG%20GT%20R%202018/mercedes_amg_gtr_t13_ext_start_fast_away_by_up_stop_off_wide_AB_MKH8060.wav",
+      "title": "Mercedes AMG GT R 2018, exterior start, fast away, by",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2019 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-amg-gtr-2018/t13_onboard_interior.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2019/individual/Pole%20Position%20-%20Mercedes%20AMG%20GT%20R%202018/mercedes_amg_gtr_t13_onbrd_start_fast_drive_stop_off_interior_DPA4021.wav",
+      "title": "Mercedes AMG GT R 2018, onboard fast drive, interior",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2019 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "flysound-bmw-x5m/exhaust_start_idle_stop.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2018/individual/FLYSOUND%20-%20BMW%20X5%20M/X50104%20BMW%20X5%20M%20EXHAUST%201%20start%20idle%20stop.wav",
+      "title": "BMW X5 M, exhaust mic, start, idle, stop",
+      "author": "FLYSOUND", "bundle": "Sonniss GDC 2018 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-skids-tarmac/t4_skidding_circles.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2018/individual/Pole%20Position%20-%20Skids%20%26%20Screeches%20Tarmac/Skids_Tarmac_t4_exterior_skidding_in_circles_MKH8060_stand.wav",
+      "title": "Skids and screeches on tarmac, skidding in circles",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2018 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-car-debris/mercedes_dropped_1m_concrete.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2017/individual/Pole%20Position%20-%20Car%20Debris%2C%20Impacts%20%26%20Crashes/mercedes_benz_dropped_1m_on_concrete_ls-5_2.wav",
+      "title": "Mercedes-Benz dropped 1 m on concrete",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2017 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-car-debris/peugeot_dropped_5m_metal.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2017/individual/Pole%20Position%20-%20Car%20Debris%2C%20Impacts%20%26%20Crashes/peugeot_106_dropped_5m_on_metal_plates_zaxcom_holophone_1.wav",
+      "title": "Peugeot 106 dropped 5 m on metal plates",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2017 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    }
+  }
+}
