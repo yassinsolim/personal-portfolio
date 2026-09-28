@@ -11,6 +11,9 @@ import type RaceTerrain from './RaceTerrain';
 // tarmac at the spots known for it. merged and cell split, so it's a few
 // draws; weak gpus only get the graffiti (their 1 km view hides the rest)
 const FENCE_HEIGHT = 3.2;
+// osm puts a few runs on the grass between the tarmac and the armco (the wide
+// end of döttinger höhe, hohe acht). catch fences stand behind the barrier
+const FENCE_BEHIND_BARRIER = 1;
 const FENCE_CELL = 800;
 // chain link is invisible past this, so far cells aren't drawn at all
 const FENCE_VIEW = 900;
@@ -250,7 +253,22 @@ export default class RaceTracksideExtras {
         const index: number[] = [];
         const posts: THREE.BufferGeometry[] = [];
         const post = new THREE.BoxGeometry(0.07, FENCE_HEIGHT, 0.07);
-        track.fences.forEach((run) => {
+        const frame = track.createFrame();
+        const hint = track.frameHint;
+        const behindBarrier = (run: [number, number][]) => {
+            let last = -1;
+            return run.map(([x, z]): [number, number] => {
+                track.queryFrame(x, z, frame, last);
+                last = frame.index;
+                const min = frame.barrierOffset + FENCE_BEHIND_BARRIER;
+                if (Math.abs(frame.lateral) >= min) return [x, z];
+                const push = (Math.sign(frame.lateral) || 1) * min - frame.lateral;
+                return [x + frame.leftX * push, z + frame.leftZ * push];
+            });
+        };
+        const runs = track.fences.map(behindBarrier);
+        track.frameHint = hint;
+        runs.forEach((run) => {
             let along = 0;
             const first = panels.length / 3;
             run.forEach(([x, z], i) => {
