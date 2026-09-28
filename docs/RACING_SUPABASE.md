@@ -26,105 +26,47 @@ Important security note:
 - Use only the **anon public key** in this client config.
 - Never put a service-role key in frontend files.
 
+### The racing project
+
+The racing game has its own free Supabase organization and project, **Nordschleife**
+(ref `qdepbyxxzbdknkfgpwyl`, AWS `us-west-2`), so its Realtime messages count against
+its own 2M a month and can't use up the quota of the shared project that WebStrafe runs
+on (and the other way around). The old shared project (`axrljzcrlmliscstmctb`) keeps the
+pre-season laps as history.
+
 ### Vercel setup
 
-For Vercel, set these Project Settings -> Environment Variables and redeploy:
+Set these in Vercel (Production and Preview) and redeploy:
 
-- `RACING_SUPABASE_URL`
-- `RACING_SUPABASE_ANON_KEY`
+- `NORDSCHLEIFE_SUPABASE_URL` = `https://qdepbyxxzbdknkfgpwyl.supabase.co`
+- `NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY` = the project's publishable key (Project Settings -> API Keys)
 - `RACING_LEADERBOARD_TABLE` (optional, defaults to `nordschleife_leaderboard`)
 - `RACING_GHOST_REPLAY_TABLE` (optional, defaults to `nordschleife_ghost_replays`)
-- `RACING_LOBBY_CHANNEL_PREFIX` (optional, defaults to `nordschleife_lobby_v1`)
+- `RACING_LOBBY_CHANNEL_PREFIX` (optional, defaults to `nordschleife_lobby_v2`)
+
+`RACING_SUPABASE_URL` / `RACING_SUPABASE_ANON_KEY` still work as a fallback, but they point
+at the old shared project; remove them once this project is live.
 
 `npm run build` runs `scripts/write-racing-config.js` first. If the Supabase URL/key are set, it writes `static/config/racing.config.json`, then Webpack copies that file into `build/config/racing.config.json`.
 
-## 2) Secure leaderboard table
+The CSP `connect-src` in `vercel.json` and `bundler/webpack.dev.js` lists the https and wss
+origins of both projects; drop the old pair together with the old env vars.
 
-Run in Supabase SQL editor:
+## 2) Tables, RLS and grants
 
-```sql
-create table if not exists public.nordschleife_leaderboard (
-  id uuid primary key default gen_random_uuid(),
-  name text not null check (char_length(name) between 1 and 16),
-  lap_time_ms integer not null check (lap_time_ms between 1000 and 7200000),
-  car_id text not null check (char_length(car_id) between 1 and 64),
-  created_at timestamptz not null default now()
-);
+Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, and sets up:
 
-alter table public.nordschleife_leaderboard enable row level security;
+- `nordschleife_leaderboard`: public read, public insert through RLS checks (name 1 to 16
+  chars, lap 1 s to 2 h, car id 1 to 64 chars). New laps carry the season tag on `car_id`.
+  A trigger caps inserts at 30 laps per 10 minutes per client ip (a real lap is 7 to 10 minutes).
+- `nordschleife_ghost_replays`: public read, insert and update (the client upserts), but only
+  for a real lap with the same car and lap time, 8 to 5001 samples.
+- `nordschleife_rate_events`: private, no access for the browser roles.
+- Grants: anon/authenticated get select + insert on laps and select + insert + update on
+  ghosts, nothing else (no delete, truncate or update on laps).
+- The leaderboard table in the `supabase_realtime` publication, so boards refresh on new laps.
 
-drop policy if exists "public read laps" on public.nordschleife_leaderboard;
-drop policy if exists "public insert laps" on public.nordschleife_leaderboard;
-
-create policy "public read laps"
-on public.nordschleife_leaderboard
-for select
-to anon, authenticated
-using (true);
-
-create policy "public insert laps"
-on public.nordschleife_leaderboard
-for insert
-to anon, authenticated
-with check (
-  char_length(name) between 1 and 16
-  and lap_time_ms between 1000 and 7200000
-  and char_length(car_id) between 1 and 64
-);
-```
-
-## 3) Realtime for leaderboard updates
-
-In Supabase:
-
-- Database -> Replication -> enable replication for `public.nordschleife_leaderboard`
-
-The app subscribes to `INSERT` events and refreshes leaderboard automatically when anyone submits a lap.
-
-## 3b) Ghost replay table for leaderboard #1 ghost
-
-Run in Supabase SQL editor:
-
-```sql
-create table if not exists public.nordschleife_ghost_replays (
-  lap_id uuid primary key references public.nordschleife_leaderboard(id) on delete cascade,
-  lap_time_ms integer not null check (lap_time_ms between 1000 and 7200000),
-  car_id text not null check (char_length(car_id) between 1 and 64),
-  samples jsonb not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.nordschleife_ghost_replays enable row level security;
-
-drop policy if exists "public read ghost replays" on public.nordschleife_ghost_replays;
-drop policy if exists "public insert ghost replays" on public.nordschleife_ghost_replays;
-
-create policy "public read ghost replays"
-on public.nordschleife_ghost_replays
-for select
-to anon, authenticated
-using (true);
-
-create policy "public insert ghost replays"
-on public.nordschleife_ghost_replays
-for insert
-to anon, authenticated
-with check (
-  lap_time_ms between 1000 and 7200000
-  and char_length(car_id) between 1 and 64
-);
-
-drop policy if exists "public update ghost replays" on public.nordschleife_ghost_replays;
-create policy "public update ghost replays"
-on public.nordschleife_ghost_replays
-for update
-to anon, authenticated
-using (true)
-with check (
-  lap_time_ms between 1000 and 7200000
-  and char_length(car_id) between 1 and 64
-);
-```
+Test it locally first (docker, nothing touches the real project): `./scripts/test-racing-sql.sh`.
 
 ## 4) Realtime for multiplayer lobbies
 

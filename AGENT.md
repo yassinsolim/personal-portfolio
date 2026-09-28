@@ -64,6 +64,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `$env:PATH = "$(Resolve-Path .\\.tools\\<node-folder>);$env:PATH"`
 - Supabase runtime config (optional):
   - `static/config/racing.config.json` (template: `static/config/racing.config.example.json`)
+  - The racing game has its own free project (Nordschleife, `qdepbyxxzbdknkfgpwyl`, us-west-2) so its
+    Realtime traffic has its own quota. Schema and RLS: `supabase/racing.sql`, tested by
+    `scripts/test-racing-sql.sh`. Don't run multi-client Realtime tests against it; use the netsim hook.
 - Render Mode defaults to Auto: `Utils/AdaptiveResolution.ts` retunes the pixel ratio every second
   to hold 60 fps (0.5x up to the screen's native ratio, capped at 2x). Below 1x it also turns off
   the film grain overlay and heavy drift smoke. Anything that swaps the scene should call
