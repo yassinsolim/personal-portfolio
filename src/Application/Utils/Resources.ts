@@ -41,8 +41,8 @@ const ktx2Enabled = () => {
     }
 };
 
-// full detail cars have a ktx2 twin (scripts/build-ktx2-cars.mjs)
-const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.lite|\.ktx2)\.glb$/.test(path);
+// cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs)
+const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.ktx2)\.glb$/.test(path);
 // once a ktx2 car has downloaded, its parse (draco and texture transcode)
 // gets this long before the webp one is loaded instead
 const KTX2_PARSE_TIMEOUT_MS = 15000;

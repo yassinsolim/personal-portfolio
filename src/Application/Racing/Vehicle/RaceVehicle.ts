@@ -648,16 +648,11 @@ export default class RaceVehicle {
                 if (!cheap) this.resources.items.gltfModel[option.resourceName] = gltf;
                 resolve(this.prepareModel(gltf.scene.clone(true), carId));
             };
-            if (cheap) {
-                this.resources.loaders.gltfLoader.load(
-                    option.modelPath.replace(/\.glb$/, '.lite.glb'),
-                    loaded,
-                    undefined,
-                    reject
-                );
-            } else {
-                this.resources.loadModel(option.modelPath, loaded, reject);
-            }
+            this.resources.loadModel(
+                cheap ? option.modelPath.replace(/\.glb$/, '.lite.glb') : option.modelPath,
+                loaded,
+                reject
+            );
         });
 
         this.loadingPromises.set(carId, loadPromise);

@@ -38,11 +38,17 @@ const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies(
 const work = await fs.mkdtemp(path.join(os.tmpdir(), 'ktx2-cars-'));
 const mb = (bytes) => `${(bytes / 1e6).toFixed(2)} MB`;
 
-for (const car of cars) {
-    const input = path.join('static', car.modelPath);
+// the full car and its lite one (weak gpus) each get a twin
+const jobs = cars.flatMap((car) => [
+    { id: car.id, input: path.join('static', car.modelPath) },
+    { id: `${car.id} lite`, input: path.join('static', car.modelPath.replace(/\.glb$/, '.lite.glb')) },
+]);
+
+for (const car of jobs) {
+    const input = car.input;
     const output = input.replace(/\.glb$/, '.ktx2.glb');
-    const png = path.join(work, `${car.id}-png.glb`);
-    const packed = path.join(work, `${car.id}-ktx.glb`);
+    const png = path.join(work, `${car.id.replace(' ', '-')}-png.glb`);
+    const packed = path.join(work, `${car.id.replace(' ', '-')}-ktx.glb`);
 
     const doc = await io.read(input);
     doc.getRoot()
