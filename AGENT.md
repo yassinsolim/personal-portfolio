@@ -586,3 +586,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   Chromium, drives, switches car and reports levels, fps and console errors.
 - Sources and licenses are in `CREDITS.md` ("Race Audio"). Keep to CC0, CC BY or royalty-free
   bundle licenses that allow public web use, and never ship audio ripped from video sites.
+
+## Lobby Notes (2026-09-28)
+- After the homepage car-click transition a card asks: 1 Solo (just closes it, the race is already
+  solo), 2 Quick join, 3 Invite a friend (creates a lobby, copies `?lobby=CODE`). Invite links skip
+  the card. `race:lobbyChoice` opens it, `LobbyChoice.tsx` is the card.
+- Quick join has no server: it walks `RING1`..`RING6` and stays in the first with 8 or fewer
+  drivers after the first presence sync.
+- Remote cars are predicted from when the pose was taken, not when it arrived:
+  `sampleAtMs` is arrival minus transit (sender's `sent_at`, with a per peer clock skew guess
+  when the lowest delay is negative or over 400 ms). The drawn car moves with its velocity before
+  smoothing. At 150 km/h with 20% loss and 120 +/- 80 ms that took the drawn error from 9.4 m to
+  0.5 m (p50), 12.5 m to about 3 m (p95).
+- `?raceDebug=1&netsim=loss,lag,jitter` (e.g. `0.2,120,80`) drops and delays outgoing broadcasts
+  for testing. `.tmp-validation/mp4.mjs <url> <netsim>` runs four clients through the real flow.
