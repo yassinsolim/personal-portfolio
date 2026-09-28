@@ -792,6 +792,7 @@ export default class RaceVehicle {
         );
 
         if (this.cheapMaterials) {
+            this.dropHiddenParts(model);
             const envMap = getCheapSkyCube();
             model.traverse((child) => {
                 const mesh = child as THREE.Mesh;
@@ -3144,6 +3145,21 @@ export default class RaceVehicle {
         model.updateMatrixWorld(true);
         this.mergeUnder(model, roots);
         roots.forEach((root) => this.mergeUnder(root, roots));
+    }
+
+    // weak gpus: cabin and engine bay parts can't be seen from the chase
+    // camera through tinted glass, and on the e92 they're most of its draws
+    // (carpet, leather, stitching, gauges). they're dropped from the model
+    dropHiddenParts(model: THREE.Object3D) {
+        const hidden =
+            /interior|carpet|leather|alcantara|stitch|gauge|dashscreen|shifter|seat|belt|pedal|steering|engine|cockpit|_int1|details_int/i;
+        const drop: THREE.Object3D[] = [];
+        model.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+            if (hidden.test((mesh.material as THREE.Material).name || '')) drop.push(mesh);
+        });
+        drop.forEach((mesh) => mesh.removeFromParent());
     }
 
     // on a weak gpu every opaque untextured unlit part of a car can share one
