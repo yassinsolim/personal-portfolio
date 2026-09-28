@@ -639,6 +639,7 @@ def main():
         'concrete': concrete,
         'bridges': merged,
         **dict(zip(('fences', 'landmarks'), trackside_osm(args.cache, X, Z, project, BBOX))),
+        'spans': spans,
         'terrain': {
             'x': round(float(x_min), 2), 'z': round(float(z_min), 2), 'cell': TERRAIN_CELL,
             'cols': cols, 'rows': rows,

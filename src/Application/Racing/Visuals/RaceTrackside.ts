@@ -65,6 +65,7 @@ export default class RaceTrackside {
         this.buildArmco();
         this.buildStart();
         this.buildBridges();
+        this.buildTrackBridges();
         this.buildBoards();
     }
 
@@ -140,7 +141,10 @@ export default class RaceTrackside {
                     end * (span / 2 - 0.7)
                 ).applyQuaternion(quaternion);
                 matrix.compose(
-                    point.clone().add(offset).add(new THREE.Vector3(0, 2.6, 0)),
+                    point
+                        .clone()
+                        .add(offset)
+                        .add(new THREE.Vector3(0, 2.6, 0)),
                     quaternion,
                     new THREE.Vector3(1, 1, 1)
                 );
@@ -149,6 +153,93 @@ export default class RaceTrackside {
         });
         const mesh = new THREE.Mesh(mergeGeometries(parts), material);
         mesh.name = 'race-bridges';
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.root.add(mesh);
+    }
+
+    // where the lap is a bridge itself (quiddelbacher hoehe over the b257,
+    // breidscheid, before doettinger hoehe, t13): a concrete parapet behind
+    // the armco on both sides, with the deck's fascia running down below the
+    // road. the armco still does the stopping
+    buildTrackBridges() {
+        const track = this.track;
+        if (!track.spans.length) return;
+        const point = new THREE.Vector3();
+        const tangent = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+        const side = new THREE.Vector3();
+        const positions: number[] = [];
+        const indices: number[] = [];
+        const THICK = 0.35;
+        const TOP = 1.0;
+        const FASCIA = 1.9;
+        track.spans.forEach((span) => {
+            const from = span.start - 4;
+            const to = span.end + 4;
+            const steps = Math.max(2, Math.ceil((to - from) / 1.5));
+            [1, -1].forEach((sign) => {
+                const first = positions.length / 3;
+                for (let i = 0; i <= steps; i++) {
+                    const t = this.frameAt(
+                        from + ((to - from) * i) / steps,
+                        point,
+                        tangent,
+                        normal,
+                        side
+                    );
+                    const inner = track.getVergeHalfWidth(t) + 0.15;
+                    // inner bottom, inner top, outer top, outer bottom
+                    [
+                        [inner, -FASCIA],
+                        [inner, TOP],
+                        [inner + THICK, TOP],
+                        [inner + THICK, -FASCIA],
+                    ].forEach(([lateral, height]) => {
+                        positions.push(
+                            point.x + side.x * sign * lateral,
+                            point.y + height,
+                            point.z + side.z * sign * lateral
+                        );
+                    });
+                }
+                for (let i = 0; i < steps; i++) {
+                    for (let f = 0; f < 3; f++) {
+                        const a = first + i * 4 + f;
+                        const b = a + 1;
+                        const c = a + 4;
+                        const d = b + 4;
+                        if (sign > 0) indices.push(a, c, b, b, c, d);
+                        else indices.push(a, b, c, b, d, c);
+                    }
+                }
+                // end caps
+                [0, steps].forEach((ring) => {
+                    const r = first + ring * 4;
+                    if ((ring === 0) === sign > 0)
+                        indices.push(r, r + 1, r + 2, r, r + 2, r + 3);
+                    else indices.push(r, r + 2, r + 1, r, r + 3, r + 2);
+                });
+            });
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(positions, 3)
+        );
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        const mesh = new THREE.Mesh(
+            geometry,
+            new THREE.MeshStandardMaterial({
+                color: 0xa19d95,
+                roughness: 0.92,
+                metalness: 0,
+                side: THREE.DoubleSide,
+            })
+        );
+        mesh.name = 'race-track-bridges';
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         this.root.add(mesh);

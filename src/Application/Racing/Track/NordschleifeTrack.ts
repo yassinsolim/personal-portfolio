@@ -128,6 +128,11 @@ export type TrackLandmark = {
     height: number;
     outline: [number, number][];
 };
+// stretches where the lap itself is a bridge, meters along the lap
+export type TrackSpan = {
+    start: number;
+    end: number;
+};
 export type TrackTerrainData = {
     x: number;
     z: number;
@@ -156,6 +161,7 @@ type TrackAssetData = {
     // catch fence runs near the lap (osm), x, z every 6 m
     fences?: [number, number][][];
     landmarks?: TrackLandmark[];
+    spans?: TrackSpan[];
     terrain: {
         x: number;
         z: number;
@@ -210,6 +216,7 @@ export default class NordschleifeTrack {
     bridges: TrackBridge[];
     fences: [number, number][][];
     landmarks: TrackLandmark[];
+    spans: TrackSpan[];
     distanceScale: number;
     terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
@@ -251,6 +258,7 @@ export default class NordschleifeTrack {
         this.bridges = data.bridges;
         this.fences = data.fences || [];
         this.landmarks = data.landmarks || [];
+        this.spans = data.spans || [];
         this.terrain = {
             x: data.terrain.x,
             z: data.terrain.z,
