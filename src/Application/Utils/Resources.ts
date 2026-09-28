@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { SameOriginKTX2Loader } from './ktx2';
 import {
     DRACO_GLTF_CONFIG,
     DRACOLoader,
@@ -26,6 +28,29 @@ const canCompileWasm = () => {
     }
 };
 
+// ?ktx2=0 loads the webp cars instead, for comparing
+const ktx2Enabled = () => {
+    try {
+        return (
+            canCompileWasm() &&
+            typeof Worker !== 'undefined' &&
+            new URLSearchParams(window.location.search).get('ktx2') !== '0'
+        );
+    } catch {
+        return false;
+    }
+};
+
+// cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs)
+const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.ktx2)\.glb$/.test(path);
+// once a ktx2 car has downloaded, its parse (draco and texture transcode)
+// gets this long before the webp one is loaded instead
+const KTX2_PARSE_TIMEOUT_MS = 15000;
+// and in case the size is unknown and the download never reports done
+const KTX2_TOTAL_TIMEOUT_MS = 90000;
+// the probe answers within 5 s, this covers a renderer that never arrives
+const KTX2_READY_TIMEOUT_MS = 8000;
+
 export default class Resources extends EventEmitter {
     sources: Resource[];
     // Not sure about this one
@@ -50,6 +75,72 @@ export default class Resources extends EventEmitter {
     };
     application: Application;
     loading: Loading;
+
+    ktx2Loader: SameOriginKTX2Loader | null = null;
+    // whether the decoder works here, known once the probe texture decodes
+    ktx2Ready: Promise<boolean> = Promise.resolve(false);
+    private resolveKtx2: ((ok: boolean) => void) | null = null;
+
+    // picks the gpu's compressed texture format for the ktx2 transcoder and
+    // checks the decoder with a tiny texture
+    setRenderer(renderer: THREE.WebGLRenderer) {
+        if (!this.ktx2Loader || !this.resolveKtx2) return;
+        this.ktx2Loader.detectSupport(renderer);
+        this.ktx2Loader.probe().then(this.resolveKtx2);
+        this.resolveKtx2 = null;
+    }
+
+    // a gltf model, a car as ktx2 when the decoder works. a failed, blocked
+    // or stuck ktx2 load (probe, worker error, parse timeout) falls back to
+    // the webp file, so a decoder problem never holds the page
+    loadModel(path: string, onLoad: (gltf: GLTF) => void, onError: (error: unknown) => void) {
+        const loader = this.loaders.gltfLoader;
+        const webp = () => loader.load(path, onLoad, undefined, onError);
+        const ktx2Loader = this.ktx2Loader;
+        if (!ktx2Loader || !hasKtx2Twin(path)) {
+            webp();
+            return;
+        }
+        const ready = Promise.race([
+            this.ktx2Ready,
+            new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), KTX2_READY_TIMEOUT_MS)),
+        ]);
+        void ready.then((ok) => {
+            if (!ok || ktx2Loader.failed) {
+                webp();
+                return;
+            }
+            let done = false;
+            let parseTimer = 0;
+            const fallback = () => {
+                if (done) return;
+                done = true;
+                window.clearTimeout(parseTimer);
+                window.clearTimeout(totalTimer);
+                stop();
+                webp();
+            };
+            const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
+            const stop = ktx2Loader.onFailure(fallback);
+            loader.load(
+                path.replace(/\.glb$/, '.ktx2.glb'),
+                (gltf) => {
+                    if (done) return;
+                    done = true;
+                    window.clearTimeout(parseTimer);
+                    window.clearTimeout(totalTimer);
+                    stop();
+                    onLoad(gltf);
+                },
+                (event) => {
+                    if (!parseTimer && event.lengthComputable && event.loaded >= event.total) {
+                        parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
+                    }
+                },
+                fallback
+            );
+        });
+    }
 
     constructor(sources: Resource[]) {
         super();
@@ -87,6 +178,15 @@ export default class Resources extends EventEmitter {
 
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
+        // cars come as ktx2, which stays compressed on the gpu. the decoder
+        // is checked once the renderer exists (setRenderer)
+        if (ktx2Enabled()) {
+            this.ktx2Loader = new SameOriginKTX2Loader();
+            gltfLoader.setKTX2Loader(this.ktx2Loader);
+            this.ktx2Ready = new Promise<boolean>((resolve) => {
+                this.resolveKtx2 = resolve;
+            });
+        }
         gltfLoader.register(() => ({
             name: 'yassin_disable_transmission',
             afterRoot: (gltf: { scene: THREE.Group }) => {
@@ -109,15 +209,10 @@ export default class Resources extends EventEmitter {
         // Load each source
         for (const source of this.sources) {
             if (source.type === 'gltfModel') {
-                this.loaders.gltfLoader.load(
+                this.loadModel(
                     source.path,
-                    (file) => {
-                        this.sourceLoaded(source, file);
-                    },
-                    undefined,
-                    (error) => {
-                        this.sourceFailed(source, error);
-                    }
+                    (file) => this.sourceLoaded(source, file),
+                    (error) => this.sourceFailed(source, error)
                 );
             } else if (source.type === 'texture') {
                 this.loaders.textureLoader.load(
