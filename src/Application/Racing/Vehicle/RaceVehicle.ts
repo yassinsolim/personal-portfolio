@@ -8,7 +8,7 @@ import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
 import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
 import { applyCarLook, isGarageMaterial } from '../Garage/carLook';
-import { carModelUrl } from '../../Utils/Resources';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
     applyTune,
     loadLook,
@@ -640,39 +640,24 @@ export default class RaceVehicle {
                 .catch(() => null);
         }
 
-        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite)
         const cheap = this.cheapMaterials;
-        const path = cheap
-            ? option.modelPath.replace(/\.glb$/, '.lite.glb')
-            : carModelUrl(option.modelPath);
+        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite),
+        // others the full one, as ktx2 when the decoder works
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
-            this.resources.loaders.gltfLoader.load(
-                path,
-                (gltf) => {
-                    if (!cheap)
-                        this.resources.items.gltfModel[option.resourceName] =
-                            gltf;
-                    const loadedModel = this.prepareModel(gltf.scene.clone(true), carId);
-                    resolve(loadedModel);
-                },
-                undefined,
-                (error) => {
-                    // a ktx2 twin that won't load: the webp original
-                    if (path !== option.modelPath && !cheap) {
-                        this.resources.loaders.gltfLoader.load(
-                            option.modelPath,
-                            (gltf) => {
-                                this.resources.items.gltfModel[option.resourceName] = gltf;
-                                resolve(this.prepareModel(gltf.scene.clone(true), carId));
-                            },
-                            undefined,
-                            reject
-                        );
-                        return;
-                    }
-                    reject(error);
-                }
-            );
+            const loaded = (gltf: GLTF) => {
+                if (!cheap) this.resources.items.gltfModel[option.resourceName] = gltf;
+                resolve(this.prepareModel(gltf.scene.clone(true), carId));
+            };
+            if (cheap) {
+                this.resources.loaders.gltfLoader.load(
+                    option.modelPath.replace(/\.glb$/, '.lite.glb'),
+                    loaded,
+                    undefined,
+                    reject
+                );
+            } else {
+                this.resources.loadModel(option.modelPath, loaded, reject);
+            }
         });
 
         this.loadingPromises.set(carId, loadPromise);
