@@ -13,7 +13,7 @@ const devSecurityHeaders = {
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
     'X-Frame-Options': 'DENY',
-    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws://127.0.0.1:8080 ws://localhost:8080 https://qdepbyxxzbdknkfgpwyl.supabase.co wss://qdepbyxxzbdknkfgpwyl.supabase.co https://axrljzcrlmliscstmctb.supabase.co wss://axrljzcrlmliscstmctb.supabase.co; frame-src https://os.yassin.app http://localhost:3000; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'"
+    'Content-Security-Policy': "default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: ws://127.0.0.1:8080 ws://localhost:8080 https://qdepbyxxzbdknkfgpwyl.supabase.co wss://qdepbyxxzbdknkfgpwyl.supabase.co; frame-src https://os.yassin.app http://localhost:3000; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'"
 }
 
 const infoColor = (_message) =>
