@@ -1246,25 +1246,62 @@ body.race-mode-touch #ui-app {
     background: rgba(0, 0, 0, 0.72);
 }
 
-/* touch: the pedals and steering sit at the bottom corners */
-@media (pointer: coarse) {
-    .race-gauges {
-        right: auto;
-        left: 50%;
-        bottom: 8px;
-        transform: translateX(-50%) scale(0.8);
-        transform-origin: bottom center;
+/* touch controls (phones, and any window small enough to get them): the
+   buttons own the bottom row, so the gauges and the map sit above it */
+body.race-mode-touch {
+    --race-touch-row: calc(
+        clamp(48px, 12vw, 72px) + max(12px, env(safe-area-inset-bottom)) +
+            10px
+    );
+}
+
+body.race-mode-touch .race-gauges {
+    right: max(14px, env(safe-area-inset-right));
+    bottom: var(--race-touch-row);
+    transform: scale(0.75);
+    transform-origin: bottom right;
+}
+
+body.race-mode-touch .race-laps {
+    margin-bottom: 0;
+}
+
+body.race-mode-touch .race-rotate-hint {
+    bottom: calc(var(--race-touch-row) + 140px);
+}
+
+body.race-mode-touch .race-minimap {
+    left: max(14px, env(safe-area-inset-left));
+    bottom: var(--race-touch-row);
+    width: 120px;
+    height: 120px;
+}
+
+/* phones in landscape: shrink the gauges so they clear the leaderboard */
+@media (max-height: 420px) {
+    body.race-mode-touch .race-gauges {
+        transform: scale(0.62);
     }
 
-    .race-laps {
-        display: none;
+    body.race-mode-touch .race-minimap {
+        width: 100px;
+        height: 100px;
+    }
+}
+
+/* narrow portrait: gauges above the pedals, map above the gauges, the
+   rotate hint above the map */
+@media (max-width: 600px) {
+    body.race-mode-touch .race-gauges {
+        transform: scale(0.68);
     }
 
-    .race-minimap {
-        top: 120px;
-        bottom: auto;
-        width: 120px;
-        height: 120px;
+    body.race-mode-touch .race-minimap {
+        bottom: calc(var(--race-touch-row) + 130px);
+    }
+
+    body.race-mode-touch .race-rotate-hint {
+        bottom: calc(var(--race-touch-row) + 262px);
     }
 }
 
