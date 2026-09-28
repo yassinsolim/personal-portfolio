@@ -899,3 +899,10 @@ body.race-mode-touch #ui-app {
         min-height: 46px;
     }
 }
+
+.race-menu-controls {
+    margin: 4px 0 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: 0.72;
+}

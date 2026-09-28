@@ -81,8 +81,32 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Track heights are scaled by `TRACK_ELEVATION_SCALE` in `NordschleifeTrack.ts`. The source data
   plus the 0.475 horizontal squeeze had made 30-120% grades. When track geometry changes, bump
   `DEFAULT_LOBBY_PREFIX` in `MultiplayerService.ts`; ghost replays snap to the current road.
-- Drift authority fades above ~110 km/h and total yaw rate is capped by speed. At 190 km/h a
-  handbrake flick used to slide cars sideways at ~50 m/s and spin them at ~480 deg/s.
+- Motion along the ground comes from `Vehicle/VehiclePhysics.ts` (September 2026): four tires with
+  combined slip (a normalized friction ellipse over a magic formula curve) and load sensitivity,
+  weight transfer, an engine torque curve with gears, clutch slip at launch and shift cuts, a
+  viscous limited slip diff per axle, brakes with bias, aero drag and downforce, and optional ABS,
+  traction control, stability control and a countersteer assist (presets in
+  `Vehicle/assists.ts`). It runs at 600 Hz inside each 60 Hz vehicle step and has no three.js in
+  it. `RaceVehicle` keeps grounding, orientation and wheel visuals, and syncs `speedMps`,
+  `lateralSpeed`, `yaw`, `gear` and `rpm` from it so audio, HUD, ghosts and multiplayer read the
+  same fields as before.
+- Per-car numbers live in `carOptions.ts` under `race.physics` (published power and torque, the
+  rest tuning) and are turned into a spec by `Vehicle/carPhysics.ts`, using the model's real
+  wheelbase and track from the wheel rig. Tune against `scripts/race-drive-metrics.js`: each car
+  should stay near its `zeroToHundredSec` and `topSpeedKph`.
+- Full keyboard steer is the angle for the tightest turn the tires can hold at the current
+  speed (geometric angle plus a small margin), not that plus a slip angle: both axles slip at the
+  limit, and the extra angle made half a press already saturate the fronts. Countersteering can
+  go further, as far as the front axle's travel, and the handbrake widens the range at low speed.
+- The handbrake declutches and fades out above ~80 km/h (to 30% by ~190), so a stray press at
+  speed unsettles the car instead of spinning it. Wall hits use 3x the yaw inertia for the
+  rotational part of the impulse so a clipped barrier is a scrape, not a pinball.
+- The road is 16 m with 3.5 m grass verges to the barriers (`NordschleifeTrack.ts`); the barrier
+  collision is in `RaceVehicle.applyBarriers` using `track.queryFrame`, which also gives each
+  wheel's surface (asphalt, kerb, grass). Test benches set `vehicle.trackBound = false`.
+- New laps carry an `@v2` tag on `car_id` and the leaderboard only reads tagged rows, because
+  laps from the old model aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
+  `MultiplayerService.ts`, and the local storage keys) whenever lap times stop being comparable.
 - Measure changes with `scripts/race-physics-check.js` (paste into the console on
   `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.
 - `node scripts/race-harness-run.mjs --url http://<lan-ip>:<port>/` runs that harness plus

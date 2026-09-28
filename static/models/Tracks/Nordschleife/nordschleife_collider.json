@@ -1,7 +1,7 @@
 {
     "closed":  true,
     "name":  "nordschleife-collider",
-    "width":  42,
+    "width":  23,
     "uvScale":  0.0015,
     "samples":  2200,
     "points":  [

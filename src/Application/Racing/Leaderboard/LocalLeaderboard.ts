@@ -9,7 +9,7 @@ export type LeaderboardEntry = {
     source: 'local' | 'remote';
 };
 
-const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v1';
+const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v2';
 
 export default class LocalLeaderboard {
     entries: LeaderboardEntry[];

@@ -7,6 +7,22 @@ import { applyCarFinish } from '../../Utils/CarFinish';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
+import VehiclePhysics, {
+    type PhysicsControls,
+    type PhysicsSurface,
+} from './VehiclePhysics';
+import {
+    buildPhysicsSpec,
+    defaultWheelGeometry,
+    type WheelGeometry,
+} from './carPhysics';
+import type { TrackFrame, TrackSurface } from '../Track/NordschleifeTrack';
+import {
+    ASSIST_PRESETS,
+    readAssistSettings,
+    writeAssistSettings,
+    type AssistPreset,
+} from './assists';
 import {
     carOptionsById,
     defaultCarId,
@@ -17,29 +33,29 @@ import {
 import { legacyColor } from '../../Utils/LegacyColor';
 
 const SPAWN_T = 0.003;
-const MAX_REVERSE_SPEED_KPH = 34;
 const GRAVITY = 32;
 const RAYCAST_HEIGHT = 320;
 const RAYCAST_DISTANCE = 1200;
 const LONG_AXIS_THRESHOLD = 1.12;
-const DRIFT_ENTRY_SPEED_MPS = 7.5;
-const DRIFT_RELEASE_SPEED_MPS = 4.5;
-const DRIFT_VISUAL_MAX_ANGLE_RAD = THREE.MathUtils.degToRad(68);
 const SMOKE_SPAWN_INTERVAL = 0.03;
-const STEERING_SENSITIVITY_SCALE = 0.132;
-const LOW_SPEED_STEER_BOOST = 2.05;
-const LOW_SPEED_STEER_BOOST_FADE_MPS = 24;
-const LOW_SPEED_STEER_RESPONSE_BOOST = 1.9;
-const DRIFT_FULL_SPEED_MPS = 23;
-const DRIFT_FADE_START_MPS = 30;
-const DRIFT_FADE_END_MPS = 70;
-const DRIFT_HIGH_SPEED_AUTHORITY = 0.3;
-const DRIFT_MAX_LATERAL_MPS = 16;
-// full steering lock at 300 km/h is ~1.12 rad/s, so the floor never clips
-// normal cornering
-const YAW_RATE_LATERAL_ACCEL = 70;
-const YAW_RATE_LIMIT_MIN = 1.2;
-const YAW_RATE_LIMIT_MAX = 3.5;
+const MAX_SPEED_MPS = 400 / 3.6;
+const MAX_REVERSE_SPEED_MPS = 34 / 3.6;
+// grip and drag per surface. kerbs lose a little, grass a lot
+const SURFACE_GRIP: Record<TrackSurface, number> = {
+    asphalt: 1,
+    kerb: 0.9,
+    grass: 0.55,
+    off: 0.4,
+};
+const SURFACE_DRAG: Record<TrackSurface, number> = {
+    asphalt: 0,
+    kerb: 0.004,
+    grass: 0.07,
+    off: 0.1,
+};
+const BARRIER_RESTITUTION = 0.22;
+const BARRIER_FRICTION = 0.35;
+const WHEEL_VISUAL_STEER_LIMIT = THREE.MathUtils.degToRad(38);
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
 const MAX_SINGLE_WHEEL_RADIUS = 0.6;
@@ -69,9 +85,6 @@ const LOW_SPEED_UPRIGHT_BLEND_FADE_MPS = 14;
 const LOW_SPEED_UPRIGHT_BLEND_MAX = 0;
 const MIN_SURFACE_NORMAL_Y = 0.72;
 const MIN_ORIENTATION_NORMAL_Y = 0.72;
-const AIRBORNE_ACCEL_MULTIPLIER_TRANSIENT = 0.82;
-const AIRBORNE_ACCEL_MULTIPLIER_SUSTAINED = 0.5;
-const AIRBORNE_TRANSIENT_WINDOW_S = 0.32;
 const SAFE_CHECKPOINT_MIN_INTERVAL_S = 0.08;
 const FALL_RECOVERY_DELAY_S = 1.35;
 const FALL_RECOVERY_LOOKBACK_S = 2.2;
@@ -87,14 +100,6 @@ const SAFE_STATE_MIN_SNAPSHOT_INTERVAL_S = 0.14;
 const SAFE_STATE_MIN_SNAPSHOT_DISTANCE = 0.6;
 const UPSIDE_DOWN_RECOVERY_UP_THRESHOLD = -0.2;
 const UPSIDE_DOWN_RECOVERY_DELAY_S = 0.6;
-const FRONT_WHEEL_VISUAL_STEER_MULTIPLIER = 1.45;
-const LOW_SPEED_VISUAL_STEER_BOOST = 1.65;
-const SHARED_TOP_SPEED_KPH = 300;
-const SHARED_ZERO_TO_HUNDRED_SEC = 3.55;
-const SHARED_BRAKE_DECEL = 42;
-const SHARED_AERO_DRAG = 0.00014;
-const SHARED_ROLLING_RESISTANCE = 0.34;
-const SHARED_MAX_STEER_ANGLE_DEG = 34;
 const AMG_ONE_ID = 'amg-one';
 const BMW_E92_M3_ID = 'bmw-e92-m3';
 const AMG_C63S_COUPE_ID = 'amg-c63s-coupe';
@@ -171,6 +176,24 @@ type VehicleTelemetry = {
     wheelContactCount: number;
     suspensionCompression: number[];
     surfaceNormal: [number, number, number];
+    lateralG: number;
+    longitudinalG: number;
+    bodySlipDeg: number;
+    steerAngle: number;
+    frontSlide: number;
+    rearSlide: number;
+    wheelSurfaces: TrackSurface[];
+    onKerb: boolean;
+    onGrass: boolean;
+    barrierContact: number;
+    impact: number;
+    shifting: boolean;
+    limiter: boolean;
+    abs: boolean;
+    tractionControl: boolean;
+    stability: boolean;
+    trackDistance: number;
+    trackLateral: number;
 };
 
 type WheelRig = {
@@ -263,13 +286,19 @@ export default class RaceVehicle {
     wheelSpinAngle: number;
     rideHeight: number;
     wheelRadius: number;
-    maxForwardSpeedMps: number;
-    maxReverseSpeedMps: number;
-    engineAccelBase: number;
-    reverseAccel: number;
-    engineBrakeDecel: number;
-    aeroDrag: number;
-    rollingResistance: number;
+    physics: VehiclePhysics;
+    trackFrame: TrackFrame;
+    wheelFrame: TrackFrame;
+    wheelSurfaces: TrackSurface[];
+    barrierContact: number;
+    impact: number;
+    frontSpinAngle: number;
+    rearSpinAngle: number;
+    physicsSurface: PhysicsSurface;
+    barrierPoint: THREE.Vector3;
+    startResets: number;
+    // test benches drive on a flat pad away from the track and turn this off
+    trackBound: boolean;
     bodyRadius: number;
     bodySize: THREE.Vector3;
     position: THREE.Vector3;
@@ -365,13 +394,41 @@ export default class RaceVehicle {
         this.wheelSpinAngle = 0;
         this.rideHeight = this.currentTuning.wheelRadiusMeters + 0.02;
         this.wheelRadius = this.currentTuning.wheelRadiusMeters;
-        this.maxForwardSpeedMps = SHARED_TOP_SPEED_KPH / 3.6;
-        this.maxReverseSpeedMps = MAX_REVERSE_SPEED_KPH / 3.6;
-        this.engineAccelBase = 8;
-        this.reverseAccel = 5.5;
-        this.engineBrakeDecel = 2.2;
-        this.aeroDrag = SHARED_AERO_DRAG;
-        this.rollingResistance = SHARED_ROLLING_RESISTANCE;
+        this.trackFrame = this.track.createFrame();
+        this.wheelFrame = this.track.createFrame();
+        this.wheelSurfaces = ['asphalt', 'asphalt', 'asphalt', 'asphalt'];
+        this.barrierContact = 0;
+        this.impact = 0;
+        this.frontSpinAngle = 0;
+        this.rearSpinAngle = 0;
+        this.physicsSurface = {
+            grounded: true,
+            slopeForward: 0,
+            slopeLeft: 0,
+            normalScale: 1,
+            grip: [1, 1, 1, 1],
+            drag: [0, 0, 0, 0],
+        };
+        this.barrierPoint = new THREE.Vector3();
+        this.startResets = 0;
+        this.trackBound = true;
+        this.physics = new VehiclePhysics(
+            buildPhysicsSpec(
+                carOptionsById[this.currentCarId] ||
+                    carOptionsById[defaultCarId],
+                defaultWheelGeometry(
+                    carOptionsById[this.currentCarId] ||
+                        carOptionsById[defaultCarId],
+                    this.currentTuning.wheelRadiusMeters
+                )
+            )
+        );
+        this.physics.onShift = (gear) => {
+            UIEventBus.dispatch('race:gearShift', {
+                gear,
+                carId: this.currentCarId,
+            });
+        };
         this.bodyRadius = 2.4;
         this.bodySize = new THREE.Vector3(4.7, 1.4, 2.1);
         this.position = new THREE.Vector3();
@@ -424,9 +481,36 @@ export default class RaceVehicle {
         this.tmpQuatG = new THREE.Quaternion();
 
         this.setCarTuning(this.currentCarId);
+        this.setupAssists();
         this.setupCarSwitcher();
         this.setModel(this.currentCarId);
         this.resetToStart();
+    }
+
+    setupAssists() {
+        const apply = (preset: AssistPreset, autoGears: boolean) => {
+            Object.assign(this.physics.assists, ASSIST_PRESETS[preset], {
+                autoGears,
+            });
+        };
+        const stored = readAssistSettings();
+        apply(stored.preset, stored.autoGears);
+        UIEventBus.on(
+            'race:assists',
+            (payload: { preset?: string; autoGears?: boolean } | undefined) => {
+                const current = readAssistSettings();
+                const preset =
+                    payload?.preset && payload.preset in ASSIST_PRESETS
+                        ? (payload.preset as AssistPreset)
+                        : current.preset;
+                const autoGears =
+                    typeof payload?.autoGears === 'boolean'
+                        ? payload.autoGears
+                        : current.autoGears;
+                apply(preset, autoGears);
+                writeAssistSettings({ preset, autoGears });
+            }
+        );
     }
 
     setupCarSwitcher() {
@@ -442,8 +526,6 @@ export default class RaceVehicle {
     setCarTuning(carId: string) {
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
         this.currentTuning = option.race;
-        this.maxForwardSpeedMps = SHARED_TOP_SPEED_KPH / 3.6;
-        this.maxReverseSpeedMps = MAX_REVERSE_SPEED_KPH / 3.6;
 
         const configuredWheelRadius = this.currentTuning.wheelRadiusMeters;
         this.wheelRadius =
@@ -452,12 +534,14 @@ export default class RaceVehicle {
                 : WHEEL_RADIUS_PLAUSIBLE_MIN;
         this.rideHeight = THREE.MathUtils.clamp(this.wheelRadius * 0.98, 0.16, 0.52);
 
-        const zeroToHundred = SHARED_ZERO_TO_HUNDRED_SEC;
-        this.engineAccelBase = 27.7778 / zeroToHundred;
-        this.reverseAccel = this.engineAccelBase * 0.56;
-        this.engineBrakeDecel = THREE.MathUtils.lerp(1.8, 3.1, this.engineAccelBase / 10);
-        this.aeroDrag = SHARED_AERO_DRAG;
-        this.rollingResistance = SHARED_ROLLING_RESISTANCE;
+        if (this.physics) {
+            this.physics.setSpec(
+                buildPhysicsSpec(
+                    option,
+                    defaultWheelGeometry(option, this.wheelRadius)
+                )
+            );
+        }
 
         this.rpm = THREE.MathUtils.clamp(
             this.rpm,
@@ -3184,6 +3268,49 @@ export default class RaceVehicle {
         if (Array.isArray(bodySize) && bodySize.length === 3) {
             this.bodySize.set(bodySize[0], bodySize[1], bodySize[2]);
         }
+        const option =
+            carOptionsById[this.currentCarId] || carOptionsById[defaultCarId];
+        this.physics.setSpec(
+            buildPhysicsSpec(option, this.getWheelGeometry(model))
+        );
+    }
+
+    // wheelbase and track from the wheel rig, in the pivot frame (meters)
+    getWheelGeometry(model: THREE.Group): WheelGeometry {
+        const option =
+            carOptionsById[this.currentCarId] || carOptionsById[defaultCarId];
+        const fallback = defaultWheelGeometry(option, this.wheelRadius);
+        const rig = (model.userData.raceWheelRig || []) as WheelRig[];
+        const toPivot = (wheel: WheelRig) =>
+            wheel.localCenter
+                .clone()
+                .applyQuaternion(model.quaternion)
+                .add(model.position);
+        const fronts = rig.filter((wheel) => wheel.front).map(toPivot);
+        const rears = rig.filter((wheel) => !wheel.front).map(toPivot);
+        if (fronts.length < 2 || rears.length < 2) return fallback;
+        const meanZ = (list: THREE.Vector3[]) =>
+            list.reduce((sum, point) => sum + point.z, 0) / list.length;
+        const width = (list: THREE.Vector3[]) =>
+            Math.max(...list.map((point) => point.x)) -
+            Math.min(...list.map((point) => point.x));
+        const wheelbase = Math.abs(meanZ(fronts) - meanZ(rears));
+        const trackFront = width(fronts);
+        const trackRear = width(rears);
+        const plausible =
+            wheelbase > 2 &&
+            wheelbase < 3.6 &&
+            trackFront > 1.2 &&
+            trackFront < 2 &&
+            trackRear > 1.2 &&
+            trackRear < 2;
+        if (!plausible) return fallback;
+        return {
+            wheelbase,
+            trackFront,
+            trackRear,
+            wheelRadius: this.wheelRadius,
+        };
     }
 
     isWheelRigSpatiallyValid(wheels: WheelRig[]) {
@@ -3232,13 +3359,19 @@ export default class RaceVehicle {
             this.steerAngle = 0;
             this.steerVisualAngle = 0;
             this.wheelSpinAngle = 0;
+            this.frontSpinAngle = 0;
+            this.rearSpinAngle = 0;
             this.smokeSpawnCooldown = 0;
+            this.barrierContact = 0;
+            this.impact = 0;
+            this.physics.reset(this.yaw, 0);
             this.input.reset();
             this.resetWheelVisuals();
         }
     }
 
     resetToStart() {
+        this.startResets += 1;
         const curve = this.track.getCurve();
         const point = curve.getPointAt(SPAWN_T);
         const tangent = curve.getTangentAt(SPAWN_T).normalize();
@@ -3275,8 +3408,14 @@ export default class RaceVehicle {
         this.steerAngle = 0;
         this.steerVisualAngle = 0;
         this.wheelSpinAngle = 0;
+        this.frontSpinAngle = 0;
+        this.rearSpinAngle = 0;
         this.gear = 1;
         this.rpm = this.currentTuning.idleRpm;
+        this.barrierContact = 0;
+        this.impact = 0;
+        this.physics.reset(this.yaw, 0);
+        this.track.frameHint = -1;
         this.smokeSpawnCooldown = 0;
         this.smoke.clear();
         this.carPivot.quaternion.identity();
@@ -3408,8 +3547,8 @@ export default class RaceVehicle {
         this.yaw = snapshot.yaw;
         this.speedMps = THREE.MathUtils.clamp(
             snapshot.speedMps * speedScale,
-            -this.maxReverseSpeedMps,
-            this.maxForwardSpeedMps
+            -MAX_REVERSE_SPEED_MPS,
+            MAX_SPEED_MPS
         );
         return true;
     }
@@ -3523,8 +3662,8 @@ export default class RaceVehicle {
         this.yaw = this.fallAnchorYaw;
         this.speedMps = THREE.MathUtils.clamp(
             this.fallAnchorSpeedMps,
-            -this.maxReverseSpeedMps,
-            this.maxForwardSpeedMps
+            -MAX_REVERSE_SPEED_MPS,
+            MAX_SPEED_MPS
         );
         this.fallRecoveryFailures = 0;
         return true;
@@ -3573,8 +3712,8 @@ export default class RaceVehicle {
             this.yaw = this.lastSafeYaw;
             this.speedMps = THREE.MathUtils.clamp(
                 this.lastSafeSpeedMps * 0.94,
-                -this.maxReverseSpeedMps,
-                this.maxForwardSpeedMps
+                -MAX_REVERSE_SPEED_MPS,
+                MAX_SPEED_MPS
             );
         }
 
@@ -3584,6 +3723,7 @@ export default class RaceVehicle {
         this.slipRatio = 0;
         this.steerAngle = 0;
         this.steerVisualAngle = 0;
+        this.physics.reset(this.yaw, this.speedMps);
         this.airborneTime = 0;
         this.upsideDownTime = 0;
         this.recoveryCooldown = FALL_RECOVERY_COOLDOWN_S;
@@ -3671,27 +3811,24 @@ export default class RaceVehicle {
             this.postRecoveryCheckpointLockout - dt
         );
         this.safeCheckpointTimer += dt;
-        // updatePosition moves along the surface plane, but height comes from
+        // the physics moves the car along the ground, but height comes from
         // grounding (or the ballistic path), which works from here
         this.stepStartY = this.position.y;
 
         this.input.update(dt);
         const controls = this.input.getState();
+        const shift = this.input.consumeShift();
+        if (shift !== 0) {
+            // shifting by hand switches the gearbox to manual
+            if (this.physics.assists.autoGears) {
+                UIEventBus.dispatch('race:assists', { autoGears: false });
+            }
+            this.physics.requestShift(shift);
+        }
 
-        this.updateLongitudinalSpeed(
-            dt,
-            controls.throttle,
-            controls.brake,
-            controls.handbrake
-        );
-        this.updateSteering(
-            dt,
-            controls.steer,
-            controls.handbrake,
-            controls.throttle
-        );
-        this.updatePosition(dt);
+        this.stepPhysics(dt, controls);
         this.groundToCollider(dt);
+        this.applyBarriers();
 
         if (this.hasInvalidState()) {
             this.restoreFromSafeCheckpoint('invalid');
@@ -3721,301 +3858,233 @@ export default class RaceVehicle {
         }
 
         this.updateTransform(dt);
-        this.updateDrivetrain(dt, controls.throttle, controls.brake);
+        this.syncDrivetrain();
         this.updateWheelVisuals(dt, controls.throttle);
         this.updateDriftSmoke(dt);
+        this.input.rumble(this.getDriftIntensity(), this.impact);
     }
 
-    updateLongitudinalSpeed(
-        deltaSeconds: number,
-        throttle: number,
-        brake: number,
-        handbrake: number
-    ) {
-        const speedSign = Math.sign(this.speedMps);
-        const speedAbs = Math.abs(this.speedMps);
-        const speedRatio = THREE.MathUtils.clamp(
-            speedAbs / Math.max(1, this.maxForwardSpeedMps),
-            0,
-            1
-        );
-        const gearPull = THREE.MathUtils.lerp(
-            1.12,
-            0.44,
-            Math.pow(speedRatio, 0.62)
-        );
-        const torqueCurve = THREE.MathUtils.lerp(
-            1.04,
-            0.72,
-            Math.pow(speedRatio, 0.85)
-        );
-        const launchBoost = 1 + Math.max(0, 1 - speedRatio) * 0.18;
-        const drivetrainGrip = 1;
-        const throttleAccel =
-            throttle *
-            this.engineAccelBase *
-            gearPull *
-            torqueCurve *
-            launchBoost *
-            drivetrainGrip;
-
-        let acceleration = 0;
-        if (throttle > 0.01 && brake < 0.35) {
-            acceleration += throttleAccel;
-        }
-
-        if (brake > 0.01) {
-            if (this.speedMps > 0.4) {
-                acceleration -= brake * SHARED_BRAKE_DECEL;
-            } else {
-                acceleration -= brake * this.reverseAccel;
+    // gravity along the road and grip under each wheel, for the tire model
+    buildPhysicsSurface(): PhysicsSurface {
+        const surface = this.physicsSurface;
+        const normal = this.surfaceNormal;
+        const sin = Math.sin(this.yaw);
+        const cos = Math.cos(this.yaw);
+        const alongSlope = 9.81 * normal.y;
+        surface.grounded = this.grounded;
+        surface.slopeForward = alongSlope * (normal.x * sin + normal.z * cos);
+        surface.slopeLeft = alongSlope * (normal.x * cos - normal.z * sin);
+        surface.normalScale = Math.max(0.3, normal.y);
+        if (!this.trackBound) {
+            for (let i = 0; i < 4; i++) {
+                this.wheelSurfaces[i] = 'asphalt';
+                surface.grip[i] = 1;
+                surface.drag[i] = 0;
             }
+            return surface;
         }
 
-        if (throttle <= 0.01 && brake <= 0.01) {
-            acceleration -= speedSign * (this.engineBrakeDecel + speedAbs * 0.015);
-        }
-
-        const aero = this.aeroDrag * this.speedMps * speedAbs;
-        const rolling = this.rollingResistance * speedSign;
-        acceleration -= aero + rolling;
-
-        if (!this.grounded) {
-            const airborneFactor =
-                this.airborneTime <= AIRBORNE_TRANSIENT_WINDOW_S
-                    ? AIRBORNE_ACCEL_MULTIPLIER_TRANSIENT
-                    : AIRBORNE_ACCEL_MULTIPLIER_SUSTAINED;
-            acceleration *= airborneFactor;
-        }
-
-        this.speedMps += acceleration * deltaSeconds;
-
-        if (handbrake > 0.2 && speedAbs > 6) {
-            const handbrakeDamping = this.usesRwdDriftTuning() ? 0.56 : 0.4;
-            const driftDampingScale =
-                this.driftAmount > 0.2 && throttle > 0.35 ? 0.35 : 1;
-            this.speedMps *=
-                1 - handbrake * handbrakeDamping * driftDampingScale * deltaSeconds;
-        }
-
-        this.speedMps = THREE.MathUtils.clamp(
-            this.speedMps,
-            -this.maxReverseSpeedMps,
-            this.maxForwardSpeedMps
+        const frame = this.track.queryFrame(
+            this.position.x,
+            this.position.z,
+            this.trackFrame
         );
-
-        if (Math.abs(this.speedMps) < 0.04 && throttle < 0.05 && brake < 0.05) {
-            this.speedMps = 0;
+        const forwardAcross = sin * frame.leftX + cos * frame.leftZ;
+        const leftAcross = cos * frame.leftX - sin * frame.leftZ;
+        const spec = this.physics.spec;
+        const a = spec.wheelbase * (1 - spec.weightFront);
+        const b = spec.wheelbase * spec.weightFront;
+        for (let i = 0; i < 4; i++) {
+            const x = i < 2 ? a : -b;
+            const track = i < 2 ? spec.trackFront : spec.trackRear;
+            const y = (i % 2 === 0 ? 0.5 : -0.5) * track;
+            const lateral = frame.lateral + x * forwardAcross + y * leftAcross;
+            const kind = this.track.getSurface(frame, lateral);
+            this.wheelSurfaces[i] = kind;
+            surface.grip[i] = SURFACE_GRIP[kind];
+            surface.drag[i] = SURFACE_DRAG[kind];
         }
+        return surface;
     }
 
-    updateSteering(
-        deltaSeconds: number,
-        steer: number,
-        handbrake: number,
-        throttle: number
-    ) {
-        const speed = Math.abs(this.speedMps);
-        const speedFactor = THREE.MathUtils.clamp(speed / 52, 0, 1);
-        const maxSteerAngle = THREE.MathUtils.degToRad(
-            SHARED_MAX_STEER_ANGLE_DEG
-        ) * STEERING_SENSITIVITY_SCALE;
-        const steerScale = THREE.MathUtils.lerp(1, 0.5, speedFactor);
-        const lowSpeedBoostT = THREE.MathUtils.clamp(
-            speed / LOW_SPEED_STEER_BOOST_FADE_MPS,
-            0,
-            1
-        );
-        const lowSpeedSteerBoost = THREE.MathUtils.lerp(
-            LOW_SPEED_STEER_BOOST,
-            1,
-            lowSpeedBoostT
-        );
-        const steerResponseBoost = THREE.MathUtils.lerp(
-            LOW_SPEED_STEER_RESPONSE_BOOST,
-            1,
-            lowSpeedBoostT
-        );
-        const targetSteerAngle =
-            steer * maxSteerAngle * steerScale * lowSpeedSteerBoost;
-        const steerLerp = THREE.MathUtils.clamp(
-            deltaSeconds * 12 * STEERING_SENSITIVITY_SCALE * steerResponseBoost,
-            0,
-            1
-        );
-        this.steerAngle = THREE.MathUtils.lerp(
-            this.steerAngle,
-            targetSteerAngle,
-            steerLerp
-        );
+    stepPhysics(dt: number, controls: PhysicsControls) {
+        const surface = this.buildPhysicsSurface();
+        this.physics.step(dt, controls, surface, controls.steer);
+        this.yaw = this.physics.yaw;
+        this.position.x += this.physics.displacementX;
+        this.position.z += this.physics.displacementZ;
+        this.syncFromPhysics();
+    }
 
-        if (speed < 0.2) {
-            this.lateralSpeed = THREE.MathUtils.lerp(this.lateralSpeed, 0, steerLerp);
-            this.driftAmount = Math.max(0, this.driftAmount - deltaSeconds * 4);
+    syncFromPhysics() {
+        const physics = this.physics;
+        this.speedMps = physics.vx;
+        this.lateralSpeed = physics.vy;
+        this.steerAngle = physics.steerAngle;
+        const sin = Math.sin(this.yaw);
+        const cos = Math.cos(this.yaw);
+        this.forward.set(sin, 0, cos);
+        this.tmpVectorA.copy(this.forward).projectOnPlane(this.surfaceNormal);
+        if (this.tmpVectorA.lengthSq() > 0.0001) {
+            this.forward.copy(this.tmpVectorA.normalize());
+        }
+        this.velocity.set(
+            physics.vx * sin + physics.vy * cos,
+            0,
+            physics.vx * cos - physics.vy * sin
+        );
+        const rear = physics.getRearSlideIntensity();
+        const front = physics.getFrontSlideIntensity();
+        this.driftAmount = rear;
+        this.slipRatio = Math.max(rear, front * 0.8);
+    }
+
+    // the barriers stand at the outer edge of the verges. corners of the body
+    // that cross one get pushed back, with an impulse at the contact point so
+    // glancing hits turn the car along the wall instead of stopping it dead
+    applyBarriers() {
+        if (!this.trackBound) {
+            this.barrierContact = 0;
             return;
         }
-
-        const wheelBase = Math.max(2.2, this.bodySize.z * 0.62);
-        let yawRate =
-            (this.speedMps / wheelBase) *
-            Math.tan(this.steerAngle);
-        const driftCapability = this.getDriftCapability();
-        const usesRwdDriftTuning = driftCapability > 0.001;
-
-        const driftSpeedNorm = THREE.MathUtils.clamp(
-            (speed - DRIFT_ENTRY_SPEED_MPS) /
-                Math.max(1e-3, DRIFT_FULL_SPEED_MPS - DRIFT_ENTRY_SPEED_MPS),
-            0,
-            1
+        const frame = this.track.queryFrame(
+            this.position.x,
+            this.position.z,
+            this.trackFrame
         );
-        const driftSteerNorm = THREE.MathUtils.clamp(
-            (Math.abs(steer) - 0.12) / 0.88,
-            0,
-            1
-        );
-        const driftHandbrakeNorm = THREE.MathUtils.clamp((handbrake - 0.18) / 0.82, 0, 1);
-        const driftThrottleNorm = THREE.MathUtils.clamp((throttle - 0.15) / 0.85, 0, 1);
-        const driftInputNorm = Math.min(driftHandbrakeNorm, driftThrottleNorm);
-        // drift fades out at high speed. at 190 km/h a handbrake flick used to
-        // slide cars sideways at almost their forward speed and spin them at
-        // 300-480 deg/s
-        const highSpeedDrift = THREE.MathUtils.lerp(
-            1,
-            DRIFT_HIGH_SPEED_AUTHORITY,
-            THREE.MathUtils.smoothstep(
-                speed,
-                DRIFT_FADE_START_MPS,
-                DRIFT_FADE_END_MPS
-            )
-        );
-        const driftTarget = usesRwdDriftTuning
-            ? driftSpeedNorm *
-              driftSteerNorm *
-              driftInputNorm *
-              driftCapability *
-              highSpeedDrift
-            : 0;
-        const driftBuildRate =
-            THREE.MathUtils.lerp(1.4, 3.1, driftTarget) *
-            THREE.MathUtils.lerp(0.7, 1, driftCapability);
-        const driftReleaseRate =
-            speed > DRIFT_RELEASE_SPEED_MPS
-                ? THREE.MathUtils.lerp(2.4, 4.2, 1 - driftTarget)
-                : THREE.MathUtils.lerp(4.2, 6, 1 - driftTarget);
-        const driftRate =
-            driftTarget >= this.driftAmount ? driftBuildRate : driftReleaseRate;
-        this.driftAmount = THREE.MathUtils.lerp(
-            this.driftAmount,
-            driftTarget,
-            THREE.MathUtils.clamp(deltaSeconds * driftRate, 0, 1)
-        );
-
-        if (this.driftAmount > 0.001) {
-            const driftPower = THREE.MathUtils.lerp(0.74, 1.12, driftCapability);
-            const driftSlipTarget =
-                -steer * speed * (0.3 + this.driftAmount * 1.05) * driftPower;
-            const driftSlipLerp = THREE.MathUtils.clamp(
-                deltaSeconds * (2.2 + this.driftAmount * 2.4),
-                0,
-                1
-            );
-            this.lateralSpeed = THREE.MathUtils.lerp(
-                this.lateralSpeed,
-                driftSlipTarget,
-                driftSlipLerp
-            );
-            yawRate +=
-                steer *
-                (0.35 + this.driftAmount * 1.15) *
-                driftPower *
-                highSpeedDrift;
+        const sin = Math.sin(this.yaw);
+        const cos = Math.cos(this.yaw);
+        const forwardAcross = sin * frame.leftX + cos * frame.leftZ;
+        const leftAcross = cos * frame.leftX - sin * frame.leftZ;
+        const halfLength = this.bodySize.z * 0.48;
+        const halfWidth = this.bodySize.x * 0.47;
+        let contact = 0;
+        let impact = 0;
+        for (const side of [1, -1]) {
+            let deepest = 0;
+            let pointX = 0;
+            let pointY = 0;
+            for (const x of [halfLength, -halfLength]) {
+                for (const y of [halfWidth, -halfWidth]) {
+                    const lateral =
+                        frame.lateral + x * forwardAcross + y * leftAcross;
+                    const depth =
+                        side > 0
+                            ? lateral - frame.barrierOffset
+                            : -frame.barrierOffset - lateral;
+                    if (depth > deepest) {
+                        deepest = depth;
+                        pointX = x;
+                        pointY = y;
+                    }
+                }
+            }
+            if (deepest <= 0) continue;
+            contact = side;
+            this.position.x -= side * frame.leftX * deepest;
+            this.position.z -= side * frame.leftZ * deepest;
+            // wall normal pointing back onto the road, in the body frame
+            const normalX = -side * frame.leftX;
+            const normalZ = -side * frame.leftZ;
+            const nx = normalX * sin + normalZ * cos;
+            const ny = normalX * cos - normalZ * sin;
+            const velocity = this.physics.pointVelocity(pointX, pointY);
+            const into = velocity.x * nx + velocity.y * ny;
+            if (into < 0) {
+                const mass = this.physics.effectiveMass(pointX, pointY, nx, ny);
+                const normalImpulse = -(1 + BARRIER_RESTITUTION) * into * mass;
+                const tx = -ny;
+                const ty = nx;
+                const along = velocity.x * tx + velocity.y * ty;
+                const tangentMass = this.physics.effectiveMass(
+                    pointX,
+                    pointY,
+                    tx,
+                    ty
+                );
+                const frictionImpulse = THREE.MathUtils.clamp(
+                    -along * tangentMass,
+                    -BARRIER_FRICTION * normalImpulse,
+                    BARRIER_FRICTION * normalImpulse
+                );
+                this.physics.applyImpulse(
+                    pointX,
+                    pointY,
+                    nx * normalImpulse + tx * frictionImpulse,
+                    ny * normalImpulse + ty * frictionImpulse
+                );
+                impact = Math.max(
+                    impact,
+                    normalImpulse / this.physics.spec.massKg
+                );
+            }
+            this.barrierPoint
+                .copy(this.position)
+                .addScaledVector(this.tmpVectorB.set(sin, 0, cos), pointX)
+                .addScaledVector(this.tmpVectorC.set(cos, 0, -sin), pointY);
         }
-
-        const baseLateralGrip = usesRwdDriftTuning
-            ? driftCapability >= 0.95
-                ? 5.4
-                : 6.15
-            : this.currentTuning.drivetrain === 'FWD'
-            ? 7.4
-            : 6.9;
-        const driftGripScale = THREE.MathUtils.lerp(1, 0.09, this.driftAmount);
-        const handbrakeGripScale = usesRwdDriftTuning
-            ? THREE.MathUtils.lerp(1, driftCapability >= 0.95 ? 0.2 : 0.34, handbrake)
-            : THREE.MathUtils.lerp(1, 0.45, handbrake);
-        const damping = baseLateralGrip * driftGripScale * handbrakeGripScale;
-        this.lateralSpeed = THREE.MathUtils.lerp(
-            this.lateralSpeed,
-            0,
-            THREE.MathUtils.clamp(deltaSeconds * damping, 0, 1)
-        );
-        const maxLateralSpeed = Math.min(
-            DRIFT_MAX_LATERAL_MPS,
-            Math.max(
-                2.2,
-                speed * THREE.MathUtils.lerp(0.45, 1.12, this.driftAmount)
-            )
-        );
-        this.lateralSpeed = THREE.MathUtils.clamp(
-            this.lateralSpeed,
-            -maxLateralSpeed,
-            maxLateralSpeed
-        );
-
-        // During drift, bias yaw from rear slip so the car rotates around the front axle.
-        const rearSlipYaw =
-            (-this.lateralSpeed /
-                Math.max(1.2, wheelBase * 0.78)) *
-            THREE.MathUtils.lerp(0.06, 0.24, this.driftAmount) *
-            highSpeedDrift;
-        yawRate += rearSlipYaw;
-
-        const counterSteer =
-            -Math.sign(this.lateralSpeed) *
-            Math.min(1.4, Math.abs(this.lateralSpeed) * 0.078) *
-            (1 - this.driftAmount * 0.45) *
-            highSpeedDrift;
-        yawRate += counterSteer;
-
-        // the slide terms stack on top of steering, so bound the total by speed:
-        // donuts still spin fast, a slide at 200 km/h can't become a violent spin
-        const yawLimit = THREE.MathUtils.clamp(
-            YAW_RATE_LATERAL_ACCEL / Math.max(speed, 1),
-            YAW_RATE_LIMIT_MIN,
-            YAW_RATE_LIMIT_MAX
-        );
-        yawRate = THREE.MathUtils.clamp(yawRate, -yawLimit, yawLimit);
-
-        this.yaw += yawRate * deltaSeconds;
+        this.barrierContact = contact;
+        this.impact = Math.max(this.impact * 0.5, impact);
+        if (contact !== 0) this.syncFromPhysics();
     }
 
-    updatePosition(deltaSeconds: number) {
-        this.forward.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
-        this.tmpVectorA
-            .copy(this.forward)
-            .projectOnPlane(this.surfaceNormal)
-            .normalize();
+    syncDrivetrain() {
+        const physics = this.physics;
+        this.gear = physics.gear < 0 ? -1 : physics.pendingGear;
+        this.rpm = physics.engineRpm;
+    }
 
-        if (this.tmpVectorA.lengthSq() > 0.0001) {
-            this.forward.copy(this.tmpVectorA);
-        }
-
-        this.tmpVectorB
-            .crossVectors(this.surfaceNormal, this.forward)
-            .normalize();
-
-        this.velocity
-            .copy(this.forward)
-            .multiplyScalar(this.speedMps)
-            .addScaledVector(this.tmpVectorB, this.lateralSpeed);
-
-        this.position.addScaledVector(this.velocity, deltaSeconds);
-
-        const speedAbs = Math.abs(this.speedMps);
-        this.slipRatio = THREE.MathUtils.clamp(
-            Math.abs(this.lateralSpeed) / Math.max(2, speedAbs + 1),
-            0,
-            1
+    // drops the car on the road here, facing along the track, stopped
+    resetToTrack() {
+        const frame = this.track.queryFrame(
+            this.position.x,
+            this.position.z,
+            this.trackFrame,
+            -1
         );
+        const margin = Math.max(0, frame.roadHalfWidth - 2.5);
+        const lateral = THREE.MathUtils.clamp(frame.lateral, -margin, margin);
+        const position = frame.point.clone();
+        position.x += frame.leftX * lateral;
+        position.z += frame.leftZ * lateral;
+        this.teleport(position, Math.atan2(frame.tangentX, frame.tangentZ), 0);
+    }
+
+    // for tests and resets: put the car at a point on the ground, with a
+    // heading and a forward speed
+    teleport(position: THREE.Vector3, yaw: number, speed = 0) {
+        this.position.copy(position);
+        this.position.y += this.rideHeight + 0.6;
+        this.yaw = yaw;
+        this.forward.set(Math.sin(yaw), 0, Math.cos(yaw));
+        this.surfaceNormal.set(0, 1, 0);
+        this.surfaceForward.copy(this.forward);
+        this.speedMps = speed;
+        this.lateralSpeed = 0;
+        this.verticalVelocity = 0;
+        this.driftAmount = 0;
+        this.slipRatio = 0;
+        this.airborneTime = 0;
+        this.upsideDownTime = 0;
+        this.recoveryCooldown = 0;
+        this.postRecoveryCheckpointLockout = 0;
+        this.fallAnchorValid = false;
+        this.fallRecoveryFailures = 0;
+        this.clearSafeStateHistory();
+        this.lastSafePosition.copy(this.position);
+        this.fallAnchorPosition.copy(this.position);
+        this.barrierContact = 0;
+        this.impact = 0;
+        this.physics.reset(yaw, speed);
+        this.track.frameHint = -1;
+        this.carPivot.quaternion.identity();
+        this.orientationTarget.identity();
+        this.stepStartY = this.position.y;
+        this.groundToCollider(0);
+        this.syncFromPhysics();
+        this.updateTransform(1);
+        this.captureSafeCheckpoint(true);
+        this.resetWheelVisuals();
     }
 
     clampNormalMinY(normal: THREE.Vector3, minY: number) {
@@ -4496,36 +4565,6 @@ export default class RaceVehicle {
         }
         planarForward.normalize();
 
-        if (this.driftAmount > 0.04 && this.velocity.lengthSq() > 9) {
-            this.tmpVectorC
-                .copy(this.velocity)
-                .projectOnPlane(orientationNormal)
-                .normalize();
-            if (this.tmpVectorC.lengthSq() > 0.0001) {
-                const slipAngle = this.getSignedAngleAroundNormal(
-                    planarForward,
-                    this.tmpVectorC,
-                    orientationNormal
-                );
-                const clampedSlipAngle = THREE.MathUtils.clamp(
-                    slipAngle,
-                    -DRIFT_VISUAL_MAX_ANGLE_RAD,
-                    DRIFT_VISUAL_MAX_ANGLE_RAD
-                );
-                const driftVisualBlend = THREE.MathUtils.clamp(
-                    this.driftAmount * 0.42,
-                    0,
-                    0.42
-                );
-                planarForward
-                    .applyAxisAngle(
-                        orientationNormal,
-                        clampedSlipAngle * driftVisualBlend
-                    )
-                    .normalize();
-            }
-        }
-
         const side = this.tmpVectorB.crossVectors(orientationNormal, planarForward);
         if (side.lengthSq() <= 1e-8) {
             side.set(1, 0, 0);
@@ -4570,135 +4609,22 @@ export default class RaceVehicle {
         return angle * sign;
     }
 
-    usesRwdDriftTuning() {
-        return (
-            this.currentTuning.drivetrain === 'RWD' ||
-            this.currentTuning.allowRwdDrift === true
-        );
-    }
-
-    getDriftCapability() {
-        if (this.currentTuning.drivetrain === 'RWD') return 1;
-        if (this.currentTuning.allowRwdDrift === true) return 0.72;
-        return 0;
-    }
-
-    updateDrivetrain(deltaSeconds: number, throttle: number, brake: number) {
-        const wheelRadius =
-            Number.isFinite(this.wheelRadius) && this.wheelRadius > 0
-                ? this.wheelRadius
-                : WHEEL_RADIUS_PLAUSIBLE_MIN;
-        const wheelRpm =
-            (Math.abs(this.speedMps) / (Math.PI * 2 * wheelRadius)) * 60;
-
-        if (this.speedMps < -0.5) {
-            this.gear = -1;
-            const reverseRpm =
-                this.currentTuning.idleRpm +
-                wheelRpm *
-                    this.currentTuning.reverseRatio *
-                    this.currentTuning.finalDrive;
-            this.rpm = THREE.MathUtils.clamp(
-                reverseRpm,
-                this.currentTuning.idleRpm,
-                this.currentTuning.redlineRpm * 0.86
-            );
-            return;
-        }
-
-        const maxGear = Math.max(1, this.currentTuning.gearRatios.length);
-        this.gear = Number.isFinite(this.gear)
-            ? THREE.MathUtils.clamp(Math.floor(this.gear), 1, maxGear)
-            : 1;
-        const currentRatio =
-            this.currentTuning.gearRatios[this.gear - 1] || 1;
-        let rpmTarget =
-            this.currentTuning.idleRpm +
-            wheelRpm * currentRatio * this.currentTuning.finalDrive;
-
-        if (rpmTarget > this.currentTuning.shiftUpRpm && this.gear < maxGear) {
-            this.gear++;
-            UIEventBus.dispatch('race:gearShift', {
-                gear: this.gear,
-                carId: this.currentCarId,
-            });
-        } else if (
-            rpmTarget < this.currentTuning.shiftDownRpm &&
-            this.gear > 1 &&
-            throttle < 0.72 &&
-            brake < 0.85
-        ) {
-            this.gear--;
-            UIEventBus.dispatch('race:gearShift', {
-                gear: this.gear,
-                carId: this.currentCarId,
-            });
-        }
-
-        const shiftedRatio =
-            this.currentTuning.gearRatios[this.gear - 1] || 1;
-        rpmTarget =
-            this.currentTuning.idleRpm +
-            wheelRpm * shiftedRatio * this.currentTuning.finalDrive;
-        rpmTarget = THREE.MathUtils.clamp(
-            rpmTarget,
-            this.currentTuning.idleRpm,
-            this.currentTuning.redlineRpm
-        );
-
-        const rpmLerp = THREE.MathUtils.clamp(deltaSeconds * 12, 0, 1);
-        this.rpm = THREE.MathUtils.lerp(this.rpm, rpmTarget, rpmLerp);
-    }
-
     updateWheelVisuals(deltaSeconds: number, throttle = 0) {
         if (!this.wheelRig.length) return;
 
         if (this.currentCarId === BMW_F90_M5_COMPETITION_ID) {
-            this.updateLegacyWheelVisuals(deltaSeconds, throttle);
+            this.updateLegacyWheelVisuals(deltaSeconds);
             return;
         }
 
-        const m5DriveSpinSpeed =
-            this.currentCarId === BMW_F90_M5_COMPETITION_ID
-                ? Math.max(
-                      Math.abs(this.speedMps),
-                      THREE.MathUtils.clamp(throttle, 0, 1) * 18
-                  ) * (this.speedMps < -0.2 ? -1 : 1)
-                : this.speedMps;
-        this.wheelSpinAngle +=
-            (m5DriveSpinSpeed / Math.max(0.1, this.wheelRadius)) * deltaSeconds;
-        const lowSpeedVisualBoostT = THREE.MathUtils.clamp(
-            Math.abs(this.speedMps) / LOW_SPEED_STEER_BOOST_FADE_MPS,
-            0,
-            1
-        );
-        const visualSteerBoost = THREE.MathUtils.lerp(
-            LOW_SPEED_VISUAL_STEER_BOOST,
-            1,
-            lowSpeedVisualBoostT
-        );
-        const maxVisualSteerAngle =
-            THREE.MathUtils.degToRad(SHARED_MAX_STEER_ANGLE_DEG) *
-            STEERING_SENSITIVITY_SCALE *
-            FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
-            visualSteerBoost;
-        const targetVisualSteerAngle = THREE.MathUtils.clamp(
-            this.steerAngle *
-                FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
-                visualSteerBoost,
-            -maxVisualSteerAngle,
-            maxVisualSteerAngle
-        );
-        this.steerVisualAngle = THREE.MathUtils.lerp(
-            this.steerVisualAngle,
-            targetVisualSteerAngle,
-            THREE.MathUtils.clamp(deltaSeconds * 14, 0, 1)
-        );
+        this.advanceWheelSpin(deltaSeconds);
         const visualSteerAngle =
             this.getWheelVisualSteerDirectionMultiplier() * this.steerVisualAngle;
 
         this.wheelRig.forEach((wheel) => {
-            const spinAngle = this.wheelSpinAngle * wheel.spinSign;
+            const spinAngle =
+                (wheel.front ? this.frontSpinAngle : this.rearSpinAngle) *
+                wheel.spinSign;
             const spinQuaternion = this.tmpQuatB.setFromAxisAngle(
                 wheel.spinAxis,
                 spinAngle
@@ -4781,45 +4707,8 @@ export default class RaceVehicle {
         });
     }
 
-    updateLegacyWheelVisuals(deltaSeconds: number, throttle = 0) {
-        this.wheelSpinAngle +=
-            (this.speedMps / Math.max(0.1, this.wheelRadius)) * deltaSeconds;
-        const lowSpeedVisualBoostT = THREE.MathUtils.clamp(
-            Math.abs(this.speedMps) / LOW_SPEED_STEER_BOOST_FADE_MPS,
-            0,
-            1
-        );
-        const visualSteerBoost = THREE.MathUtils.lerp(
-            LOW_SPEED_VISUAL_STEER_BOOST,
-            1,
-            lowSpeedVisualBoostT
-        );
-        const maxVisualSteerAngle =
-            THREE.MathUtils.degToRad(SHARED_MAX_STEER_ANGLE_DEG) *
-            STEERING_SENSITIVITY_SCALE *
-            FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
-            visualSteerBoost;
-        const targetVisualSteerAngle = THREE.MathUtils.clamp(
-            this.steerAngle *
-                FRONT_WHEEL_VISUAL_STEER_MULTIPLIER *
-                visualSteerBoost,
-            -maxVisualSteerAngle,
-            maxVisualSteerAngle
-        );
-        this.steerVisualAngle = THREE.MathUtils.lerp(
-            this.steerVisualAngle,
-            targetVisualSteerAngle,
-            THREE.MathUtils.clamp(deltaSeconds * 14, 0, 1)
-        );
-
-        const throttleSpin =
-            Math.abs(this.speedMps) < 0.4
-                ? THREE.MathUtils.clamp(throttle, 0, 1) * 18
-                : 0;
-        if (throttleSpin > 0) {
-            this.wheelSpinAngle +=
-                (throttleSpin / Math.max(0.1, this.wheelRadius)) * deltaSeconds;
-        }
+    updateLegacyWheelVisuals(deltaSeconds: number) {
+        this.advanceWheelSpin(deltaSeconds);
 
         const steerQuaternion = this.tmpQuatA.setFromAxisAngle(
             new THREE.Vector3(0, 1, 0),
@@ -4827,7 +4716,9 @@ export default class RaceVehicle {
         );
 
         this.wheelRig.forEach((wheel) => {
-            const spinAngle = this.wheelSpinAngle * wheel.spinSign;
+            const spinAngle =
+                (wheel.front ? this.frontSpinAngle : this.rearSpinAngle) *
+                wheel.spinSign;
             const spinQuaternion = this.tmpQuatB.setFromAxisAngle(
                 wheel.spinAxis,
                 spinAngle
@@ -4889,6 +4780,27 @@ export default class RaceVehicle {
         });
     }
 
+    // wheels turn at the tire model's own speeds, so wheelspin and lockups
+    // show. steer follows the road wheel angle
+    advanceWheelSpin(deltaSeconds: number) {
+        const omega = this.physics.wheelOmega;
+        const front = (omega[0] + omega[1]) * 0.5;
+        const rear = (omega[2] + omega[3]) * 0.5;
+        this.frontSpinAngle += front * deltaSeconds;
+        this.rearSpinAngle += rear * deltaSeconds;
+        this.wheelSpinAngle = (this.frontSpinAngle + this.rearSpinAngle) * 0.5;
+        const target = THREE.MathUtils.clamp(
+            this.steerAngle,
+            -WHEEL_VISUAL_STEER_LIMIT,
+            WHEEL_VISUAL_STEER_LIMIT
+        );
+        this.steerVisualAngle = THREE.MathUtils.lerp(
+            this.steerVisualAngle,
+            target,
+            THREE.MathUtils.clamp(deltaSeconds * 20, 0, 1)
+        );
+    }
+
     getWheelVisualSteerDirectionMultiplier() {
         if (
             this.currentCarId === AMG_C63S_COUPE_ID ||
@@ -4934,20 +4846,51 @@ export default class RaceVehicle {
 
     updateDriftSmoke(deltaSeconds: number) {
         this.smokeSpawnCooldown -= deltaSeconds;
-        const driftIntensity = this.getDriftIntensity();
+        const rear = this.physics.getRearSlideIntensity();
+        const front = this.physics.getFrontSlideIntensity();
+        const onAsphalt = (index: number) =>
+            this.wheelSurfaces[index] === 'asphalt' ||
+            this.wheelSurfaces[index] === 'kerb';
 
-        if (
-            this.grounded &&
-            driftIntensity > 0.28 &&
-            this.smokeSpawnCooldown <= 0
-        ) {
-            this.getRearWheelWorldPositions().forEach((position) => {
-                this.smoke.emit(position, driftIntensity, Math.abs(this.speedMps));
-            });
+        if (this.grounded && this.smokeSpawnCooldown <= 0) {
+            const speed = Math.hypot(this.speedMps, this.lateralSpeed);
+            if (rear > 0.18 && (onAsphalt(2) || onAsphalt(3))) {
+                this.getRearWheelWorldPositions().forEach((position) => {
+                    this.smoke.emit(position, rear, speed);
+                });
+            }
+            // lockups smoke the fronts
+            if (front > 0.4 && (onAsphalt(0) || onAsphalt(1))) {
+                this.getFrontWheelWorldPositions().forEach((position) => {
+                    this.smoke.emit(position, front * 0.7, speed);
+                });
+            }
             this.smokeSpawnCooldown = SMOKE_SPAWN_INTERVAL;
         }
 
         this.smoke.update(deltaSeconds);
+    }
+
+    getFrontWheelWorldPositions() {
+        if (this.frontWheelRig.length > 0) {
+            return this.frontWheelRig.map((wheel) =>
+                wheel.object.getWorldPosition(new THREE.Vector3())
+            );
+        }
+        const frontOffset = Math.max(1.1, this.bodySize.z * 0.3);
+        const sideOffset = Math.max(0.5, this.bodySize.x * 0.22);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(
+            this.carPivot.quaternion
+        );
+        const side = new THREE.Vector3()
+            .crossVectors(up, this.forward)
+            .normalize()
+            .multiplyScalar(sideOffset);
+        const base = this.position
+            .clone()
+            .addScaledVector(this.forward, frontOffset)
+            .addScaledVector(up, 0.08);
+        return [base.clone().add(side), base.clone().sub(side)];
     }
 
     getRearWheelWorldPositions() {
@@ -4982,7 +4925,10 @@ export default class RaceVehicle {
 
     getDriftIntensity() {
         return THREE.MathUtils.clamp(
-            this.slipRatio * 0.9 + this.driftAmount * 0.95,
+            Math.max(
+                this.physics.getRearSlideIntensity(),
+                this.physics.getFrontSlideIntensity() * 0.6
+            ),
             0,
             1
         );
@@ -5004,7 +4950,8 @@ export default class RaceVehicle {
 
 
     getTelemetry(): VehicleTelemetry {
-        const speedMagnitude = this.velocity.length();
+        const physics = this.physics;
+        const speedMagnitude = Math.hypot(physics.vx, physics.vy);
         return {
             speedMps: this.speedMps,
             speedKph: speedMagnitude * 3.6,
@@ -5028,6 +4975,24 @@ export default class RaceVehicle {
                 this.surfaceNormal.y,
                 this.surfaceNormal.z,
             ],
+            lateralG: physics.accelLat / 9.81,
+            longitudinalG: physics.accelLong / 9.81,
+            bodySlipDeg: THREE.MathUtils.radToDeg(physics.getBodySlip()),
+            steerAngle: physics.steerAngle,
+            frontSlide: physics.getFrontSlideIntensity(),
+            rearSlide: physics.getRearSlideIntensity(),
+            wheelSurfaces: this.wheelSurfaces.slice(),
+            onKerb: this.wheelSurfaces.includes('kerb'),
+            onGrass: this.wheelSurfaces.includes('grass'),
+            barrierContact: this.barrierContact,
+            impact: this.impact,
+            shifting: physics.shiftTimer > 0,
+            limiter: physics.limiterActive,
+            abs: physics.absActive,
+            tractionControl: physics.tcsActive,
+            stability: physics.stabilityActive,
+            trackDistance: this.trackFrame.distance,
+            trackLateral: this.trackFrame.lateral,
         };
     }
 }

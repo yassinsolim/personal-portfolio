@@ -87,7 +87,8 @@
         pad.layers.mask = origCollider.layers.mask;
         pad.updateMatrixWorld(true);
         v.colliderMesh = pad;
-        if (v.physics?.setCollider) v.physics.setCollider(pad);
+        const origTrackBound = v.trackBound;
+        v.trackBound = false;
 
         const zero = () =>
             Object.assign(controls, {
@@ -287,8 +288,15 @@
             },
 
             drift() {
-                // handbrake flick at 80 km/h, then throttle with countersteer
-                // held by a simple slip controller, like a player would
+                // handbrake flick at 80 km/h, then hold a little steer into
+                // the corner and ride the throttle to keep about 30 degrees,
+                // the way you'd drift on a keyboard (the countersteer assist
+                // does the catching). stability and traction control off
+                const assists = v.physics ? { ...v.physics.assists } : null;
+                if (v.physics && !options.driftWithAssists) {
+                    v.physics.assists.stability = false;
+                    v.physics.assists.tractionControl = false;
+                }
                 place();
                 const target = (options.driftKph || 80) / 3.6;
                 controls.throttle = 1;
@@ -308,13 +316,12 @@
                         controls.handbrake = 1;
                         controls.throttle = 0.4;
                     } else {
+                        const signed = slipDeg();
                         controls.handbrake = 0;
-                        controls.throttle = 0.85;
-                        // countersteer against the slide, aiming for ~30 deg
-                        const s = slipDeg();
-                        controls.steer = Math.max(
-                            -1,
-                            Math.min(1, -(s + 30) / 25)
+                        controls.steer = options.driftSteer ?? 0.3;
+                        controls.throttle = Math.max(
+                            0.15,
+                            Math.min(1, 0.55 + (30 - Math.abs(signed)) / 30)
                         );
                     }
                     v.update(DT);
@@ -322,11 +329,11 @@
                     slipMax = Math.max(slipMax, s);
                     yawTotal += wrap(v.yaw - prevYaw);
                     prevYaw = v.yaw;
-                    if (t > 1.2 && s > 12) {
+                    if (t > 1.2 && s > 12 && s < 60) {
                         heldSlip += s;
                         heldFrames++;
                     }
-                    if (Math.abs(yawTotal) > Math.PI * 1.5) spun = true;
+                    if (s > 100) spun = true;
                     if (i % 30 === 0) {
                         trace.push([
                             +t.toFixed(1),
@@ -335,6 +342,7 @@
                         ]);
                     }
                 }
+                if (assists) Object.assign(v.physics.assists, assists);
                 return {
                     maxSlipDeg: Math.round(slipMax),
                     heldSlideS: +(heldFrames * DT).toFixed(2),
@@ -366,7 +374,7 @@
             }
         } finally {
             v.colliderMesh = origCollider;
-            if (v.physics?.setCollider) v.physics.setCollider(origCollider);
+            v.trackBound = origTrackBound;
             v.input.getState = origGetState;
             v.input.update = origInputUpdate;
             v.restoreFromSafeCheckpoint = origRestore;

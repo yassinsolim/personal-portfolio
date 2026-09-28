@@ -31,6 +31,9 @@
 
 ## Vehicle Performance Reference Sources (Tuning Inputs, Not Imported Assets)
 
+The race physics (`race.physics` in `carOptions.ts`) uses each car's published power and torque
+from these sources, plus tuning values chosen to land near the listed 0-100 and top speeds.
+
 - Mercedes-AMG ONE technical data
   - URL: https://www.mercedes-amg.com/en/home/vehicles/amg-one/hypercar.html
   - Usage: target top speed and acceleration envelope

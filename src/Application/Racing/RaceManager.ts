@@ -113,6 +113,7 @@ export default class RaceManager {
     lastPhysicsStepTimeMs: number;
     debugGameEnabled: boolean;
     ghostPlaybackEnabled: boolean;
+    lastStartResets: number;
 
     constructor() {
         this.application = new Application();
@@ -178,6 +179,7 @@ export default class RaceManager {
         this.topLeaderboardGhostRequestSerial = 0;
         this.physicsAccumulator = 0;
         this.lastPhysicsStepTimeMs = 0;
+        this.lastStartResets = 0;
         this.debugGameEnabled = new URLSearchParams(window.location.search).has(
             'debugGame'
         );
@@ -214,10 +216,14 @@ export default class RaceManager {
         });
 
         UIEventBus.on('race:resetVehicle', () => {
-            if (!this.active) return;
-            this.vehicle.resetToStart();
+            if (!this.active || this.paused) return;
+            this.vehicle.resetToTrack();
             this.physicsAccumulator = 0;
-            UIEventBus.dispatch('race:inputReset', { source: 'resetVehicle' });
+        });
+
+        UIEventBus.on('race:restartLap', () => {
+            if (!this.active || this.paused) return;
+            this.restartLap();
         });
 
         UIEventBus.on(
@@ -359,17 +365,10 @@ export default class RaceManager {
         this.vehicle.setActive(true);
         this.chaseCamera.setActive(true);
         this.chaseCamera.setPaused(false);
-        this.lapTimer.reset();
-        const nowMs = this.application.time.elapsed;
-        const telemetry = this.vehicle.getTelemetry();
-        const lapStart = this.lapTimer.startLap(nowMs, telemetry.position);
-        this.currentLapTimeMs = lapStart.lapTimeMs;
-        this.lapRunning = lapStart.lapRunning;
-        this.lapProgress = lapStart.progress;
         this.pendingLapTimeMs = 0;
         this.lapSubmitInFlight = false;
         this.ghostReplay.setActive(this.ghostPlaybackEnabled);
-        this.ghostReplay.startLap(nowMs);
+        this.startLapTimer();
         this.remoteSmoke.setActive(true);
 
         UIEventBus.dispatch('freeCamToggle', false);
@@ -380,6 +379,25 @@ export default class RaceManager {
         this.refreshLeaderboard();
         this.engineAudio.setRaceActive(true);
         this.engineAudio.setPaused(false);
+    }
+
+    // back to the start line with a fresh lap, keeping race mode running
+    restartLap() {
+        this.vehicle.resetToStart();
+        this.startLapTimer();
+    }
+
+    startLapTimer() {
+        this.physicsAccumulator = 0;
+        this.lapTimer.reset();
+        const nowMs = this.application.time.elapsed;
+        const telemetry = this.vehicle.getTelemetry();
+        const lapStart = this.lapTimer.startLap(nowMs, telemetry.position);
+        this.currentLapTimeMs = lapStart.lapTimeMs;
+        this.lapRunning = lapStart.lapRunning;
+        this.lapProgress = lapStart.progress;
+        this.ghostReplay.startLap(nowMs);
+        this.lastStartResets = this.vehicle.startResets;
     }
 
     exitRaceMode() {
@@ -977,6 +995,9 @@ export default class RaceManager {
             const physicsEnd =
                 typeof performance !== 'undefined' ? performance.now() : Date.now();
             this.lastPhysicsStepTimeMs = physicsEnd - physicsStart;
+            if (this.vehicle.startResets !== this.lastStartResets) {
+                this.startLapTimer();
+            }
 
             const telemetry = this.vehicle.getTelemetry();
             const lapWasRunning = this.lapRunning;

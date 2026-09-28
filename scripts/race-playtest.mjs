@@ -30,7 +30,9 @@ const mode = opt('mode', 'auto');
 const carId = opt('car', '');
 const mobile = Boolean(opt('mobile', false));
 const headless = Boolean(opt('headless', false));
-const latAccel = Number(opt('lat', 11));
+// cornering target in m/s^2, defaults to 78% of the car's tire grip
+const latOption = opt('lat', '');
+const latAccel = latOption === '' ? null : Number(latOption);
 const width = Number(opt('width', mobile ? 852 : 1512));
 const height = Number(opt('height', mobile ? 393 : 900));
 const dpr = Number(opt('dpr', mobile ? 3 : 2));
@@ -334,6 +336,7 @@ const apState = () =>
             input: [c.throttle, c.brake, c.steer, c.handbrake].map(
                 (x) => +x.toFixed(2)
             ),
+            grip: v.physics ? v.physics.spec.tireGrip : 1.15,
         };
     });
 
@@ -365,7 +368,8 @@ while (Date.now() - start < seconds * 1000) {
     const s = await apState();
     const elapsed = (Date.now() - start) / 1000;
     const kph = s.speed * 3.6;
-    const vTarget = Math.sqrt(latAccel / Math.max(1e-4, s.maxK));
+    const lat = latAccel ?? 0.78 * s.grip * 9.81;
+    const vTarget = Math.sqrt(lat / Math.max(1e-4, s.maxK));
     if (!driftDone && elapsed > 12 && kph > 70 && kph < 140) {
         driftDone = true;
         driftUntil = Date.now() + 1600;

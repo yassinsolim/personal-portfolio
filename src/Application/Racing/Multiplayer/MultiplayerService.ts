@@ -92,6 +92,9 @@ type MultiplayerProfilePayload = {
 const CONFIG_URL = '/config/racing.config.json';
 // bump when track geometry changes, so old and new builds never share a lobby
 const DEFAULT_LOBBY_PREFIX = 'nordschleife_lobby_v2';
+// bumped with the tire model and the narrower road, and added to the channel
+// name so it holds even when the config sets its own prefix
+const PHYSICS_SEASON = 'p2';
 const SESSION_KEY = 'yassinverse:nordschleife:multiplayer:session:v1';
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 const TELEMETRY_SEND_INTERVAL_FAST_MS = 40;
@@ -675,7 +678,7 @@ export default class MultiplayerService {
         this.setLocalCarId(carId);
         this.emitState();
 
-        const channelName = `${this.lobbyChannelPrefix}:${lobbyCode}`;
+        const channelName = `${this.lobbyChannelPrefix}_${PHYSICS_SEASON}:${lobbyCode}`;
         await this.removeStaleChannelsByName(channelName);
 
         let channel: RealtimeChannel | null = null;
