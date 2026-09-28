@@ -220,12 +220,18 @@ export default class RaceTransition {
                 });
             }
         };
+        // solo, quick join or an invite link, asked once the ring is built.
+        // an invite link already picked the lobby
+        const askLobby = () => {
+            if (!getInviteLobbyCode()) UIEventBus.dispatch('race:lobbyChoice', {});
+        };
         if (this.skipped) {
             // straight into the race with the ring already built
             startRace();
             await this.raceOnScreen();
             UIEventBus.dispatch('race:transitionSkip', {});
             this.finish();
+            askLobby();
             return;
         }
         this.captureRoom();
@@ -236,6 +242,7 @@ export default class RaceTransition {
         UIEventBus.dispatch('race:transitionReveal', {});
         await this.openRoom();
         this.finish();
+        askLobby();
     }
 
     raceOnScreen() {

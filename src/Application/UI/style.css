@@ -924,3 +924,128 @@ body.race-mode-touch #ui-app {
     -webkit-backdrop-filter: none;
     background: rgba(0, 0, 0, 0.72);
 }
+
+/* solo, quick join or invite, after the homepage transition */
+.race-lobby-choice {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 12vh;
+    z-index: 30;
+    pointer-events: none;
+}
+
+.race-lobby-card {
+    pointer-events: auto;
+    background: rgba(0, 0, 0, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 16px 18px;
+    color: #fff;
+    font-family: monospace;
+    max-width: min(720px, 92vw);
+    animation: race-lobby-in 0.35s ease-out;
+}
+
+.race-lobby-card h3 {
+    margin: 0 0 12px;
+    font-size: 16px;
+}
+
+.race-lobby-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.race-lobby-options button {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+    padding: 12px 12px 12px 38px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 8px;
+    color: #fff;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.race-lobby-options button:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.16);
+}
+
+.race-lobby-options button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.race-lobby-options small {
+    opacity: 0.75;
+    font-size: 11px;
+}
+
+.race-lobby-key {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    font-size: 11px;
+    line-height: 18px;
+    text-align: center;
+}
+
+.race-lobby-error {
+    margin: 10px 0 0;
+    color: #ffb4a8;
+    font-size: 12px;
+}
+
+.race-lobby-link {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px;
+    margin: 4px 0 10px;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    color: #fff;
+}
+
+.race-lobby-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.race-lobby-actions button,
+.race-lobby-error button {
+    padding: 6px 14px;
+    background: #fff;
+    color: #111;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+@keyframes race-lobby-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+}
+
+@media (max-width: 640px) {
+    .race-lobby-options {
+        grid-template-columns: 1fr;
+    }
+}

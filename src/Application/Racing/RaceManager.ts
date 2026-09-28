@@ -318,6 +318,16 @@ export default class RaceManager {
             }
         );
 
+        UIEventBus.on(
+            'race:multiplayerQuickJoin',
+            async (payload: MultiplayerActionPayload | undefined) => {
+                await this.multiplayer.initialize();
+                const playerName = payload?.playerName || 'Driver';
+                const telemetry = this.vehicle.getTelemetry();
+                await this.multiplayer.quickJoin(playerName, telemetry.carId);
+            }
+        );
+
         UIEventBus.on('race:multiplayerLeaveLobby', async () => {
             await this.multiplayer.leaveLobby();
             this.clearRemoteVehicles();
@@ -952,11 +962,12 @@ export default class RaceManager {
 
         visual.targetPosition.copy(this.tmpRemotePosition);
         visual.targetQuaternion.copy(this.tmpRemoteQuaternion);
-        const telemetryAgeMs = Math.max(0, Date.now() - Date.parse(player.lastSeenAt || ''));
+        const sampleAt = player.sampleAtMs ?? Date.parse(player.lastSeenAt || '');
+        const telemetryAgeMs = Math.max(0, Date.now() - sampleAt);
         const extrapolationSeconds = THREE.MathUtils.clamp(
             telemetryAgeMs / 1000,
             0,
-            0.28
+            0.45
         );
         if (extrapolationSeconds > 0 && player.velocity) {
             // predicted along the real velocity, which in a slide isn't
@@ -985,6 +996,12 @@ export default class RaceManager {
                 visual.root.position.copy(visual.targetPosition);
                 visual.root.quaternion.copy(visual.targetQuaternion);
             } else {
+                // move with the car first, so the smoothing only eats
+                // corrections and doesn't trail a fast car by a few meters
+                if (player.velocity) {
+                    visual.root.position.x += player.velocity[0] * deltaSeconds;
+                    visual.root.position.z += player.velocity[1] * deltaSeconds;
+                }
                 const alpha = THREE.MathUtils.clamp(deltaSeconds * 16, 0, 1);
                 visual.root.position.lerp(visual.targetPosition, alpha);
                 visual.root.quaternion.slerp(visual.targetQuaternion, alpha);
