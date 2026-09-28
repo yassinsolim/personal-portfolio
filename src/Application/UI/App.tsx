@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
 import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
+import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
+import Minimap from './components/Minimap';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -63,6 +65,10 @@ type HudState = {
     lapRunning: boolean;
     lapProgress: number;
     ghostBestLapMs?: number;
+    redlineRpm?: number;
+    lastLapMs?: number;
+    sectors?: SectorHud & { bounds: number[] };
+    map?: { x: number; z: number; heading: number; remotes: Array<{ x: number; z: number }> };
 };
 
 type DebugStats = {
@@ -267,6 +273,7 @@ const App = () => {
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
+    const [trackOutline, setTrackOutline] = useState<number[][]>([]);
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
 
     useEffect(() => {
@@ -292,6 +299,9 @@ const App = () => {
         );
 
         eventBus.on('race:lobbyChoice', () => setLobbyChoiceOpen(true));
+        eventBus.on('race:trackOutline', (state: { points?: number[][] } | undefined) => {
+            if (state?.points?.length) setTrackOutline(state.points);
+        });
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
             setRacePaused(Boolean(state?.paused));
@@ -838,32 +848,30 @@ const App = () => {
                 </div>
             )}
             {raceModeActive && (
+                <RaceHudGauges
+                    speedKph={hud.speedKph}
+                    gear={displayedGear}
+                    rpm={hud.rpm}
+                    redlineRpm={hud.redlineRpm || 7000}
+                    lapTimeMs={hud.lapTimeMs}
+                    lapRunning={hud.lapRunning}
+                    lastLapMs={hud.lastLapMs || 0}
+                    bestLapMs={hud.ghostBestLapMs || 0}
+                    sectors={hud.sectors || null}
+                />
+            )}
+            {raceModeActive && hud.map && (
+                <Minimap
+                    outline={trackOutline}
+                    bounds={hud.sectors?.bounds || []}
+                    x={hud.map.x}
+                    z={hud.map.z}
+                    heading={hud.map.heading}
+                    remotes={hud.map.remotes}
+                />
+            )}
+            {raceModeActive && (
                 <div className="race-hud" data-prevent-click>
-                    <div className="race-hud-main">
-                        <div className="race-hud-speed">
-                            {Math.max(0, Math.round(hud.speedKph))}
-                            <span> km/h</span>
-                        </div>
-                        <div className="race-hud-meta">
-                            <span>Gear {displayedGear}</span>
-                            <span>RPM {Math.round(hud.rpm)}</span>
-                            <span>
-                                Lap{' '}
-                                {hud.lapRunning
-                                    ? formatLapTime(hud.lapTimeMs)
-                                    : '--:--.---'}
-                            </span>
-                            <span>
-                                Progress {Math.round(hud.lapProgress * 100)}%
-                            </span>
-                            <span>
-                                Ghost{' '}
-                                {hud.ghostBestLapMs
-                                    ? formatLapTime(hud.ghostBestLapMs)
-                                    : '--:--.---'}
-                            </span>
-                        </div>
-                    </div>
 
                     <div className="race-hud-board">
                         <h4>Leaderboard</h4>
