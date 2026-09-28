@@ -159,7 +159,10 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `scripts/track/build_nordschleife.py` (OpenStreetMap ways, the Copernicus GLO-30 DEM, OSM
   forests). The file also carries section names, per-section widths and banking (Karussell
   14 degrees, concrete), the overpasses, and a 30 m terrain grid with the canopy taken off.
-  Keep the ODbL and Copernicus credits (CREDITS.md and the race menu) with it.
+  Keep the ODbL, DGM1 (© GeoBasis-DE / LVermGeoRP, dl-de/by-2-0) and Copernicus credits
+  (CREDITS.md and the race menu) with it. Since Sep 2026 the road profile, camber (`rollDeg`,
+  per point, left edge higher positive) and terrain come from the RLP DGM1 lidar (1 m); the
+  tiles are cached in `<cache>/dgm1`. `--no-dgm1` rebuilds the old Copernicus-only file.
 - The collider is 160 chunk meshes in a group; raycast it recursively. Vertical motion uses
   real gravity now. A car leaves the road only at a real crest: `v^2 * curvature > 1.25 *
   (g + downforce)` on the track's smoothed profile (`frameCrest`), and lands on its first wheel.

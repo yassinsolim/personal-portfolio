@@ -203,37 +203,6 @@ export const createCheckerTexture = (columns: number, rows: number) => {
 };
 
 // white paint letters on the asphalt, a bit rough at the edges
-export const createRoadTextTexture = (text: string, seed: number) => {
-    const width = 1024;
-    const height = 256;
-    const random = rng(seed);
-    const { canvas, context } = canvas2d(width, height);
-    if (!context) return new THREE.Texture();
-    context.clearRect(0, 0, width, height);
-    context.fillStyle = 'rgba(245,245,238,0.92)';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    let fontSize = 190;
-    context.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
-    while (context.measureText(text).width > width * 0.92 && fontSize > 40) {
-        fontSize -= 8;
-        context.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
-    }
-    context.fillText(text, width / 2, height / 2 + 6);
-    // wear: knock holes in the paint
-    context.globalCompositeOperation = 'destination-out';
-    for (let i = 0; i < 2600; i++) {
-        const r = random() * 2.4 + 0.4;
-        context.fillStyle = `rgba(0,0,0,${0.3 + random() * 0.7})`;
-        context.beginPath();
-        context.arc(random() * width, random() * height, r, 0, Math.PI * 2);
-        context.fill();
-    }
-    context.globalCompositeOperation = 'source-over';
-    const texture = finish(canvas as HTMLCanvasElement, true, false);
-    return texture;
-};
-
 // the timing board on the start gantry
 export const createGantryTexture = () => {
     const width = 1024;

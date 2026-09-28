@@ -48,7 +48,7 @@ const RIBBON_CELL = 1200;
 
 // one mesh per map cell, by triangle centroid. the pieces share the vertex
 // buffers and only differ in index, with their own bounds for culling
-const splitByCell = (mesh: THREE.Mesh, cell: number) => {
+export const splitByCell = (mesh: THREE.Mesh, cell: number) => {
     const geometry = mesh.geometry;
     const group = new THREE.Group();
     group.name = mesh.name;
@@ -119,6 +119,15 @@ export type TrackBridge = {
     kind: string | null;
     name: string | null;
 };
+// a landmark on the skyline from osm, its footprint around x, z
+export type TrackLandmark = {
+    name: string;
+    kind: 'castle' | 'tower';
+    x: number;
+    z: number;
+    height: number;
+    outline: [number, number][];
+};
 export type TrackTerrainData = {
     x: number;
     z: number;
@@ -137,8 +146,16 @@ type TrackAssetData = {
     sections: TrackSection[];
     widths: [number, number][];
     banksDeg: [number, number][];
+    // measured camber per point (dgm1 lidar), degrees, left edge higher is
+    // positive. when it's there it replaces the corner banks
+    rollDeg?: number[];
+    // meters between points along the raw polyline
+    spacing: number;
     concrete: [number, boolean][];
     bridges: TrackBridge[];
+    // catch fence runs near the lap (osm), x, z every 6 m
+    fences?: [number, number][][];
+    landmarks?: TrackLandmark[];
     terrain: {
         x: number;
         z: number;
@@ -191,6 +208,8 @@ export default class NordschleifeTrack {
     frameConcrete: Uint8Array;
     sections: TrackSection[];
     bridges: TrackBridge[];
+    fences: [number, number][][];
+    landmarks: TrackLandmark[];
     distanceScale: number;
     terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
@@ -230,6 +249,8 @@ export default class NordschleifeTrack {
         this.length = this.colliderCurve.getLength();
         this.sections = data.sections;
         this.bridges = data.bridges;
+        this.fences = data.fences || [];
+        this.landmarks = data.landmarks || [];
         this.terrain = {
             x: data.terrain.x,
             z: data.terrain.z,
@@ -345,6 +366,17 @@ export default class NordschleifeTrack {
             }
             return value;
         };
+        // the measured camber is per data point, the lidar says which way
+        // (off camber corners too)
+        const roll = data.rollDeg && data.rollDeg.length === data.points.length ? data.rollDeg : null;
+        const sampleRoll = (distance: number) => {
+            if (!roll) return 0;
+            const f = distance / scale / data.spacing;
+            const i = Math.floor(f);
+            const k = f - i;
+            const n = roll.length;
+            return roll[((i % n) + n) % n] * (1 - k) + roll[(((i + 1) % n) + n) % n] * k;
+        };
         const concrete = data.concrete.map(
             ([distance, on]) => [distance, on ? 1 : 0] as [number, number]
         );
@@ -365,7 +397,9 @@ export default class NordschleifeTrack {
             );
             // positive curvature turns left, and a left turn leans left, which
             // is a negative roll about the tangent
-            this.frameBank[i] = -Math.sign(curvature) * bank;
+            this.frameBank[i] = roll
+                ? THREE.MathUtils.degToRad(sampleRoll(distance))
+                : -Math.sign(curvature) * bank;
             this.frameConcrete[i] = sample(concrete, distance) > 0.5 ? 1 : 0;
         }
     }

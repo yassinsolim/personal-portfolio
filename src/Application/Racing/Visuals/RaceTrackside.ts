@@ -4,11 +4,10 @@ import type NordschleifeTrack from '../Track/NordschleifeTrack';
 import {
     createCheckerTexture,
     createGantryTexture,
-    createRoadTextTexture,
 } from './proceduralTextures';
 
 // things along the road: armco on both sides with posts, the start gantry
-// and line, and painted words on the asphalt like the ring's graffiti
+// and line (the graffiti on the asphalt is in RaceTracksideExtras)
 const BARRIER_INSET = 0.15;
 const POST_HALF_WIDTH = 0.06;
 const POST_HALF_DEPTH = 0.045;
@@ -28,16 +27,6 @@ const ARMCO_PROFILE: [number, number][] = [
     [0, 0.76],
     [-0.03, 0.76],
     [-0.03, 0.44],
-];
-const ROAD_WORDS: { t: number; text: string; lateral: number }[] = [
-    { t: 0.06, text: 'GRÜNE HÖLLE', lateral: 0 },
-    { t: 0.17, text: 'YASSIN', lateral: -2.5 },
-    { t: 0.29, text: 'FLAT OUT?', lateral: 2 },
-    { t: 0.41, text: 'BRAKE LATER', lateral: 0 },
-    { t: 0.55, text: 'NÜRBURGRING', lateral: -2 },
-    { t: 0.68, text: 'KEEP LEFT', lateral: 2.5 },
-    { t: 0.82, text: 'SEND IT', lateral: 0 },
-    { t: 0.93, text: 'ALMOST THERE', lateral: -1.5 },
 ];
 
 export default class RaceTrackside {
@@ -75,7 +64,6 @@ export default class RaceTrackside {
         });
         this.buildArmco();
         this.buildStart();
-        this.buildRoadWords();
         this.buildBridges();
         this.buildBoards();
     }
@@ -532,39 +520,4 @@ export default class RaceTrackside {
         group.add(line);
     }
 
-    buildRoadWords() {
-        const track = this.track;
-        ROAD_WORDS.forEach((word, index) => {
-            const length = 14;
-            const range: [number, number] = [
-                word.t,
-                word.t + length / track.length,
-            ];
-            const geometry = track.createRibbonGeometry(
-                track.visualCurve,
-                Math.round(8 / (range[1] - range[0])),
-                () => [word.lateral + 3.2, word.lateral - 3.2],
-                0.022,
-                1 / length,
-                range
-            );
-            const material = new THREE.MeshStandardMaterial({
-                map: createRoadTextTexture(word.text, 50 + index),
-                transparent: true,
-                roughness: 0.75,
-                depthWrite: false,
-                polygonOffset: true,
-                polygonOffsetFactor: -5,
-                polygonOffsetUnits: -10,
-            });
-            // the ribbon runs 0..1 across and 0..1 along, the words read along
-            material.map!.rotation = Math.PI / 2;
-            material.map!.center.set(0.5, 0.5);
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.name = `race-road-word-${index}`;
-            mesh.receiveShadow = true;
-            mesh.renderOrder = 2;
-            this.root.add(mesh);
-        });
-    }
 }
