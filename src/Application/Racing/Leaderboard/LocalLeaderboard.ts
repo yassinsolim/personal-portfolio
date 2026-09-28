@@ -7,6 +7,8 @@ export type LeaderboardEntry = {
     carId: string;
     createdAt: string;
     source: 'local' | 'remote';
+    // the garage tune code when the lap was set on a tuned car
+    tune?: string;
 };
 
 const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v3';
@@ -47,8 +49,10 @@ export default class LocalLeaderboard {
         }
     }
 
-    getTop(limit = 12) {
-        return this.entries.slice(0, limit);
+    getTop(limit = 12, board: 'stock' | 'tuned' = 'stock') {
+        return this.entries
+            .filter((entry) => (board === 'tuned' ? Boolean(entry.tune) : !entry.tune))
+            .slice(0, limit);
     }
 
     add(entry: Omit<LeaderboardEntry, 'id' | 'createdAt' | 'source'>) {

@@ -30,6 +30,8 @@ export type PhysicsSpec = {
     tireShape: number;
     loadSensitivity: number;
     rollShareFront: number;
+    // how fast weight moves across the car, seconds (springs and dampers)
+    loadFilterTime: number;
     cdA: number;
     clA: number;
     aeroFront: number;
@@ -125,7 +127,6 @@ const INNER_STEP = 1 / 600;
 // damped) when the car is nearly stopped
 const SLIP_SPEED_FLOOR = 1.5;
 const RELAXATION_LENGTH = 0.3;
-const LOAD_FILTER_TIME = 0.07;
 const SHIFT_COOLDOWN = 0.3;
 const REVERSE_ENGAGE_SPEED = 0.8;
 const REVERSE_ENGAGE_DELAY = 0.25;
@@ -959,7 +960,7 @@ export default class VehiclePhysics {
         } else {
             this.yawRate *= Math.max(0, 1 - dt * 0.8);
         }
-        const loadBlend = clamp(dt / LOAD_FILTER_TIME, 0, 1);
+        const loadBlend = clamp(dt / spec.loadFilterTime, 0, 1);
         this.accelLong += (ax - this.accelLong) * loadBlend;
         this.accelLat += (ay - this.accelLat) * loadBlend;
 

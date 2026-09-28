@@ -6,6 +6,8 @@ import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
+import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
+import { carHasCalipers } from './Garage/carLook';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
@@ -67,6 +69,9 @@ type RemoteVehicleVisual = {
     wheelSpinAngle: number;
     targetPosition: THREE.Vector3;
     targetQuaternion: THREE.Quaternion;
+    model: THREE.Object3D;
+    // the look applied last, as json, to spot changes
+    lookKey: string;
 };
 
 export default class RaceManager {
@@ -84,6 +89,9 @@ export default class RaceManager {
     paused: boolean;
     lapTimer: LapTimer;
     sectors: SectorTimer;
+    garageOpen = false;
+    garageSetupAtOpen = '';
+    leaderboardBoard: 'stock' | 'tuned' = 'stock';
     lastLapTimeMs = 0;
     localLeaderboard: LocalLeaderboard;
     leaderboardService: LeaderboardService;
@@ -355,6 +363,41 @@ export default class RaceManager {
         UIEventBus.on('carChange', (carId: string) => {
             if (!carId) return;
             this.multiplayer.setLocalCarId(carId);
+            // the vehicle loads that car's garage setup on the same event
+            window.setTimeout(() => this.publishGarage(), 0);
+        });
+
+        UIEventBus.on('race:garageOpen', (state: { open?: boolean } | undefined) => {
+            const open = Boolean(state?.open);
+            if (open === this.garageOpen) return;
+            this.garageOpen = open;
+            this.chaseCamera.garage = open;
+            if (open) {
+                this.garageSetupAtOpen = JSON.stringify([this.vehicle.look, this.vehicle.tune]);
+                this.dispatchGarage();
+            } else if (this.garageSetupAtOpen !== JSON.stringify([this.vehicle.look, this.vehicle.tune])) {
+                // a lap can't start stock and end tuned
+                this.startLapTimer();
+            }
+            UIEventBus.dispatch('race:inputReset', { source: 'garage' });
+        });
+
+        UIEventBus.on(
+            'race:garageApply',
+            (state: { look?: unknown; tune?: unknown; save?: boolean } | undefined) => {
+                this.vehicle.setGarage(
+                    sanitizeLook(state?.look),
+                    sanitizeTune(state?.tune),
+                    state?.save !== false
+                );
+                this.publishGarage();
+                this.dispatchGarage();
+            }
+        );
+
+        UIEventBus.on('race:leaderboardBoard', (state: { board?: string } | undefined) => {
+            this.leaderboardBoard = state?.board === 'tuned' ? 'tuned' : 'stock';
+            void this.refreshLeaderboard();
         });
 
         UIEventBus.on('race:submitLapName', async (payload: { name?: string }) => {
@@ -377,11 +420,13 @@ export default class RaceManager {
 
         try {
             const telemetry = this.vehicle.getTelemetry();
+            const { tune, look } = this.vehicle;
             const entry = await this.leaderboardService.submitLap(
                 name,
                 lapTimeMs,
                 telemetry.carId,
-                lapReplay
+                lapReplay,
+                isStockSetup(tune, look) ? undefined : tuneCode(tune, look)
             );
             this.multiplayer.setLocalPlayerName(name);
             this.multiplayer.publishLap(entry);
@@ -559,12 +604,42 @@ export default class RaceManager {
         this.dispatchState();
     }
 
+    publishGarage() {
+        const { look, tune } = this.vehicle;
+        this.multiplayer.setLocalLook(look, !isStockSetup(tune, look));
+    }
+
+    // what the garage screen shows: the current setup and the car's numbers
+    dispatchGarage() {
+        const { look, tune } = this.vehicle;
+        const spec = this.vehicle.physics.spec;
+        UIEventBus.dispatch('race:garageState', {
+            carId: this.vehicle.currentCarId,
+            look,
+            tune,
+            calipers: carHasCalipers(this.vehicle.currentCarId),
+            tuned: !isStockSetup(tune, look),
+            stats: {
+                powerKw: Math.round(spec.powerW / 1000),
+                torqueNm: Math.round(spec.torqueNm),
+                grip: Math.round(spec.tireGrip * 100) / 100,
+                topKph: Math.round(spec.vmax * 3.6),
+                downforce: Math.round(spec.clA * 100) / 100,
+                brakeFront: Math.round(spec.brakeBias * 100),
+                finalDrive: Math.round(spec.finalDrive * 100) / 100,
+            },
+        });
+    }
+
     async refreshLeaderboard() {
-        const entries = await this.leaderboardService.getLeaderboard(10);
+        const board = this.leaderboardBoard;
+        const entries = await this.leaderboardService.getLeaderboard(10, board);
         UIEventBus.dispatch('race:leaderboardUpdate', {
             entries,
+            board,
         });
-        void this.syncTopLeaderboardGhost(entries);
+        // the ghost to chase is always the stock record
+        if (board === 'stock') void this.syncTopLeaderboardGhost(entries);
     }
 
     async syncTopLeaderboardGhost(entries: LeaderboardEntry[]) {
@@ -805,6 +880,8 @@ export default class RaceManager {
             wheelSpinAngle: 0,
             targetPosition: new THREE.Vector3(),
             targetQuaternion: new THREE.Quaternion(),
+            model,
+            lookKey: '',
         };
         this.remoteVehicles.set(player.sessionId, visual);
         return visual;
@@ -1080,6 +1157,12 @@ export default class RaceManager {
             this.remoteSessionScratch.add(player.sessionId);
             const visual = this.ensureRemoteVehicle(player);
             if (!visual) return;
+            const look = player.look || STOCK_LOOK;
+            const lookKey = JSON.stringify(look);
+            if (visual.lookKey !== lookKey) {
+                visual.lookKey = lookKey;
+                this.vehicle.applyLookTo(visual.model, player.carId, look);
+            }
             this.updateRemoteVehicleVisual(visual, player, deltaSeconds);
             this.remoteCars.push(this.remoteCarFrom(visual, player));
         });
@@ -1147,7 +1230,7 @@ export default class RaceManager {
             Math.max(0, this.application.time.delta / 1000)
         );
         this.updateRemoteVehicles(delta);
-        if (!this.paused) {
+        if (!this.paused && !this.garageOpen) {
             // equal steps. a leftover sliver (a frame just over 1/60 s) used
             // to run as a microsecond step, and the grounding divides height
             // changes by the step, which could launch the car into the sky

@@ -1,5 +1,7 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { createMockRealtime, mockRealtimeEnabled } from './mockRealtime';
+import { decodeLook, encodeLook, sanitizeLook, STOCK_LOOK } from '../Garage/garage';
+import type { CarLook } from '../Garage/garage';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import { randomInt } from '../../Utils/Random';
 import type { LeaderboardEntry } from '../Leaderboard/LocalLeaderboard';
@@ -37,6 +39,8 @@ export type MultiplayerPlayerState = {
     // local clock time the last pose was taken on the sender, arrival minus
     // the transit time. prediction runs from here, not from arrival
     sampleAtMs?: number;
+    look?: CarLook;
+    tuned?: boolean;
 };
 
 export type MultiplayerBump = {
@@ -82,6 +86,9 @@ type MultiplayerTelemetryPayload = {
     session_id: string;
     name: string;
     car_id: string;
+    // garage look as a short code, and whether the car is tuned
+    look?: string;
+    tuned?: boolean;
     speed_kph: number;
     lap_progress: number;
     lap_time_ms: number;
@@ -110,6 +117,10 @@ type MultiplayerProfilePayload = {
     car_id: string;
     is_host: boolean;
     connected_at: string;
+    // garage look, so others see the paint and wheels, and whether the car
+    // runs a tune
+    look?: CarLook;
+    tuned?: boolean;
 };
 
 const CONFIG_URL = '/config/racing.config.json';
@@ -198,6 +209,8 @@ export default class MultiplayerService {
     presenceSynced = false;
     // the lobby to rejoin after a hidden tab or a trip out of race mode
     suspended: { code: string; host: boolean } | null = null;
+    localLook: CarLook = STOCK_LOOK;
+    localTuned = false;
     // lowest delay seen per sender (ms, their clock to ours)
     peerDelays = new Map<string, { floor: number; at: number }>();
     laps: MultiplayerLapState[];
@@ -478,6 +491,12 @@ export default class MultiplayerService {
         this.emitState();
     }
 
+    // goes out with the next telemetry packet, no message of its own
+    setLocalLook(look: CarLook, tuned: boolean) {
+        this.localLook = sanitizeLook(look);
+        this.localTuned = tuned;
+    }
+
     setLocalCarId(carId: string) {
         this.localCarId = carOptionsById[carId] ? carId : defaultCarId;
         this.touchLocalPlayer();
@@ -576,6 +595,8 @@ export default class MultiplayerService {
             yaw_rate: this.roundTo(this.clampNumber(payload.yawRate ?? 0, -12, 12), 3),
             ghost: Boolean(payload.ghost),
             sent_at: new Date(now).toISOString(),
+            look: encodeLook(this.localLook),
+            tuned: this.localTuned,
         };
         // the pose to a few cm, not the lap clock (it always changes), so a
         // parked car counts as unchanged
@@ -587,6 +608,7 @@ export default class MultiplayerService {
             ghost: safePayload.ghost,
             car_id: safePayload.car_id,
             name: safePayload.name,
+            look: safePayload.look,
         });
         const heartbeatDue =
             now - this.lastTelemetryHeartbeatAt >= TELEMETRY_HEARTBEAT_INTERVAL_MS;
@@ -927,6 +949,8 @@ export default class MultiplayerService {
             car_id: this.localCarId,
             is_host: this.isHost,
             connected_at: new Date().toISOString(),
+            look: this.localLook,
+            tuned: this.localTuned,
         };
 
         // presence carries the profile, once on join (and it goes on leave).
@@ -980,6 +1004,8 @@ export default class MultiplayerService {
                 if (existing) {
                     existing.name = name;
                     existing.carId = carId;
+                    existing.look = sanitizeLook((raw as { look?: unknown }).look);
+                    existing.tuned = (raw as { tuned?: unknown }).tuned === true;
                     existing.isHost = isHost;
                     existing.lastSeenAt = nowIso;
                     return;
@@ -989,6 +1015,8 @@ export default class MultiplayerService {
                     sessionId,
                     name,
                     carId,
+                    look: sanitizeLook((raw as { look?: unknown }).look),
+                    tuned: (raw as { tuned?: unknown }).tuned === true,
                     connectedAt,
                     isHost,
                     speedKph: 0,
@@ -1026,9 +1054,13 @@ export default class MultiplayerService {
         const connectedAt =
             this.sanitizeIsoString(parsed.connected_at) || new Date().toISOString();
         const isHost = parsed.is_host === true;
+        const look = sanitizeLook(parsed.look);
+        const tuned = parsed.tuned === true;
         const existing = this.players.get(sessionId);
         const nowIso = new Date().toISOString();
         if (existing) {
+            existing.look = look;
+            existing.tuned = tuned;
             existing.name = name;
             existing.carId = carId;
             existing.isHost = isHost;
@@ -1051,6 +1083,8 @@ export default class MultiplayerService {
                 yawRate: 0,
                 ghost: false,
                 lastSeenAt: nowIso,
+                look,
+                tuned,
             });
         }
         this.emitState();
@@ -1101,6 +1135,8 @@ export default class MultiplayerService {
             : null;
         player.yawRate = this.clampNumber(parsed.yaw_rate ?? 0, -12, 12);
         player.ghost = Boolean(parsed.ghost);
+        if (typeof parsed.look === 'string') player.look = decodeLook(parsed.look);
+        player.tuned = parsed.tuned === true;
         player.lastSeenAt = nowIso;
         player.sampleAtMs = this.estimateSampleTime(sessionId, parsed.sent_at);
 
@@ -1168,6 +1204,8 @@ export default class MultiplayerService {
             car_id: this.localCarId,
             is_host: this.isHost,
             connected_at: new Date().toISOString(),
+            look: this.localLook,
+            tuned: this.localTuned,
         };
         this.channel.track(payload).catch(() => undefined);
     }

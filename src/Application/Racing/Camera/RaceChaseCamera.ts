@@ -100,6 +100,10 @@ export default class RaceChaseCamera {
     lookIdle: number;
     viewIndex: number;
     farOverride = 0;
+    garage = false;
+    garageAngle = 0;
+    garagePitch = 0;
+    garageDragIdle = 10;
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
@@ -180,6 +184,11 @@ export default class RaceChaseCamera {
             this.cycleView();
         };
         document.addEventListener('keydown', this.viewKeyHandler);
+        UIEventBus.on('race:garageOrbit', (state: { dx?: number; dy?: number } | undefined) => {
+            this.garageAngle -= (state?.dx || 0) * 0.008;
+            this.garagePitch = Math.min(0.6, Math.max(-0.25, this.garagePitch + (state?.dy || 0) * 0.004));
+            this.garageDragIdle = 0;
+        });
         // the graphics preset's draw distance
         UIEventBus.on(
             'race:drawDistance',
@@ -479,6 +488,23 @@ export default class RaceChaseCamera {
 
         this.tmpUp.set(0, 1, 0);
         const anchor = this.tmpAnchor.copy(vehicle.position);
+
+        // garage: a slow orbit around the parked car, draggable
+        if (this.garage) {
+            this.garageAngle += dt * (this.garageDragIdle > 1.5 ? 0.22 : 0);
+            this.garageDragIdle += dt;
+            const radius = vehicle.bodySize.z * 0.95 + 2.2;
+            const angle = carYaw + Math.PI * 0.8 + this.garageAngle;
+            camera.position.set(
+                anchor.x + Math.sin(angle) * radius,
+                anchor.y + 1.25 + this.garagePitch * 2.5,
+                anchor.z + Math.cos(angle) * radius
+            );
+            camera.up.set(0, 1, 0);
+            camera.lookAt(anchor.x, anchor.y + 0.45, anchor.z);
+            this.initialized = false;
+            return;
+        }
 
         if (view.mounted) {
             this.updateMounted(view, carYaw, anchor, size, speed, dt);

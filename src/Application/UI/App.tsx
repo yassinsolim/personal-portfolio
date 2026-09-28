@@ -5,6 +5,7 @@ import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
 import Minimap from './components/Minimap';
+import Garage, { GarageState } from './components/Garage';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -274,6 +275,25 @@ const App = () => {
     const [assists, setAssists] = useState(() => readAssistSettings());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
     const [trackOutline, setTrackOutline] = useState<number[][]>([]);
+    const [garageOpen, setGarageOpen] = useState(false);
+    const [leaderboardBoard, setLeaderboardBoard] = useState<'stock' | 'tuned'>('stock');
+    const [garageState, setGarageState] = useState<GarageState | null>(null);
+    // the lobby card comes back after the garage when it was opened from it
+    const [garageFromCard, setGarageFromCard] = useState(false);
+    const openGarage = useCallback((fromCard: boolean) => {
+        setGarageFromCard(fromCard);
+        setLobbyChoiceOpen(false);
+        setGarageOpen(true);
+        eventBus.dispatch('race:garageOpen', { open: true });
+    }, []);
+    const closeGarage = useCallback(() => {
+        setGarageOpen(false);
+        eventBus.dispatch('race:garageOpen', { open: false });
+        setGarageFromCard((fromCard) => {
+            if (fromCard) setLobbyChoiceOpen(true);
+            return false;
+        });
+    }, []);
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
 
     useEffect(() => {
@@ -294,11 +314,13 @@ const App = () => {
                 if (!active) {
                     setPointerLocked(false);
                     setLobbyChoiceOpen(false);
+                    setGarageOpen(false);
                 }
             }
         );
 
         eventBus.on('race:lobbyChoice', () => setLobbyChoiceOpen(true));
+        eventBus.on('race:garageState', (state: GarageState) => setGarageState(state));
         eventBus.on('race:trackOutline', (state: { points?: number[][] } | undefined) => {
             if (state?.points?.length) setTrackOutline(state.points);
         });
@@ -660,7 +682,7 @@ const App = () => {
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
 
     return (
-        <div id="ui-app">
+        <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <LoadingScreen />
             {showHint && (
                 <div className="look-hint">
@@ -847,7 +869,7 @@ const App = () => {
                     </button>
                 </div>
             )}
-            {raceModeActive && (
+            {raceModeActive && !garageOpen && (
                 <RaceHudGauges
                     speedKph={hud.speedKph}
                     gear={displayedGear}
@@ -860,7 +882,7 @@ const App = () => {
                     sectors={hud.sectors || null}
                 />
             )}
-            {raceModeActive && hud.map && (
+            {raceModeActive && hud.map && !garageOpen && (
                 <Minimap
                     outline={trackOutline}
                     bounds={hud.sectors?.bounds || []}
@@ -874,7 +896,24 @@ const App = () => {
                 <div className="race-hud" data-prevent-click>
 
                     <div className="race-hud-board">
-                        <h4>Leaderboard</h4>
+                        <h4 className="race-board-head">
+                            Leaderboard
+                            <span className="race-board-switch">
+                                {(['stock', 'tuned'] as const).map((board) => (
+                                    <button
+                                        type="button"
+                                        key={board}
+                                        className={leaderboardBoard === board ? 'on' : ''}
+                                        onClick={() => {
+                                            setLeaderboardBoard(board);
+                                            eventBus.dispatch('race:leaderboardBoard', { board });
+                                        }}
+                                    >
+                                        {board === 'stock' ? 'Stock' : 'Tuned'}
+                                    </button>
+                                ))}
+                            </span>
+                        </h4>
                         {leaderboard.length === 0 ? (
                             <p>No laps yet.</p>
                         ) : (
@@ -987,12 +1026,16 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && lobbyChoiceOpen && !racePaused && (
+            {raceModeActive && lobbyChoiceOpen && !racePaused && !garageOpen && (
                 <LobbyChoice
                     multiplayer={multiplayer}
                     playerName={playerName}
                     onClose={closeLobbyChoice}
+                    onGarage={() => openGarage(true)}
                 />
+            )}
+            {raceModeActive && garageOpen && (
+                <Garage state={garageState} onClose={closeGarage} />
             )}
             {raceModeActive && racePaused && (
                 <div className="race-menu-overlay" data-prevent-click>
@@ -1132,6 +1175,15 @@ const App = () => {
                         <div className="race-menu-actions">
                             <button type="button" onClick={handleResumeRace}>
                                 Resume Race
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    eventBus.dispatch('race:setPaused', { paused: false });
+                                    openGarage(false);
+                                }}
+                            >
+                                Garage
                             </button>
                             <button type="button" onClick={handleRaceToggle}>
                                 Exit Race Mode

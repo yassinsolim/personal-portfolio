@@ -939,6 +939,7 @@ body.race-mode-touch #ui-app {
 
 .race-lobby-card {
     pointer-events: auto;
+    max-width: min(900px, 94vw) !important;
     background: rgba(0, 0, 0, 0.72);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 10px;
@@ -956,7 +957,7 @@ body.race-mode-touch #ui-app {
 
 .race-lobby-options {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 10px;
 }
 
@@ -1266,4 +1267,293 @@ body.race-mode-touch #ui-app {
         width: 120px;
         height: 120px;
     }
+}
+
+/* garage: the car on the left, the panel on the right */
+.garage {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    pointer-events: auto;
+    display: flex;
+    font-family: monospace;
+    color: #fff;
+}
+
+.garage-stage {
+    flex: 1;
+    cursor: grab;
+    position: relative;
+}
+
+.garage-stage:active {
+    cursor: grabbing;
+}
+
+.garage-title {
+    position: absolute;
+    left: 24px;
+    top: 20px;
+    pointer-events: none;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.garage-title h2 {
+    margin: 0;
+    font-size: 28px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.garage-title p {
+    margin: 4px 0 2px;
+    font-size: 15px;
+}
+
+.garage-title small {
+    opacity: 0.7;
+}
+
+.garage-panel {
+    width: min(400px, 92vw);
+    display: flex;
+    flex-direction: column;
+    background: rgba(8, 10, 14, 0.84);
+    border-left: 1px solid rgba(255, 255, 255, 0.14);
+    padding: 16px;
+    box-sizing: border-box;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.garage-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+}
+
+.garage-tabs button,
+.garage-options button,
+.garage-actions button,
+.garage-factory {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    color: #fff;
+    font-family: inherit;
+    padding: 7px 8px;
+    cursor: pointer;
+}
+
+.garage-tabs button.on,
+.garage-options button.on,
+.garage-factory.on {
+    background: #fff;
+    color: #111;
+}
+
+.garage-body {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.garage-body h4 {
+    margin: 12px 0 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.75;
+}
+
+.garage-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+.garage-swatches.disabled {
+    opacity: 0.35;
+}
+
+.garage-swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    cursor: pointer;
+    padding: 0;
+}
+
+.garage-swatch.on {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5);
+}
+
+.garage-custom {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.garage-custom input {
+    width: 28px;
+    height: 26px;
+    border: none;
+    background: none;
+    padding: 0;
+}
+
+.garage-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+}
+
+.garage-options.wrap {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.garage-options.column {
+    grid-template-columns: 1fr;
+}
+
+.garage-options.column button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    text-align: left;
+}
+
+.garage-options small {
+    opacity: 0.7;
+    font-size: 11px;
+}
+
+.garage-slider {
+    margin: 10px 0;
+}
+
+.garage-slider-head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+}
+
+.garage-slider-head strong.changed {
+    color: #ffd34d;
+}
+
+.garage-slider input {
+    width: 100%;
+    accent-color: #ff5a3c;
+}
+
+.garage-slider-ends {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    opacity: 0.6;
+}
+
+.garage-note {
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.garage-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    font-size: 11px;
+}
+
+.garage-stats div {
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 5px 6px;
+}
+
+.garage-stats span {
+    opacity: 0.65;
+}
+
+.garage-board {
+    font-size: 11px;
+    margin: 0;
+    opacity: 0.8;
+}
+
+.garage-board.tuned {
+    color: #ffd34d;
+}
+
+.garage-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.garage-actions .primary {
+    background: #fff;
+    color: #111;
+    font-weight: bold;
+    padding: 8px 22px;
+}
+
+@media (max-width: 760px) {
+    .garage {
+        flex-direction: column;
+    }
+
+    .garage-stage {
+        min-height: 34vh;
+    }
+
+    .garage-panel {
+        width: 100%;
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.14);
+        max-height: 66vh;
+    }
+}
+
+.race-board-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.race-board-switch {
+    display: inline-flex;
+    gap: 2px;
+    pointer-events: auto;
+}
+
+.race-board-switch button {
+    font-family: inherit;
+    font-size: 10px;
+    padding: 2px 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.race-board-switch button.on {
+    background: #fff;
+    color: #111;
+}
+
+/* the garage has the screen to itself */
+.garage-open > *:not(.garage) {
+    visibility: hidden;
 }

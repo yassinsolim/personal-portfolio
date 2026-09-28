@@ -20,6 +20,7 @@ const CONFIG_FETCH_TIMEOUT_MS = 10000;
 // ones, so new rows carry this tag on car_id and the board only reads tagged
 // rows. old rows stay in the table. no schema change needed
 const SEASON_TAG = '@v3';
+const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
 
 type RemoteLeaderboardRow = {
@@ -135,8 +136,9 @@ export default class LeaderboardService {
         );
     }
 
-    async getLeaderboard(limit = 10) {
-        const localEntries = this.local.getTop(limit);
+    // stock laps end in the season tag, tuned ones carry ~t<tune code> after it
+    async getLeaderboard(limit = 10, board: 'stock' | 'tuned' = 'stock') {
+        const localEntries = this.local.getTop(limit, board);
         await this.initialize();
 
         if (!this.supabase) {
@@ -147,7 +149,7 @@ export default class LeaderboardService {
             const { data, error } = await this.supabase
                 .from(this.tableName)
                 .select('id,name,lap_time_ms,car_id,created_at')
-                .like('car_id', `%${SEASON_TAG}`)
+                .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
 
@@ -162,6 +164,7 @@ export default class LeaderboardService {
                 carId: this.sanitizeCarId(entry.car_id),
                 createdAt: entry.created_at || new Date().toISOString(),
                 source: 'remote' as const,
+                tune: this.readTune(entry.car_id),
             }));
 
             return this.mergeEntries(remoteEntries, localEntries).slice(0, limit);
@@ -174,8 +177,11 @@ export default class LeaderboardService {
         name: string,
         lapTimeMs: number,
         carId: string,
-        ghostReplay?: GhostLapReplay | null
+        ghostReplay?: GhostLapReplay | null,
+        tune?: string
     ) {
+        const safeTune = tune && /^[0-9a-z]{1,16}$/.test(tune) ? tune : undefined;
+        const tag = `${SEASON_TAG}${safeTune ? TUNE_TAG + safeTune : ''}`;
         const safeName = this.sanitizeName(name);
         const safeLapTimeMs = this.sanitizeLapTime(lapTimeMs);
         const safeCarId = this.sanitizeCarId(carId);
@@ -189,6 +195,7 @@ export default class LeaderboardService {
             name: safeName,
             lapTimeMs: safeLapTimeMs,
             carId: safeCarId,
+            ...(safeTune ? { tune: safeTune } : {}),
         });
         if (safeReplay) {
             this.cacheGhostReplay(localEntry.id, safeReplay);
@@ -205,7 +212,7 @@ export default class LeaderboardService {
                 .insert({
                     name: safeName,
                     lap_time_ms: safeLapTimeMs,
-                    car_id: `${safeCarId}${SEASON_TAG}`,
+                    car_id: `${safeCarId}${tag}`,
                 })
                 .select('id,name,lap_time_ms,car_id,created_at')
                 .single();
@@ -222,9 +229,10 @@ export default class LeaderboardService {
                 carId: this.sanitizeCarId(row.car_id || safeCarId),
                 createdAt: row.created_at || new Date().toISOString(),
                 source: 'remote' as const,
+                tune: safeTune,
             };
             if (safeReplay) {
-                await this.submitGhostReplay(entry.id, safeReplay);
+                await this.submitGhostReplay(entry.id, safeReplay, tag);
             }
             return entry;
         } catch (error) {
@@ -362,6 +370,11 @@ export default class LeaderboardService {
         return Math.min(7_200_000, Math.max(1_000, numeric));
     }
 
+    readTune(carId: string) {
+        const match = String(carId || '').match(/~t([0-9a-z]{1,16})$/);
+        return match ? match[1] : undefined;
+    }
+
     sanitizeCarId(carId: string) {
         const base = String(carId || '').split('@')[0];
         return carOptionsById[base] ? base : defaultCarId;
@@ -429,7 +442,9 @@ export default class LeaderboardService {
         } as GhostLapReplay;
     }
 
-    async submitGhostReplay(lapId: string, replay: GhostLapReplay) {
+    // the ghost's car_id has to match its lap row exactly (the insert policy
+    // checks it), tune code included
+    async submitGhostReplay(lapId: string, replay: GhostLapReplay, tag = SEASON_TAG) {
         const safeLapId = String(lapId || '').trim();
         if (!safeLapId) return;
 
@@ -452,7 +467,7 @@ export default class LeaderboardService {
                     {
                         lap_id: safeLapId,
                         lap_time_ms: safeReplay.lapTimeMs,
-                        car_id: `${safeReplay.carId}${SEASON_TAG}`,
+                        car_id: `${safeReplay.carId}${tag}`,
                         samples: safeReplay.samples,
                     },
                     { onConflict: 'lap_id' }

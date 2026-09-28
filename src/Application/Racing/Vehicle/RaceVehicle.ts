@@ -7,6 +7,19 @@ import { applyBmwM5GlassTint } from '../../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
 import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
+import { applyCarLook, isGarageMaterial } from '../Garage/carLook';
+import {
+    applyTune,
+    loadLook,
+    loadTune,
+    sanitizeLook,
+    sanitizeTune,
+    saveLook,
+    saveTune,
+    STOCK_LOOK,
+    STOCK_TUNE,
+} from '../Garage/garage';
+import type { CarLook, CarTune } from '../Garage/garage';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -33,6 +46,7 @@ import {
     type CarRaceConfig,
     type DrivetrainType,
 } from '../../carOptions';
+import type { CarOption } from '../../carOptions';
 import { legacyColor } from '../../Utils/LegacyColor';
 
 const SPAWN_T = 0.003;
@@ -321,6 +335,10 @@ export default class RaceVehicle {
     spawnSlot: number;
     // weak gpu: cars get phong materials when they're prepared
     cheapMaterials: boolean;
+    preparingCarId = '';
+    // garage choices for the current car
+    look: CarLook = STOCK_LOOK;
+    tune: CarTune = STOCK_TUNE;
     bodyRadius: number;
     bodySize: THREE.Vector3;
     position: THREE.Vector3;
@@ -438,7 +456,7 @@ export default class RaceVehicle {
         this.spawnSlot = 0;
         this.cheapMaterials = false;
         this.physics = new VehiclePhysics(
-            buildPhysicsSpec(
+            this.buildSpec(
                 carOptionsById[this.currentCarId] ||
                     carOptionsById[defaultCarId],
                 defaultWheelGeometry(
@@ -551,6 +569,8 @@ export default class RaceVehicle {
     setCarTuning(carId: string) {
         const option = carOptionsById[carId] || carOptionsById[defaultCarId];
         this.currentTuning = option.race;
+        this.look = loadLook(option.id);
+        this.tune = loadTune(option.id);
 
         const configuredWheelRadius = this.currentTuning.wheelRadiusMeters;
         this.wheelRadius =
@@ -561,7 +581,7 @@ export default class RaceVehicle {
 
         if (this.physics) {
             this.physics.setSpec(
-                buildPhysicsSpec(
+                this.buildSpec(
                     option,
                     defaultWheelGeometry(option, this.wheelRadius)
                 )
@@ -681,6 +701,8 @@ export default class RaceVehicle {
     }
 
     prepareModel(model: THREE.Group, carId: string) {
+        this.preparingCarId = carId;
+        model.userData.raceModelRoot = true;
         this.cloneMaterials(model);
         this.applyMaterialTweaks(model, carId);
 
@@ -3311,11 +3333,15 @@ export default class RaceVehicle {
             // transparent parts sort per object (glass over lights), merging
             // them would scramble that order
             if (mesh.material.transparent) return;
-            // plain parts group by how shiny they are, so tires stay matte
+            // plain parts group by how shiny they are, so tires stay matte.
+            // paint and calipers keep their own material for the garage, and
+            // wheels (rims) never go plain
             const phong = mesh.material as THREE.MeshPhongMaterial;
-            const look = this.isPlainCheap(mesh.material)
-                ? `plain:${phong.side}:${Math.round(phong.reflectivity * 10)}:${Math.round(phong.shininess / 30)}`
-                : this.materialSignature(mesh.material);
+            const garage = isGarageMaterial(this.preparingCarId, mesh.material.name || '');
+            const look =
+                !garage && root.userData.raceModelRoot && this.isPlainCheap(mesh.material)
+                    ? `plain:${phong.side}:${Math.round(phong.reflectivity * 10)}:${Math.round(phong.shininess / 30)}`
+                    : this.materialSignature(mesh.material) + (garage ? `|${mesh.material.name}` : '');
             const key = `${look}|${mesh.castShadow}|${mesh.renderOrder}`;
             const list = groups.get(key);
             if (list) list.push(mesh);
@@ -3325,9 +3351,10 @@ export default class RaceVehicle {
         groups.forEach((meshes) => {
             if (meshes.length < 2) return;
             const indexed = meshes.every((mesh) => mesh.geometry.index);
-            const plain = this.isPlainCheap(
-                meshes[0].material as THREE.Material
-            );
+            const plain =
+                Boolean(root.userData.raceModelRoot) &&
+                !isGarageMaterial(this.preparingCarId, (meshes[0].material as THREE.Material).name || '') &&
+                this.isPlainCheap(meshes[0].material as THREE.Material);
             const needed = plain
                 ? { position: 3, normal: 3, color: 3 }
                 : this.attributesFor(meshes[0].material as THREE.Material);
@@ -3616,8 +3643,49 @@ export default class RaceVehicle {
         const option =
             carOptionsById[this.currentCarId] || carOptionsById[defaultCarId];
         this.physics.setSpec(
-            buildPhysicsSpec(option, this.getWheelGeometry(model))
+            this.buildSpec(option, this.getWheelGeometry(model))
         );
+        this.applyLookTo(model, this.currentCarId, this.look);
+    }
+
+    // the car's stock spec with the garage tune on top
+    buildSpec(option: CarOption, geometry: WheelGeometry) {
+        return applyTune(buildPhysicsSpec(option, geometry), this.tune, this.look);
+    }
+
+    // new garage choices for the current car: saved, shown and driven
+    setGarage(look: CarLook, tune: CarTune, save = true) {
+        this.look = sanitizeLook(look);
+        this.tune = sanitizeTune(tune);
+        if (save) {
+            saveLook(this.currentCarId, this.look);
+            saveTune(this.currentCarId, this.tune);
+        }
+        const option = carOptionsById[this.currentCarId] || carOptionsById[defaultCarId];
+        this.physics.setSpec(
+            this.buildSpec(
+                option,
+                this.carModel ? this.getWheelGeometry(this.carModel) : defaultWheelGeometry(option, this.wheelRadius)
+            )
+        );
+        if (this.carModel) this.applyLookTo(this.carModel, this.currentCarId, this.look);
+    }
+
+    // rims from another car need that car's model, which may still be loading
+    applyLookTo(model: THREE.Object3D, carId: string, look: CarLook) {
+        if (look.wheels === 'stock' || look.wheels === carId) {
+            applyCarLook(model, carId, { ...look, wheels: 'stock' });
+            return;
+        }
+        const donor = this.getPreparedModel(look.wheels);
+        if (donor) {
+            applyCarLook(model, carId, look, { donor });
+            return;
+        }
+        applyCarLook(model, carId, { ...look, wheels: 'stock' });
+        void this.ensurePreparedModel(look.wheels).then((loaded) => {
+            if (loaded) applyCarLook(model, carId, look, { donor: loaded });
+        });
     }
 
     // wheelbase and track from the wheel rig, in the pivot frame (meters)

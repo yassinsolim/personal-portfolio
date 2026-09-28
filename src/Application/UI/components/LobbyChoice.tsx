@@ -7,6 +7,7 @@ type Props = {
     multiplayer: MultiplayerState;
     playerName: string;
     onClose: () => void;
+    onGarage: () => void;
 };
 
 type Pending = 'quick' | 'invite' | null;
@@ -35,7 +36,7 @@ const copyText = async (text: string) => {
 
 // shown once the homepage transition has built the ring: keep driving solo,
 // drop into a public lobby, or open a private one and copy its link
-const LobbyChoice = ({ multiplayer, playerName, onClose }: Props) => {
+const LobbyChoice = ({ multiplayer, playerName, onClose, onGarage }: Props) => {
     const [pending, setPending] = useState<Pending>(null);
     const [link, setLink] = useState('');
     const [copied, setCopied] = useState<boolean | null>(null);
@@ -82,6 +83,7 @@ const LobbyChoice = ({ multiplayer, playerName, onClose }: Props) => {
                 solo();
             else if (event.code === 'Digit2') quick();
             else if (event.code === 'Digit3') invite();
+            else if (event.code === 'Digit4') onGarage();
             else return;
             event.preventDefault();
             event.stopPropagation();
@@ -137,6 +139,15 @@ const LobbyChoice = ({ multiplayer, playerName, onClose }: Props) => {
                                 <small>
                                     A private lobby and a link to share
                                 </small>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={onGarage}
+                                disabled={Boolean(pending)}
+                            >
+                                <span className="race-lobby-key">4</span>
+                                <strong>Garage</strong>
+                                <small>Paint, wheels, body kit and tuning</small>
                             </button>
                         </div>
                         {failed && (

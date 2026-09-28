@@ -45,6 +45,7 @@ export const buildPhysicsSpec = (
         tireShape: 1.4,
         loadSensitivity: 0.12,
         rollShareFront: option.id === 'amg-one' ? 0.5 : 0.56,
+        loadFilterTime: 0.07,
         cdA: tuning.cdA,
         clA: tuning.clA ?? 0.1,
         aeroFront: 0.42,
