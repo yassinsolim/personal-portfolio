@@ -65,7 +65,8 @@ const BARRIER_RESTITUTION = 0.22;
 const BARRIER_FRICTION = 0.35;
 // cars reflect the sky a bit under full strength, the probe has no occluders
 // so at 1 the lower body glows
-const RACE_ENV_INTENSITY = 0.7;
+const RACE_ENV_INTENSITY = 0.55;
+const RACE_EMISSIVE_MAX = 0.45;
 const WHEEL_VISUAL_STEER_LIMIT = THREE.MathUtils.degToRad(38);
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
@@ -3090,6 +3091,11 @@ export default class RaceVehicle {
             }
             if (material instanceof THREE.MeshStandardMaterial) {
                 material.envMapIntensity = RACE_ENV_INTENSITY;
+                // lights and badges are tuned for the unlit room, through
+                // the race bloom they flare into a white haze over the body
+                if (material.emissive && material.emissive.getHex() !== 0) {
+                    material.emissiveIntensity = Math.min(material.emissiveIntensity, RACE_EMISSIVE_MAX);
+                }
             }
         });
     }
