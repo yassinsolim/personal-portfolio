@@ -75,6 +75,10 @@ from these sources, plus tuning values chosen to land near the listed 0-100 and 
   - Repo: https://github.com/supabase/supabase-js
   - License: MIT
 
+- Supabase (hosted Postgres and Realtime, Free Plan) for the lap leaderboard, ghost replays and lobbies
+  - Project: Nordschleife (`qdepbyxxzbdknkfgpwyl`, AWS us-west-2)
+  - URL: https://supabase.com
+
 - Three.js (already used across project; racing features also depend on it)
   - Repo: https://github.com/mrdoob/three.js
   - License: MIT

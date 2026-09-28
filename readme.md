@@ -45,7 +45,7 @@ npm run dev
 
 Online leaderboard setup is documented in `docs/RACING_SUPABASE.md`.
 If Supabase config is not provided, leaderboard automatically falls back to localStorage.
-On Vercel, set `RACING_SUPABASE_URL` and `RACING_SUPABASE_ANON_KEY` as environment variables before deploying.
+On Vercel, set `NORDSCHLEIFE_SUPABASE_URL` and `NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY` (the racing game's own Supabase project) before deploying; the schema is `supabase/racing.sql`.
 
 ## Exporting the Scene (GLB/GLTF)
 
