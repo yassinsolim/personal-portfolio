@@ -630,3 +630,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Leaderboard: any tune, body kit or ride height change makes the car tuned. Tuned laps are
   tagged `<car>@v3~t<code>` and live on the tuned board; the stock board still reads `%@v3`.
 - Multiplayer: the look rides on telemetry as a short code (`encodeLook`), no extra messages.
+
+## KTX2 Notes (2026-09-28)
+- Cars (full and lite) have `<model>.ktx2.glb` twins from `node scripts/build-ktx2-cars.mjs`
+  (gltfpack 0.18+ with BasisU, default `~/Assets/webstrafe/tools/bin/gltfpack` or `GLTFPACK=`).
+  Rebuild them whenever a car glb changes; the webp glb stays as the fallback.
+- The decoder is a real same origin worker, `basis/ktx2-worker.js`, generated in prebuild by
+  `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `vercel.json` allows
+  `'unsafe-eval'` for the emscripten transcoder; the page policy is unchanged and no blob
+  worker is used for it (`Utils/ktx2.ts`).
+- Never hangs: a 451 byte probe must decode within 5 s before any car picks ktx2, a worker error
+  flips everything to webp, and a downloaded ktx2 car gets 15 s to parse before the webp one is
+  loaded. `?ktx2=0` forces webp; `?raceDebug=1&ktx2fail=worker|hang|probe` forces each failure.
