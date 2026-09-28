@@ -6,6 +6,7 @@
 // when sent and once per client it reaches.
 //
 // turned on with ?raceDebug=1&mpmock=1
+import { randomUint32 } from '../../Utils/Random';
 
 type Listener = {
     type: string;
@@ -46,7 +47,7 @@ export const mockRealtimeEnabled = () => {
     }
 };
 
-const clientId = Math.random().toString(36).slice(2, 10);
+const clientId = randomUint32().toString(36);
 
 class MockChannel {
     topic: string;

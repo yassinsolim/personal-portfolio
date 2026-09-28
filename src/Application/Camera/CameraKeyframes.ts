@@ -139,7 +139,6 @@ export class IdleKeyframe extends CameraKeyframeInstance {
             Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 +
             this.origin.y -
             3000;
-        this.position.z = this.position.z;
     }
 }
 

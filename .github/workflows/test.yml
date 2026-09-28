@@ -1,0 +1,59 @@
+name: test
+
+# the headless suites: terrain under the road and trackside off it (npm test),
+# the drivetrain check against published figures, and a production build.
+# the sql test needs docker, so it only runs when the lap tables change
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # no dependency lifecycle scripts: nothing the tests or the build use needs one
+      - run: npm ci --no-audit --no-fund --ignore-scripts
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - name: terrain and trackside invariants
+        run: npm test
+      - name: drivetrain
+        run: |
+          npm run test:drivetrain
+          npm run check:drivetrain
+      - name: build
+        run: npm run build
+
+  sql:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: lap tables changed?
+        id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null || git diff --name-only "$base" HEAD | grep -qE '^(supabase/|scripts/test-racing-sql\.sh|\.github/workflows/test\.yml)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: racing sql (throwaway postgres in docker)
+        if: steps.changed.outputs.run == 'true'
+        run: bash scripts/test-racing-sql.sh

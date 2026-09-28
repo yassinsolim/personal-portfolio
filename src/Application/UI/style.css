@@ -946,7 +946,6 @@ body.race-mode-touch #ui-app {
     padding: 16px 18px;
     color: #fff;
     font-family: monospace;
-    max-width: min(720px, 92vw);
     animation: race-lobby-in 0.35s ease-out;
 }
 
