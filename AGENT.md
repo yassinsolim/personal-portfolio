@@ -658,3 +658,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The model's wheels are only for looks now. When a car is added, give it `tyres`,
   `transmission`, `torqueCurve`, `speedLimitKph` and `tachMaxRpm`, add it to the reference file and
   the geometry json, and run the check.
+
+## KTX2 Notes (2026-09-28)
+- Cars (full and lite) have `<model>.ktx2.glb` twins from `node scripts/build-ktx2-cars.mjs`
+  (gltfpack 0.18+ with BasisU, default `~/Assets/webstrafe/tools/bin/gltfpack` or `GLTFPACK=`).
+  Rebuild them whenever a car glb changes; the webp glb stays as the fallback.
+- The decoder is a real same origin worker, `basis/ktx2-worker.js`, generated in prebuild by
+  `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `vercel.json` allows
+  `'unsafe-eval'` for the emscripten transcoder; the page policy is unchanged and no blob
+  worker is used for it (`Utils/ktx2.ts`).
+- Never hangs: a 451 byte probe must decode within 5 s before any car picks ktx2, a worker error
+  flips everything to webp, and a downloaded ktx2 car gets 15 s to parse before the webp one is
+  loaded. `?ktx2=0` forces webp; `?raceDebug=1&ktx2fail=worker|hang|probe` forces each failure.

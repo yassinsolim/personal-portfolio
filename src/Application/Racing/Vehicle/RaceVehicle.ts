@@ -8,6 +8,7 @@ import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
 import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
 import { applyCarLook, isGarageMaterial } from '../Garage/carLook';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
     applyTune,
     loadLook,
@@ -639,25 +640,18 @@ export default class RaceVehicle {
                 .catch(() => null);
         }
 
-        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite)
         const cheap = this.cheapMaterials;
-        const path = cheap
-            ? option.modelPath.replace(/\.glb$/, '.lite.glb')
-            : option.modelPath;
+        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite),
+        // others the full one, as ktx2 when the decoder works
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
-            this.resources.loaders.gltfLoader.load(
-                path,
-                (gltf) => {
-                    if (!cheap)
-                        this.resources.items.gltfModel[option.resourceName] =
-                            gltf;
-                    const loadedModel = this.prepareModel(gltf.scene.clone(true), carId);
-                    resolve(loadedModel);
-                },
-                undefined,
-                (error) => {
-                    reject(error);
-                }
+            const loaded = (gltf: GLTF) => {
+                if (!cheap) this.resources.items.gltfModel[option.resourceName] = gltf;
+                resolve(this.prepareModel(gltf.scene.clone(true), carId));
+            };
+            this.resources.loadModel(
+                cheap ? option.modelPath.replace(/\.glb$/, '.lite.glb') : option.modelPath,
+                loaded,
+                reject
             );
         });
 

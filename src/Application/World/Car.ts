@@ -111,7 +111,8 @@ export default class Car {
         }
 
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
-            this.resources.loaders.gltfLoader.load(
+            // ktx2 when the decoder works, same as the preloaded cars
+            this.resources.loadModel(
                 carOption.modelPath,
                 (gltf) => {
                     this.resources.items.gltfModel[carOption.resourceName] = gltf;
@@ -120,10 +121,7 @@ export default class Car {
                     this.prepareCarModel(car, carOption);
                     resolve(car);
                 },
-                undefined,
-                (error) => {
-                    reject(error);
-                }
+                reject
             );
         });
 

@@ -68,7 +68,7 @@ Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, 
   project in September 2026).
 - `nordschleife_ghost_replays`: public read, insert and update (the client upserts), but only
   for a real lap with the same car and lap time, 8 to 5001 samples, every sample an object and
-  at most 1.5 MB. A ghost can only be replaced in the 15 minutes after it's written.
+  at most 2 MB (a real 10 minute lap is about 1 MB). A ghost can only be replaced in the 15 minutes after it's written.
 - `nordschleife_rate_events`: private, no access for the browser roles.
 - Grants: anon/authenticated get select + insert on laps and select + insert + update on
   ghosts, nothing else (no delete, truncate or update on laps).

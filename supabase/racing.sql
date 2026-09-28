@@ -102,8 +102,9 @@ create policy "public insert ghost replays"
   to anon, authenticated
   with check (
     public.nordschleife_ghost_matches_lap(lap_id, lap_time_ms, car_id)
-    -- 5001 samples of 8 numbers is well under this; it stops a padded payload
-    and octet_length(samples::text) <= 1500000
+    -- a real 10 minute lap is about 1 MB (4879 samples); 5001 samples of 8 long
+    -- numbers stay under this, a padded payload doesn't
+    and octet_length(samples::text) <= 2000000
     and not jsonb_path_exists(samples, '$[*] ? (@.type() != "object")')
   );
 
@@ -116,7 +117,7 @@ create policy "public update ghost replays"
   using (created_at > now() - interval '15 minutes')
   with check (
     public.nordschleife_ghost_matches_lap(lap_id, lap_time_ms, car_id)
-    and octet_length(samples::text) <= 1500000
+    and octet_length(samples::text) <= 2000000
     and not jsonb_path_exists(samples, '$[*] ? (@.type() != "object")')
   );
 
