@@ -28,7 +28,7 @@ const RENDER_MODES: { mode: QualityMode; label: string }[] = [
 
 const ASSIST_OPTIONS: { preset: AssistPreset; label: string }[] = [
     { preset: 'standard', label: 'Standard' },
-    { preset: 'sport', label: 'Sport' },
+    { preset: 'sport', label: 'Sport (drift)' },
     { preset: 'off', label: 'Off' },
 ];
 

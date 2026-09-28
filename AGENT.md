@@ -116,6 +116,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
 - `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
 
+## Drift Notes (2026-09-28)
+- Sport assists include the drift assist (`VehiclePhysics.updateDrift`): once the rear is out
+  past ~7 degrees it holds a slide at the angle the steering picks (straight ~17, full into the
+  corner ~30), countersteers with a PD on the slip angle, eases the throttle on overshoot, holds
+  a gear by road speed, and drops rear grip up to 16% with throttle so lower torque cars keep
+  sliding. Tuning is `DRIFT_TUNING`, per instance as `physics.driftTuning`.
+- `__drive(cars, { only: ['driftAssist'] })` measures it; `--drive-options` passes that through
+  `race-harness-run.mjs`. Standard and Off don't use it, so their numbers don't move.
+
 ## Track Notes (2026-09-28)
 - The lap is the real Nordschleife, full length (20.77 km) and full elevation (333 to 627 m),
   from `static/models/Tracks/Nordschleife/nordschleife.json`. Rebuild it with

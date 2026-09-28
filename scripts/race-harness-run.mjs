@@ -130,7 +130,9 @@ if (!skip.has('stress')) {
     );
 }
 if (!skip.has('drive')) {
-    await run('drive', `__drive(${JSON.stringify(cars)})`);
+    // --drive-options '{"only":["driftAssist"],"driftTuning":{...}}'
+    const driveOptions = opt('drive-options', '{}');
+    await run('drive', `__drive(${JSON.stringify(cars)}, ${driveOptions})`);
 }
 results.errors = errors;
 fs.mkdirSync(path.dirname(out), { recursive: true });

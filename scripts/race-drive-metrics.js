@@ -359,6 +359,85 @@
                     trace,
                 };
             },
+
+            // the sport drift assist the way a keyboard player uses it: flick
+            // on the handbrake, then full throttle and a fixed bit of steer
+            // into the corner for 5 s, then steer out for 2 s to end it
+            driftAssist() {
+                const assists = v.physics ? { ...v.physics.assists } : null;
+                if (v.physics) {
+                    Object.assign(v.physics.assists, {
+                        stability: false,
+                        tractionControl: false,
+                        countersteer: true,
+                        drift: true,
+                    });
+                }
+                if (v.physics && options.driftTuning) {
+                    Object.assign(v.physics.driftTuning, options.driftTuning);
+                }
+                place();
+                const target = (options.driftKph || 80) / 3.6;
+                controls.throttle = 1;
+                for (let i = 0; i < 60 * 30 && speed() < target; i++)
+                    v.update(DT);
+                const held = [];
+                let spun = false;
+                let exitS = null;
+                let yawTotal = 0;
+                let prevYaw = v.yaw;
+                const trace = [];
+                for (let i = 0; i < 60 * 7; i++) {
+                    const t = i * DT;
+                    // flickS and flickSteer size the handbrake flick, a
+                    // keyboard tap is shorter and softer than the default
+                    const flick = options.flickS ?? 0.5;
+                    controls.handbrake = t < flick ? 1 : 0;
+                    controls.throttle = t < flick ? 0.4 : t < 5 ? 1 : 0.5;
+                    controls.steer =
+                        t < flick
+                            ? options.flickSteer ?? 1
+                            : t < 5
+                            ? options.driftSteer ?? 0.3
+                            : -0.6;
+                    v.update(DT);
+                    const s = Math.abs(slipDeg());
+                    yawTotal += wrap(v.yaw - prevYaw);
+                    prevYaw = v.yaw;
+                    if (t > 1.5 && t < 5) held.push(s);
+                    if (t >= 5 && exitS === null && s < 5)
+                        exitS = +(t - 5).toFixed(2);
+                    if (s > 100) spun = true;
+                    if (i % 30 === 0) {
+                        trace.push([
+                            +t.toFixed(1),
+                            Math.round(speed() * 3.6),
+                            Math.round(slipDeg()),
+                        ]);
+                    }
+                }
+                if (assists) Object.assign(v.physics.assists, assists);
+                const inSlide = held.filter((x) => x > 12 && x < 60);
+                const mean =
+                    inSlide.reduce((a, b) => a + b, 0) /
+                    Math.max(1, inSlide.length);
+                const sd = Math.sqrt(
+                    inSlide.reduce((a, b) => a + (b - mean) * (b - mean), 0) /
+                        Math.max(1, inSlide.length)
+                );
+                return {
+                    heldPct: Math.round(
+                        (inSlide.length / Math.max(1, held.length)) * 100
+                    ),
+                    meanSlipDeg: Math.round(mean),
+                    slipSdDeg: +sd.toFixed(1),
+                    turnedDeg: Math.round((yawTotal * 180) / Math.PI),
+                    exitS,
+                    spun,
+                    endKph: Math.round(speed() * 3.6),
+                    trace,
+                };
+            },
         };
 
         const only = options.only || Object.keys(tests);
