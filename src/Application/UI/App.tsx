@@ -1169,7 +1169,8 @@ const App = () => {
 
                         <p className="race-menu-credits">
                             Track: © OpenStreetMap contributors (ODbL).
-                            Elevation: Copernicus GLO-30 DEM.
+                            Elevation: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0,
+                            www.lvermgeo.rlp.de [Daten bearbeitet]; Copernicus GLO-30 DEM.
                         </p>
 
                         <div className="race-menu-actions">

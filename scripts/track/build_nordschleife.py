@@ -1,8 +1,11 @@
 # builds static/models/Tracks/Nordschleife/nordschleife.json from open data:
 #   centerline, sections, bridges and forests: openstreetmap (odbl 1.0)
-#   elevation: copernicus glo-30 dem (copernicus dem licence)
+#   elevation: rhineland-palatinate dgm1, the 1 m lidar ground model
+#     (© GeoBasis-DE / LVermGeoRP, dl-de/by-2-0), for the road profile, its
+#     camber and the terrain. copernicus glo-30 (copernicus dem licence) is
+#     the fallback outside it and with --no-dgm1
 #
-#   python3 -m venv /tmp/trackenv && /tmp/trackenv/bin/pip install numpy tifffile imagecodecs
+#   python3 -m venv /tmp/trackenv && /tmp/trackenv/bin/pip install numpy tifffile imagecodecs pyproj
 #   /tmp/trackenv/bin/python scripts/track/build_nordschleife.py --cache /tmp/nords
 #
 # the cache dir keeps the overpass answers and dem tiles so reruns are offline.
@@ -27,6 +30,7 @@ DEM_URL = (
     'https://copernicus-dem-30m.s3.amazonaws.com/'
     'Copernicus_DSM_COG_10_N50_00_{e}_00_DEM/Copernicus_DSM_COG_10_N50_00_{e}_00_DEM.tif'
 )
+DGM1_URL = 'https://geobasis-rlp.de/data/dgm1/current/tif/'
 SPACING = 4.0
 # not part of the nordschleife lap
 EXCLUDE = (
@@ -79,6 +83,82 @@ def dem_tiles(cache):
         arrays.append(tifffile.imread(path).astype(np.float64))
     # both tiles are 2400 wide at this latitude, 6 to 8 degrees east
     return np.hstack(arrays)
+
+
+class Dgm1:
+    # the 1 km tiles of the rlp lidar ground model (etrs89 utm 32n, 1 m, top
+    # left corner as the tie point, -9999 for no data), fetched as needed
+    def __init__(self, cache):
+        from pyproj import Transformer
+        self.dir = os.path.join(cache, 'dgm1')
+        os.makedirs(self.dir, exist_ok=True)
+        index = os.path.join(self.dir, 'index.txt')
+        if not os.path.exists(index):
+            html = urllib.request.urlopen(DGM1_URL, timeout=120).read().decode()
+            import re
+            names = sorted(set(re.findall(r'dgm1_32_\d+_\d+_1_rp_\d+\.tif', html)))
+            open(index, 'w').write('\n'.join(names))
+        self.names = {}
+        for name in open(index).read().split():
+            parts = name.split('_')
+            self.names[(int(parts[2]), int(parts[3]))] = name
+        self.tiles = {}
+        self.to_utm = Transformer.from_crs(4326, 25832, always_xy=True)
+
+    def tile(self, ek, nk):
+        key = (ek, nk)
+        if key not in self.tiles:
+            name = self.names.get(key)
+            if name is None:
+                self.tiles[key] = None
+            else:
+                path = os.path.join(self.dir, name)
+                if not os.path.exists(path):
+                    urllib.request.urlretrieve(DGM1_URL + name, path)
+                data = tifffile.imread(path).astype(np.float64)
+                data[data < -1000] = np.nan
+                self.tiles[key] = data
+        return self.tiles[key]
+
+    def pixel(self, px, py):
+        # pixel column px (east) and row py counted from the north edge of
+        # the tile row, in whole meters of utm
+        ek, nk = px // 1000, (py - 1) // 1000
+        data = self.tile(int(ek), int(nk))
+        if data is None:
+            return np.nan
+        return data[int((nk + 1) * 1000 - py), int(px - ek * 1000)]
+
+    def at_many(self, lat, lon):
+        e, n = self.to_utm.transform(np.asarray(lon), np.asarray(lat))
+        fx, fy = np.asarray(e) - 0.5, np.asarray(n) + 0.5
+        x0, y0 = np.floor(fx).astype(np.int64), np.ceil(fy).astype(np.int64)
+        dx, dy = fx - x0, y0 - fy
+        def grab(px, py):
+            out = np.full(px.shape, np.nan)
+            ek, nk = px // 1000, (py - 1) // 1000
+            for key in set(zip(ek.tolist(), nk.tolist())):
+                data = self.tile(*key)
+                if data is None:
+                    continue
+                m = (ek == key[0]) & (nk == key[1])
+                out[m] = data[(key[1] + 1) * 1000 - py[m], px[m] - key[0] * 1000]
+            return out
+        a, b = grab(x0, y0), grab(x0 + 1, y0)
+        c, d = grab(x0, y0 - 1), grab(x0 + 1, y0 - 1)
+        return a * (1 - dx) * (1 - dy) + b * dx * (1 - dy) + c * (1 - dx) * dy + d * dx * dy
+
+    def at(self, lat, lon):
+        e, n = self.to_utm.transform(lon, lat)
+        # pixel centers sit half a meter in from the corners
+        fx, fy = e - 0.5, n + 0.5
+        x0, y0 = math.floor(fx), math.ceil(fy)
+        dx, dy = fx - x0, y0 - fy
+        a = self.pixel(x0, y0)
+        b = self.pixel(x0 + 1, y0)
+        c = self.pixel(x0, y0 - 1)
+        d = self.pixel(x0 + 1, y0 - 1)
+        return a * (1 - dx) * (1 - dy) + b * dx * (1 - dy) + c * (1 - dx) * dy + d * dx * dy
 
 
 def gauss_loop(v, spacing, sigma):
@@ -200,10 +280,152 @@ def rasterize(rings, gx, gz, project):
     return mask
 
 
+def copernicus_profile(X, Z, lx, lz, names, count, spacing, dem_at, unproject):
+    # road height: the lowest of the middle and 8 m either side, so a canopy
+    # over the road cell doesn't lift it, then smoothed and held to real grades
+    center = np.array([dem_at(*unproject(x, z)) for x, z in zip(X, Z)])
+    near = center.copy()
+    for o in (-8.0, 8.0):
+        near = np.minimum(near, [dem_at(*unproject(x + ax * o, z + az * o)) for x, z, ax, az in zip(X, Z, lx, lz)])
+    y = gauss_loop(near, spacing, 22.0)
+    for name, (height, half) in CRESTS.items():
+        idx = [i for i, nm in enumerate(names) if nm == name]
+        if not idx:
+            continue
+        top = idx[int(np.argmax(center[idx]))]
+        offsets = (np.arange(count) - top + count // 2) % count - count // 2
+        y += height * np.exp(-((offsets * spacing) / half) ** 2)
+    for _ in range(6):
+        for i in range(1, count):
+            y[i] = np.clip(y[i], y[i - 1] - MAX_DROP * spacing, y[i - 1] + MAX_CLIMB * spacing)
+        for i in range(count - 2, -1, -1):
+            y[i] = np.clip(y[i], y[i + 1] - MAX_CLIMB * spacing, y[i + 1] + MAX_DROP * spacing)
+    y = gauss_loop(y, spacing, 6.0)
+    # the loop has to close on itself
+    y += np.linspace(0, y[0] - y[-1], count)
+    return y
+
+
+# the dgm1 is bare ground at 1 m, so the road comes straight from it: at every
+# point a line is fitted across the road (8 samples edge to edge), its middle
+# is the height and its slope the camber. light smoothing keeps it smooth at
+# car scale (noise, kerbs) without taking the crests off. over the lap's own
+# bridges the model has the ground below, so those stretches are bridged
+ROAD_SIGMA_M = 3.0
+ROLL_SIGMA_M = 8.0
+MAX_ROLL_DEG = 25.0
+SAFETY_GRADE = 0.22
+
+
+def dgm1_profile(dgm, X, Z, lx, lz, names, spans, count, spacing, to_latlon):
+    half = np.array([WIDTHS.get(nm, DEFAULT_WIDTH) / 2 - 0.8 for nm in names])
+    rel = np.linspace(-1, 1, 8)
+    offs = half[:, None] * rel[None, :]
+    px = X[:, None] + lx[:, None] * offs
+    pz = Z[:, None] + lz[:, None] * offs
+    lat, lon = to_latlon(px, pz)
+    h = dgm.at_many(lat.ravel(), lon.ravel()).reshape(px.shape)
+    ok = np.isfinite(h)
+    center = np.full(count, np.nan)
+    slope = np.zeros(count)
+    for i in range(count):
+        s, v = offs[i][ok[i]], h[i][ok[i]]
+        if len(v) >= 4:
+            b, a = np.polyfit(s, v, 1)
+            center[i], slope[i] = a, b
+    # bridged stretches and any gaps: straight across from the ends
+    bridged = np.zeros(count, bool)
+    for sp in spans:
+        a, b = sp['start'] - 5, sp['end'] + 5
+        d = np.arange(count) * spacing
+        bridged |= ((d >= a) & (d <= b)) | ((d + count * spacing >= a) & (d + count * spacing <= b))
+    center[bridged] = np.nan
+    slope[bridged] = 0.0
+    idx = np.arange(count)
+    good = np.isfinite(center)
+    center = np.interp(idx, idx[good], center[good], period=count)
+    y = gauss_loop(center, spacing, ROAD_SIGMA_M)
+    for _ in range(3):
+        for i in range(1, count):
+            y[i] = np.clip(y[i], y[i - 1] - SAFETY_GRADE * spacing, y[i - 1] + SAFETY_GRADE * spacing)
+    y += np.linspace(0, y[0] - y[-1], count)
+    # left edge higher is a positive roll (the runtime's convention)
+    roll = np.degrees(np.arctan(gauss_loop(slope, spacing, ROLL_SIGMA_M)))
+    roll = np.clip(roll, -MAX_ROLL_DEG, MAX_ROLL_DEG)
+    return y, roll, center
+
+
+def report_profile(y, y_cop, roll, names, dist, spacing):
+    diff = y - y_cop
+    order = np.argsort(-np.abs(diff))
+    seen = set()
+    print('biggest height changes vs copernicus:')
+    for i in order:
+        if names[i] in seen:
+            continue
+        seen.add(names[i])
+        print('  %-22s %7.0f m  %+.1f m' % (names[i], dist[i], diff[i]))
+        if len(seen) >= 8:
+            break
+    print('  rms %.2f m, max %.1f m' % (np.sqrt(np.mean(diff ** 2)), np.abs(diff).max()))
+    print('biggest camber:')
+    seen = set()
+    for i in np.argsort(-np.abs(roll)):
+        if names[i] in seen:
+            continue
+        seen.add(names[i])
+        print('  %-22s %7.0f m  %+.1f deg' % (names[i], dist[i], roll[i]))
+        if len(seen) >= 8:
+            break
+    # crest height: how far the road rises over the straight line between
+    # 40 m before and after, the bigger jumps
+    n = int(round(40 / spacing))
+    rise = y - (np.roll(y, n) + np.roll(y, -n)) / 2
+    rise_cop = y_cop - (np.roll(y_cop, n) + np.roll(y_cop, -n)) / 2
+    print('crests (rise over the 80 m chord), dgm1 vs copernicus:')
+    for name in ('Flugplatz', 'Schwedenkreuz', 'Pflanzgarten', 'Sprunghügel', 'Brünnchen', 'Quiddelbacher Höhe', 'Hohe Acht'):
+        idx = [i for i, nm in enumerate(names) if nm == name]
+        if idx:
+            i = idx[int(np.argmax(rise[idx]))]
+            j = idx[int(np.argmax(rise_cop[idx]))]
+            print('  %-22s %+.2f m at %.0f m   (copernicus %+.2f m)' % (name, rise[i], dist[i], rise_cop[j]))
+
+
+def lap_spans(bridges, X, Z, dist, length, project):
+    # where the lap itself is a bridge: raceway ways tagged bridge that lie on
+    # the centerline (not the pit lane beside it)
+    bnodes = {el['id']: (el['lat'], el['lon']) for el in bridges['elements'] if el['type'] == 'node'}
+    spans = []
+    for el in bridges['elements']:
+        tags = el.get('tags', {})
+        if el['type'] != 'way' or tags.get('highway') != 'raceway' or tags.get('bridge') in (None, 'no'):
+            continue
+        pts = [project(bnodes[nid]) for nid in el['nodes'] if nid in bnodes]
+        ends = []
+        for px, pz in (pts[0], pts[-1]):
+            i = int(np.argmin((X - px) ** 2 + (Z - pz) ** 2))
+            ends.append((math.hypot(X[i] - px, Z[i] - pz), float(dist[i])))
+        if max(off for off, _ in ends) > 3:
+            continue
+        a, b = sorted(d for _, d in ends)
+        if b - a > length / 2:
+            a, b = b, a + length
+        spans.append({'start': round(a, 1), 'end': round(b, 1)})
+    spans.sort(key=lambda s: s['start'])
+    merged = []
+    for sp in spans:
+        if merged and sp['start'] <= merged[-1]['end'] + 5:
+            merged[-1]['end'] = max(merged[-1]['end'], sp['end'])
+        else:
+            merged.append(sp)
+    return merged
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cache', default='/tmp/nords')
     parser.add_argument('--out', default='static/models/Tracks/Nordschleife/nordschleife.json')
+    parser.add_argument('--no-dgm1', action='store_true', help='copernicus only, the old build')
     args = parser.parse_args()
     os.makedirs(args.cache, exist_ok=True)
     s, w, n, e = BBOX
@@ -253,32 +475,19 @@ def main():
 
     names = [section_at(d) for d in dist]
 
-    # road height: the lowest of the middle and 8 m either side, so a canopy
-    # over the road cell doesn't lift it, then smoothed and held to real grades
     tx = np.roll(X, -1) - np.roll(X, 1)
     tz = np.roll(Z, -1) - np.roll(Z, 1)
     tn = np.hypot(tx, tz)
     lx, lz = tz / tn, -tx / tn
-    center = np.array([dem_at(*unproject(x, z)) for x, z in zip(X, Z)])
-    near = center.copy()
-    for o in (-8.0, 8.0):
-        near = np.minimum(near, [dem_at(*unproject(x + ax * o, z + az * o)) for x, z, ax, az in zip(X, Z, lx, lz)])
-    y = gauss_loop(near, spacing, 22.0)
-    for name, (height, half) in CRESTS.items():
-        idx = [i for i, nm in enumerate(names) if nm == name]
-        if not idx:
-            continue
-        top = idx[int(np.argmax(center[idx]))]
-        offsets = (np.arange(count) - top + count // 2) % count - count // 2
-        y += height * np.exp(-((offsets * spacing) / half) ** 2)
-    for _ in range(6):
-        for i in range(1, count):
-            y[i] = np.clip(y[i], y[i - 1] - MAX_DROP * spacing, y[i - 1] + MAX_CLIMB * spacing)
-        for i in range(count - 2, -1, -1):
-            y[i] = np.clip(y[i], y[i + 1] - MAX_CLIMB * spacing, y[i + 1] + MAX_DROP * spacing)
-    y = gauss_loop(y, spacing, 6.0)
-    # the loop has to close on itself
-    y += np.linspace(0, y[0] - y[-1], count)
+    to_latlon = np.vectorize(unproject)
+    spans = lap_spans(bridges, X, Z, dist, length, project)
+    roll = None
+    if args.no_dgm1:
+        y = copernicus_profile(X, Z, lx, lz, names, count, spacing, dem_at, unproject)
+    else:
+        y, roll, copernicus = dgm1_profile(Dgm1(args.cache), X, Z, lx, lz, names, spans, count, spacing, to_latlon)
+        y_cop = copernicus_profile(X, Z, lx, lz, names, count, spacing, dem_at, unproject)
+        report_profile(y, y_cop, roll, names, dist, spacing)
 
     widths = [[round(float(start), 1), WIDTHS.get(name, DEFAULT_WIDTH)] for name, start in section_starts]
     banks = [[round(float(start), 1), BANKS.get(name, 0.0)] for name, start in section_starts]
@@ -295,6 +504,22 @@ def main():
     woods_soft = gauss_grid(woods.astype(np.float64), 1.2)
     surface = np.array([[dem_at(*unproject(x, z)) for x, z in zip(rx, rz)] for rx, rz in zip(gx, gz)])
     ground = gauss_grid(surface - CANOPY_M * woods_soft, 1.0)
+    if not args.no_dgm1:
+        # the lidar ground averaged over each cell (25 samples, 6 m apart),
+        # copernicus only where the dgm1 has nothing
+        sub = (np.arange(5) - 2) * (TERRAIN_CELL / 5)
+        acc = np.zeros(ground.shape)
+        hits = np.zeros(ground.shape)
+        dgm = Dgm1(args.cache)
+        for ox in sub:
+            for oz in sub:
+                lat, lon = to_latlon(gx + ox, gz + oz)
+                v = dgm.at_many(lat.ravel(), lon.ravel()).reshape(gx.shape)
+                good = np.isfinite(v)
+                acc[good] += v[good]
+                hits[good] += 1
+        lidar = np.where(hits > 12, acc / np.maximum(hits, 1), np.nan)
+        ground = np.where(np.isfinite(lidar), lidar, ground)
     heights_dm = np.clip(np.round(ground * 10), 0, 65535).astype('<u2')
     forest_u8 = np.clip(np.round(woods_soft * 255), 0, 255).astype(np.uint8)
 
@@ -336,7 +561,9 @@ def main():
         'attribution': [
             'Track centerline, corner names, bridges and forests: © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright)',
             'Elevation: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved',
-        ],
+        ] + ([] if args.no_dgm1 else [
+            'Road profile, camber and terrain: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0, www.lvermgeo.rlp.de [Daten bearbeitet] (DGM1)',
+        ]),
         'license': 'This derived database is available under the ODbL 1.0',
         'closed': True,
         'length': round(float(length), 1),
@@ -346,6 +573,7 @@ def main():
         'sections': [{'name': name, 'distance': round(float(start), 1)} for name, start in section_starts],
         'widths': widths,
         'banksDeg': banks,
+        **({} if roll is None else {'rollDeg': [round(float(r), 1) for r in roll]}),
         'concrete': concrete,
         'bridges': merged,
         'terrain': {

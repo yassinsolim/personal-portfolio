@@ -16,9 +16,14 @@
   - Centerline, corner names, overpasses and forest areas: © OpenStreetMap contributors,
     https://www.openstreetmap.org/copyright. The file is a derived database and is available
     under the Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)
-  - Elevation and terrain: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and
-    Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights
-    reserved. Used under the Copernicus DEM licence
+  - Road profile, camber and terrain: DGM1, the 1 m lidar ground model of Rhineland-Palatinate,
+    © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0, www.lvermgeo.rlp.de [Daten bearbeitet].
+    Licence: Datenlizenz Deutschland – Namensnennung – Version 2.0
+    (https://www.govdata.de/dl-de/by-2-0). Changes: sampled along the lap, fitted across the
+    road, smoothed, and averaged into 30 m terrain cells
+  - Elevation fallback outside the DGM1: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus
+    Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA;
+    all rights reserved. Used under the Copernicus DEM licence
   - Built by `scripts/track/build_nordschleife.py`; the in-game race menu carries the credit
 
 - Race engine audio (replaced September 2026, see "Race Audio" below)
