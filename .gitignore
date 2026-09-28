@@ -11,3 +11,7 @@ exports/
 .tmp-validation/
 *.log
 *.pid
+
+# Environment variables
+.env
+.env.local
