@@ -99,6 +99,7 @@ export default class RaceChaseCamera {
     pitchOffset: number;
     lookIdle: number;
     viewIndex: number;
+    farOverride = 0;
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
@@ -179,6 +180,17 @@ export default class RaceChaseCamera {
             this.cycleView();
         };
         document.addEventListener('keydown', this.viewKeyHandler);
+        // the graphics preset's draw distance
+        UIEventBus.on(
+            'race:drawDistance',
+            (state: { far?: number } | undefined) => {
+                this.farOverride = state?.far || 0;
+                if (!this.active) return;
+                const camera = this.application.camera.instance;
+                camera.far = this.farOverride || RACE_CAMERA_FAR;
+                camera.updateProjectionMatrix();
+            }
+        );
         UIEventBus.on('race:cycleCamera', () => {
             if (this.active) this.cycleView();
         });
@@ -407,7 +419,7 @@ export default class RaceChaseCamera {
             this.time = 0;
             this.initialized = false;
             camera.near = RACE_CAMERA_NEAR;
-            camera.far = RACE_CAMERA_FAR;
+            camera.far = this.farOverride || RACE_CAMERA_FAR;
             camera.fov = this.getView().fov;
             camera.updateProjectionMatrix();
             return;

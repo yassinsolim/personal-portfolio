@@ -589,8 +589,7 @@ body.race-mode-touch #ui-app {
     justify-content: space-between;
     align-items: flex-end;
     gap: 16px;
-    padding: 0
-        max(14px, env(safe-area-inset-right))
+    padding: 0 max(14px, env(safe-area-inset-right))
         max(12px, env(safe-area-inset-bottom))
         max(14px, env(safe-area-inset-left));
     pointer-events: none;
@@ -757,7 +756,7 @@ body.race-mode-touch #ui-app {
         -o-animation: 0.65s blink step-end infinite;
         animation: 0.65s blink step-end infinite;
     }
-    
+
     .loading-screen-body {
         padding-left: 16px;
         padding-right: 16px;
@@ -858,7 +857,9 @@ body.race-mode-touch #ui-app {
         max-width: 190px;
     }
 
-    body.race-mode-active .look-hint > div:not(.race-toggle):not(.race-pause-toggle) {
+    body.race-mode-active
+        .look-hint
+        > div:not(.race-toggle):not(.race-pause-toggle) {
         display: none;
     }
 
@@ -911,4 +912,15 @@ body.race-mode-touch #ui-app {
     margin: -6px 0 12px;
     font-size: 10px;
     opacity: 0.5;
+}
+
+/* weak gpus and the performance preset: a software compositor pays ~25 ms a
+   frame for backdrop blur, so the panels go solid instead */
+.race-lite .race-hud-board,
+.race-lite .race-menu-overlay,
+.race-lite .race-touch-button,
+.race-lite .race-debug-panel {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(0, 0, 0, 0.72);
 }

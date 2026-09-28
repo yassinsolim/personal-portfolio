@@ -154,7 +154,7 @@ export default class RaceForest {
         const trees = this.placeTrees(
             track,
             terrain,
-            quality === 'high' ? 32000 : 12000
+            quality === 'high' ? 32000 : 8000
         );
         this.count = trees.reduce((sum, chunk) => sum + chunk.length, 0);
         trees.forEach((chunk, index) =>

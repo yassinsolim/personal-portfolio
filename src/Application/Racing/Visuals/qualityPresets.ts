@@ -24,6 +24,11 @@ export type PresetSettings = {
     treeShadowRange: number;
     // real tree geometry out to here, billboards past it
     nearTreeRange: number;
+    // camera far plane. the haze already hides everything past about 6 km,
+    // shorter than that the fog closes in to hide the far plane
+    drawDistance: number;
+    // the scattering sky shader, or just the fog color behind everything
+    sky: boolean;
 };
 
 export const PRESETS: Record<RacePreset, PresetSettings> = {
@@ -39,6 +44,8 @@ export const PRESETS: Record<RacePreset, PresetSettings> = {
         shadowSize: 2048,
         treeShadowRange: 120,
         nearTreeRange: 190,
+        drawDistance: 9000,
+        sky: true,
     },
     balanced: {
         maxPixelRatio: 1.5,
@@ -52,6 +59,8 @@ export const PRESETS: Record<RacePreset, PresetSettings> = {
         shadowSize: 2048,
         treeShadowRange: 75,
         nearTreeRange: 120,
+        drawDistance: 6000,
+        sky: true,
     },
     performance: {
         maxPixelRatio: 1,
@@ -65,11 +74,17 @@ export const PRESETS: Record<RacePreset, PresetSettings> = {
         shadowSize: 1024,
         treeShadowRange: 0,
         nearTreeRange: 50,
+        drawDistance: 2500,
+        sky: true,
     },
 };
 
 // on top of the preset for weak gpus
-export const WEAK_GPU_LIMITS = { maxPixelRatio: 0.75, nearTreeRange: 0 };
+export const WEAK_GPU_LIMITS = {
+    maxPixelRatio: 0.65,
+    nearTreeRange: 0,
+    drawDistance: 1000,
+};
 
 export const settingsFor = (
     preset: RacePreset,
@@ -87,6 +102,8 @@ export const settingsFor = (
             settings.nearTreeRange,
             WEAK_GPU_LIMITS.nearTreeRange
         ),
+        drawDistance: WEAK_GPU_LIMITS.drawDistance,
+        sky: false,
     };
 };
 
@@ -99,6 +116,9 @@ const WEAK_GPU =
 export const detectGpuTier = (
     gl: WebGLRenderingContext | WebGL2RenderingContext
 ): GpuTier => {
+    // ?raceTier=low or high forces it, for testing the light path on a fast machine
+    const forced = new URLSearchParams(window.location.search).get('raceTier');
+    if (forced === 'low' || forced === 'high') return forced;
     if (isLowPowerDevice() || isMobileDevice()) return 'low';
     let renderer = '';
     try {

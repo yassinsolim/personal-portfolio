@@ -10,8 +10,11 @@ import {
 // things along the road: armco on both sides with posts, the start gantry
 // and line, and painted words on the asphalt like the ring's graffiti
 const BARRIER_INSET = 0.15;
-const POST_SPACING = 4;
-const POST_CHUNKS = 16;
+const POST_HALF_WIDTH = 0.06;
+const POST_HALF_DEPTH = 0.045;
+const POST_HEIGHT = 0.82;
+const RAIL_COLOR = new THREE.Color(0xc4c8cc);
+const POST_COLOR = new THREE.Color(0x6d7176);
 // w-beam cross section: out from the barrier line toward the road, height
 // segments of the rail along the lap, for culling
 const ARMCO_SEGMENTS = 60;
@@ -43,13 +46,23 @@ export default class RaceTrackside {
     armcoMaterial: THREE.MeshStandardMaterial;
     postMaterial: THREE.MeshStandardMaterial;
 
-    constructor(parent: THREE.Object3D, track: NordschleifeTrack) {
+    // a ring (and post) every this many meters along the armco
+    ringSpacing: number;
+
+    constructor(
+        parent: THREE.Object3D,
+        track: NordschleifeTrack,
+        lite = false
+    ) {
         this.track = track;
+        this.ringSpacing = lite ? 8 : 4;
         this.root = new THREE.Group();
         this.root.name = 'race-trackside';
         parent.add(this.root);
         this.armcoMaterial = new THREE.MeshStandardMaterial({
-            color: 0xc4c8cc,
+            // rail and post shades come from the vertex colors
+            color: 0xffffff,
+            vertexColors: true,
             // weathered galvanized steel, dull enough not to flare
             metalness: 0.75,
             roughness: 0.58,
@@ -61,7 +74,6 @@ export default class RaceTrackside {
             roughness: 0.5,
         });
         this.buildArmco();
-        this.buildPosts();
         this.buildStart();
         this.buildRoadWords();
         this.buildBridges();
@@ -288,8 +300,9 @@ export default class RaceTrackside {
         const track = this.track;
         const curve = track.visualCurve;
         const segments = ARMCO_SEGMENTS;
-        // about every 4 m, a whole number per segment
-        const samples = segments * Math.ceil(track.length / 4 / segments);
+        // a whole number of rings per segment
+        const samples =
+            segments * Math.ceil(track.length / this.ringSpacing / segments);
         const perSegment = samples / segments;
         const point = new THREE.Vector3();
         const tangent = new THREE.Vector3();
@@ -302,6 +315,8 @@ export default class RaceTrackside {
         // one pass for the rail vertices of both sides, so the ribbon frame
         // stays continuous around the lap
         const rails: Record<number, number[]> = { 1: [], [-1]: [] };
+        // per ring: the post foot, the way out from the road, and along it
+        const posts: Record<number, number[]> = { 1: [], [-1]: [] };
         [1, -1].forEach((sign) => {
             previousSide.set(1, 0, 0);
             for (let i = 0; i <= samples; i++) {
@@ -318,6 +333,15 @@ export default class RaceTrackside {
                 const lateral =
                     sign * (track.getVergeHalfWidth(t) - BARRIER_INSET);
                 base.copy(point).addScaledVector(side, lateral);
+                posts[sign].push(
+                    base.x + side.x * sign * 0.1,
+                    base.y,
+                    base.z + side.z * sign * 0.1,
+                    side.x * sign,
+                    side.z * sign,
+                    tangent.x,
+                    tangent.z
+                );
                 ARMCO_PROFILE.forEach(([inward, height]) => {
                     vertex
                         .copy(base)
@@ -331,6 +355,7 @@ export default class RaceTrackside {
             const first = segment * perSegment;
             const rings = perSegment + 1;
             const positions: number[] = [];
+            const colors: number[] = [];
             const indices: number[] = [];
             [1, -1].forEach((sign) => {
                 const start = positions.length / 3;
@@ -341,6 +366,9 @@ export default class RaceTrackside {
                         (first + rings) * columns * 3
                     )
                 );
+                for (let k = 0; k < rings * columns; k++) {
+                    colors.push(RAIL_COLOR.r, RAIL_COLOR.g, RAIL_COLOR.b);
+                }
                 for (let i = 0; i < perSegment; i++) {
                     for (let c = 0; c < columns; c++) {
                         const next = (c + 1) % columns;
@@ -352,6 +380,60 @@ export default class RaceTrackside {
                         else indices.push(a, b, d, b, e, d);
                     }
                 }
+                // a post at every ring: the faces you can see from the road
+                // (front, both sides, top) in the same mesh as the rail
+                const p = posts[sign];
+                for (let i = first; i < first + perSegment; i++) {
+                    const [fx, fy, fz, ox, oz, tx, tz] = p.slice(
+                        i * 7,
+                        i * 7 + 7
+                    );
+                    const hw = POST_HALF_WIDTH;
+                    const hd = POST_HALF_DEPTH;
+                    const corner = (u: number, v: number, h: number) => [
+                        fx + tx * u * hw + ox * v * hd,
+                        fy + h,
+                        fz + tz * u * hw + oz * v * hd,
+                    ];
+                    const quad = (q: number[][]) => {
+                        const at = positions.length / 3;
+                        q.forEach((c) => {
+                            positions.push(c[0], c[1], c[2]);
+                            colors.push(
+                                POST_COLOR.r,
+                                POST_COLOR.g,
+                                POST_COLOR.b
+                            );
+                        });
+                        indices.push(at, at + 1, at + 2, at, at + 2, at + 3);
+                    };
+                    const h = POST_HEIGHT;
+                    // front faces the road (v = -1)
+                    quad([
+                        corner(-1, -1, 0),
+                        corner(1, -1, 0),
+                        corner(1, -1, h),
+                        corner(-1, -1, h),
+                    ]);
+                    quad([
+                        corner(1, -1, 0),
+                        corner(1, 1, 0),
+                        corner(1, 1, h),
+                        corner(1, -1, h),
+                    ]);
+                    quad([
+                        corner(-1, 1, 0),
+                        corner(-1, -1, 0),
+                        corner(-1, -1, h),
+                        corner(-1, 1, h),
+                    ]);
+                    quad([
+                        corner(-1, -1, h),
+                        corner(1, -1, h),
+                        corner(1, 1, h),
+                        corner(-1, 1, h),
+                    ]);
+                }
             });
             const geometry = new THREE.BufferGeometry();
             geometry.setIndex(indices);
@@ -359,66 +441,15 @@ export default class RaceTrackside {
                 'position',
                 new THREE.Float32BufferAttribute(positions, 3)
             );
+            geometry.setAttribute(
+                'color',
+                new THREE.Float32BufferAttribute(colors, 3)
+            );
             geometry.computeVertexNormals();
             geometry.computeBoundingSphere();
             const mesh = new THREE.Mesh(geometry, this.armcoMaterial);
             mesh.name = `race-armco-${segment}`;
             mesh.receiveShadow = true;
-            this.root.add(mesh);
-        }
-    }
-
-    buildPosts() {
-        const track = this.track;
-        const curve = track.visualCurve;
-        const length = track.length;
-        const count = Math.floor(length / POST_SPACING);
-        const geometry = new THREE.BoxGeometry(0.09, 0.82, 0.12);
-        geometry.translate(0, 0.41, 0);
-        const point = new THREE.Vector3();
-        const tangent = new THREE.Vector3();
-        const normal = new THREE.Vector3();
-        const side = new THREE.Vector3(1, 0, 0);
-        const previousSide = new THREE.Vector3(1, 0, 0);
-        const matrix = new THREE.Matrix4();
-        const basis = new THREE.Matrix4();
-        const position = new THREE.Vector3();
-        const perChunk = Math.ceil(count / POST_CHUNKS);
-        for (let chunk = 0; chunk < POST_CHUNKS; chunk++) {
-            const first = chunk * perChunk;
-            const last = Math.min(count, first + perChunk);
-            if (last <= first) break;
-            const mesh = new THREE.InstancedMesh(
-                geometry,
-                this.postMaterial,
-                (last - first) * 2
-            );
-            mesh.name = `race-armco-posts-${chunk}`;
-            let index = 0;
-            for (let i = first; i < last; i++) {
-                const t = i / count;
-                track.getRibbonFrame(
-                    curve,
-                    t,
-                    point,
-                    tangent,
-                    normal,
-                    side,
-                    previousSide
-                );
-                for (const sign of [1, -1]) {
-                    const lateral =
-                        sign *
-                        (track.getVergeHalfWidth(t) - BARRIER_INSET + 0.1);
-                    position.copy(point).addScaledVector(side, lateral);
-                    basis.makeBasis(side, normal, tangent);
-                    matrix.copy(basis).setPosition(position);
-                    mesh.setMatrixAt(index++, matrix);
-                }
-            }
-            mesh.instanceMatrix.needsUpdate = true;
-            mesh.computeBoundingSphere();
-            mesh.castShadow = true;
             this.root.add(mesh);
         }
     }

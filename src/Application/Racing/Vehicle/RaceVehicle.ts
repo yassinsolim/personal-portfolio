@@ -1,10 +1,12 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
 import UIEventBus from '../../UI/EventBus';
 import { applyBmwM5GlassTint } from '../../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
+import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -317,6 +319,8 @@ export default class RaceVehicle {
     wheelContactPoints: THREE.Vector3[];
     // grid slot at the start line in a lobby, 0 is pole
     spawnSlot: number;
+    // weak gpu: cars get phong materials when they're prepared
+    cheapMaterials: boolean;
     bodyRadius: number;
     bodySize: THREE.Vector3;
     position: THREE.Vector3;
@@ -432,6 +436,7 @@ export default class RaceVehicle {
         this.trackBound = true;
         this.wheelContactPoints = [0, 1, 2, 3].map(() => new THREE.Vector3());
         this.spawnSlot = 0;
+        this.cheapMaterials = false;
         this.physics = new VehiclePhysics(
             buildPhysicsSpec(
                 carOptionsById[this.currentCarId] ||
@@ -590,6 +595,16 @@ export default class RaceVehicle {
         });
     }
 
+    // switch to the weak gpu car materials: models already prepared are
+    // built again, the one on screen swapped for its new version
+    useCheapMaterials() {
+        if (this.cheapMaterials) return;
+        this.cheapMaterials = true;
+        this.cachedModels.clear();
+        if (this.currentCarId && this.carModel)
+            this.setModel(this.currentCarId);
+    }
+
     ensurePreparedModel(carId: string): Promise<THREE.Group | null> {
         const prepared = this.getPreparedModel(carId);
         if (prepared) return Promise.resolve(prepared);
@@ -604,11 +619,18 @@ export default class RaceVehicle {
                 .catch(() => null);
         }
 
+        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite)
+        const cheap = this.cheapMaterials;
+        const path = cheap
+            ? option.modelPath.replace(/\.glb$/, '.lite.glb')
+            : option.modelPath;
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
             this.resources.loaders.gltfLoader.load(
-                option.modelPath,
+                path,
                 (gltf) => {
-                    this.resources.items.gltfModel[option.resourceName] = gltf;
+                    if (!cheap)
+                        this.resources.items.gltfModel[option.resourceName] =
+                            gltf;
                     const loadedModel = this.prepareModel(gltf.scene.clone(true), carId);
                     resolve(loadedModel);
                 },
@@ -622,7 +644,9 @@ export default class RaceVehicle {
         this.loadingPromises.set(carId, loadPromise);
         loadPromise
             .then((loadedModel) => {
-                this.cachedModels.set(carId, loadedModel);
+                // a full model finishing after the switch to lite isn't kept
+                if (cheap === this.cheapMaterials)
+                    this.cachedModels.set(carId, loadedModel);
             })
             .catch((error) => {
                 console.warn(
@@ -642,6 +666,8 @@ export default class RaceVehicle {
     getPreparedModel(carId: string) {
         const cached = this.cachedModels.get(carId);
         if (cached) return cached;
+        // the preloaded model is the full detail one
+        if (this.cheapMaterials) return null;
 
         const option = carOptionsById[carId];
         if (!option) return null;
@@ -742,6 +768,16 @@ export default class RaceVehicle {
                 shiftedSize.x * shiftedSize.x + shiftedSize.z * shiftedSize.z
             ) * 0.42
         );
+
+        if (this.cheapMaterials) {
+            const envMap = getCheapSkyCube();
+            model.traverse((child) => {
+                const mesh = child as THREE.Mesh;
+                if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+                mesh.material = toCheapCarMaterial(mesh.material, envMap);
+            });
+        }
+        this.mergeStaticMeshes(model, wheelRig);
 
         // soft darkening right under the car, the sun shadow alone reads as
         // floating at the contact patches
@@ -3052,6 +3088,9 @@ export default class RaceVehicle {
         return hints.some((hint) => lowered.includes(hint));
     }
 
+    // a copy per mesh: the finish code tints some meshes by name (m5 side
+    // windows), which must not reach others that share the source material.
+    // merging matches materials by what they look like, not by object
     cloneMaterials(model: THREE.Object3D) {
         model.traverse((child) => {
             if (!(child instanceof THREE.Mesh) || !child.material) return;
@@ -3060,6 +3099,266 @@ export default class RaceVehicle {
             } else {
                 child.material = child.material.clone();
             }
+        });
+    }
+
+    // a car model is dozens to a thousand meshes, most of them trim sharing a
+    // few materials. merging them per material cuts the draw calls (and the
+    // shadow pass) to a handful. each wheel and linked part is merged within
+    // itself, since it spins and steers as one piece
+    mergeStaticMeshes(model: THREE.Object3D, wheelRig: WheelRig[]) {
+        model.updateMatrixWorld(true);
+        // linked visuals are wheel parts that live elsewhere in the model and
+        // follow their wheel rigidly, one draw each (the m5 has 113). as
+        // children of the wheel they move the same and can merge with it
+        wheelRig.forEach((wheel) => {
+            wheel.linkedVisuals.forEach((linked) =>
+                wheel.object.attach(linked.object)
+            );
+            wheel.linkedVisuals.length = 0;
+        });
+        const roots = new Set<THREE.Object3D>();
+        wheelRig.forEach((wheel) => roots.add(wheel.object));
+        model.updateMatrixWorld(true);
+        this.mergeUnder(model, roots);
+        roots.forEach((root) => this.mergeUnder(root, roots));
+    }
+
+    // on a weak gpu every opaque untextured unlit part of a car can share one
+    // vertex colored material, the e92 alone is ~40 of those
+    isPlainCheap(material: THREE.Material) {
+        const m = material as THREE.MeshPhongMaterial;
+        if (!this.cheapMaterials || !m.isMeshPhongMaterial) return false;
+        if (m.transparent || m.alphaTest > 0) return false;
+        if (m.map || m.normalMap || m.alphaMap || m.emissiveMap) return false;
+        return m.emissive.r + m.emissive.g + m.emissive.b < 1e-3;
+    }
+
+    bakeColor(geometry: THREE.BufferGeometry, color: THREE.Color) {
+        const colors = geometry.getAttribute('color') as THREE.BufferAttribute;
+        for (let i = 0; i < colors.count; i++) {
+            colors.setXYZ(
+                i,
+                colors.getX(i) * color.r,
+                colors.getY(i) * color.g,
+                colors.getZ(i) * color.b
+            );
+        }
+    }
+
+    // the shared one takes the average shine of its parts, weighted by size
+    plainCheapMaterial(meshes: THREE.Mesh[]) {
+        let weight = 0;
+        let reflectivity = 0;
+        let shininess = 0;
+        let specular = 0;
+        meshes.forEach((mesh) => {
+            const m = mesh.material as THREE.MeshPhongMaterial;
+            const w = mesh.geometry.getAttribute('position').count;
+            weight += w;
+            reflectivity += m.reflectivity * w;
+            shininess += m.shininess * w;
+            specular += m.specular.r * w;
+        });
+        const first = meshes[0].material as THREE.MeshPhongMaterial;
+        return new THREE.MeshPhongMaterial({
+            name: 'car-plain',
+            vertexColors: true,
+            side: first.side,
+            envMap: first.envMap,
+            combine: THREE.MixOperation,
+            reflectivity: reflectivity / weight,
+            shininess: shininess / weight,
+            specular: new THREE.Color().setScalar(specular / weight),
+        });
+    }
+
+    // exports often repeat a material per primitive, so match on what it
+    // looks like rather than which object it is
+    materialSignature(material: THREE.Material) {
+        const m = material as THREE.MeshPhysicalMaterial;
+        const tex = (t?: THREE.Texture | null) =>
+            t ? t.source?.uuid || t.uuid : '-';
+        return [
+            m.type,
+            m.color?.getHexString(),
+            m.emissive?.getHexString(),
+            m.emissiveIntensity,
+            m.roughness,
+            m.metalness,
+            m.opacity,
+            m.transparent,
+            m.side,
+            m.alphaTest,
+            m.depthWrite,
+            m.vertexColors,
+            m.clearcoat,
+            m.clearcoatRoughness,
+            m.transmission,
+            m.envMapIntensity,
+            m.polygonOffset,
+            tex(m.map),
+            tex(m.normalMap),
+            tex(m.roughnessMap),
+            tex(m.metalnessMap),
+            tex(m.emissiveMap),
+            tex(m.alphaMap),
+            tex(m.aoMap),
+        ].join(':');
+    }
+
+    // what a material reads from its geometry, the rest can be dropped
+    attributesFor(material: THREE.Material) {
+        const m = material as THREE.MeshStandardMaterial;
+        const needed: Record<string, number> = { position: 3, normal: 3 };
+        if (
+            m.map ||
+            m.normalMap ||
+            m.roughnessMap ||
+            m.metalnessMap ||
+            m.alphaMap ||
+            m.emissiveMap ||
+            m.bumpMap
+        ) {
+            needed.uv = 2;
+        }
+        if (m.aoMap || m.lightMap) needed.uv1 = 2;
+        if (m.vertexColors) needed.color = 3;
+        return needed;
+    }
+
+    // same attribute set on every part so they merge: extras dropped, missing
+    // uvs zeroed, missing colors white, missing normals computed
+    normalizeAttributes(
+        geometry: THREE.BufferGeometry,
+        needed: Record<string, number>
+    ) {
+        Object.keys(geometry.attributes).forEach((name) => {
+            if (!(name in needed)) geometry.deleteAttribute(name);
+        });
+        geometry.morphAttributes = {};
+        const count = geometry.getAttribute('position').count;
+        Object.entries(needed).forEach(([name, size]) => {
+            const existing = geometry.getAttribute(name) as
+                THREE.BufferAttribute | undefined;
+            if (
+                existing &&
+                existing.itemSize === size &&
+                !(existing as unknown as THREE.InterleavedBufferAttribute)
+                    .isInterleavedBufferAttribute &&
+                existing.array instanceof Float32Array &&
+                !existing.normalized
+            ) {
+                return;
+            }
+            if (existing) {
+                // interleaved, normalized or integer data: plain floats instead
+                const values = new Float32Array(count * size);
+                for (let i = 0; i < count; i++) {
+                    for (let k = 0; k < size; k++)
+                        values[i * size + k] = existing.getComponent(i, k);
+                }
+                geometry.setAttribute(
+                    name,
+                    new THREE.BufferAttribute(values, size)
+                );
+                return;
+            }
+            if (name === 'normal') {
+                geometry.computeVertexNormals();
+                return;
+            }
+            const fill = name === 'color' ? 1 : 0;
+            geometry.setAttribute(
+                name,
+                new THREE.BufferAttribute(
+                    new Float32Array(count * size).fill(fill),
+                    size
+                )
+            );
+        });
+        return geometry;
+    }
+
+    // merge the meshes below root, stopping at any other root in the set
+    mergeUnder(root: THREE.Object3D, roots: Set<THREE.Object3D>) {
+        const ownerOf = (object: THREE.Object3D) => {
+            for (
+                let node: THREE.Object3D | null = object;
+                node;
+                node = node.parent
+            ) {
+                if (node === root) return true;
+                if (roots.has(node)) return false;
+            }
+            return false;
+        };
+        const toRoot = new THREE.Matrix4().copy(root.matrixWorld).invert();
+        const groups = new Map<string, THREE.Mesh[]>();
+        root.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh)
+                return;
+            if ((mesh as THREE.InstancedMesh).isInstancedMesh) return;
+            if (Array.isArray(mesh.material) || !mesh.visible) return;
+            const geometry = mesh.geometry;
+            if (Object.keys(geometry.morphAttributes).length) return;
+            // a root that is a mesh itself stays as it is, hiding it would
+            // hide what's merged under it too
+            if (mesh === root || roots.has(mesh)) return;
+            if (!ownerOf(mesh.parent || mesh)) return;
+            if (!geometry.getAttribute('position')) return;
+            // transparent parts sort per object (glass over lights), merging
+            // them would scramble that order
+            if (mesh.material.transparent) return;
+            // plain parts group by how shiny they are, so tires stay matte
+            const phong = mesh.material as THREE.MeshPhongMaterial;
+            const look = this.isPlainCheap(mesh.material)
+                ? `plain:${phong.side}:${Math.round(phong.reflectivity * 10)}:${Math.round(phong.shininess / 30)}`
+                : this.materialSignature(mesh.material);
+            const key = `${look}|${mesh.castShadow}|${mesh.renderOrder}`;
+            const list = groups.get(key);
+            if (list) list.push(mesh);
+            else groups.set(key, [mesh]);
+        });
+        const matrix = new THREE.Matrix4();
+        groups.forEach((meshes) => {
+            if (meshes.length < 2) return;
+            const indexed = meshes.every((mesh) => mesh.geometry.index);
+            const plain = this.isPlainCheap(
+                meshes[0].material as THREE.Material
+            );
+            const needed = plain
+                ? { position: 3, normal: 3, color: 3 }
+                : this.attributesFor(meshes[0].material as THREE.Material);
+            const parts = meshes.map((mesh) => {
+                matrix.multiplyMatrices(toRoot, mesh.matrixWorld);
+                const source = mesh.material as THREE.MeshPhongMaterial;
+                const clone = mesh.geometry.clone();
+                // vertex colors only count where the material used them
+                if (plain && !source.vertexColors)
+                    clone.deleteAttribute('color');
+                // floats first: quantized positions would clip when moved
+                let geometry = this.normalizeAttributes(clone, needed);
+                if (plain) this.bakeColor(geometry, source.color);
+                if (!indexed && geometry.index)
+                    geometry = geometry.toNonIndexed();
+                return geometry.applyMatrix4(matrix);
+            });
+            const merged = mergeGeometries(parts);
+            parts.forEach((part) => part.dispose());
+            if (!merged) return;
+            const first = meshes[0];
+            const mesh = new THREE.Mesh(
+                merged,
+                plain ? this.plainCheapMaterial(meshes) : first.material
+            );
+            mesh.name = `${first.name || 'car'}-merged`;
+            mesh.castShadow = first.castShadow;
+            mesh.receiveShadow = first.receiveShadow;
+            mesh.renderOrder = first.renderOrder;
+            root.add(mesh);
+            meshes.forEach((original) => original.removeFromParent());
         });
     }
 

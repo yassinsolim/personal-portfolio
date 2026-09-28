@@ -1,6 +1,8 @@
-// usage: node scripts/optimize-models.mjs [--src models-src] [--out static] [carId|flipper ...]
+// usage: node scripts/optimize-models.mjs [--src models-src] [--out static] [--lite] [carId|flipper ...]
 // reads the original sketchfab exports from --src and writes web-ready glbs to
-// --out at the same relative path, so carOptions model paths stay unchanged
+// --out at the same relative path, so carOptions model paths stay unchanged.
+// --lite reads the web glbs instead and writes <model>.lite.glb next to them:
+// the low detail race car weak gpus load (see carOptions litePath)
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { NodeIO, PropertyType } from '@gltf-transform/core';
@@ -69,8 +71,16 @@ const readFlag = (flag, fallback) => {
     args.splice(index, 2);
     return value;
 };
-const srcRoot = readFlag('--src', 'models-src');
+const liteIndex = args.indexOf('--lite');
+const lite = liteIndex >= 0;
+if (lite) args.splice(liteIndex, 1);
+const srcRoot = readFlag('--src', lite ? 'static' : 'models-src');
 const outRoot = readFlag('--out', 'static');
+// the lite cars are only seen from the chase camera on weak gpus: a few mm of
+// error and small textures, about a fifth of the triangles
+const LITE_ERROR_METERS = 0.01;
+const LITE_TEXTURE_SIZE = 512;
+const litePathOf = (modelPath) => modelPath.replace(/\.glb$/, '.lite.glb');
 
 const models = [
     ...carOptions.map((car) => ({
@@ -78,8 +88,9 @@ const models = [
         modelPath: car.modelPath,
         lengthMeters: car.lengthMeters,
         simplifyMaterials: simplifyMaterialsByModel[car.id] || [],
+        simplifyAll: lite,
     })),
-    ...extraModels,
+    ...(lite ? [] : extraModels),
 ];
 const selected = args.length
     ? models.filter((model) => args.includes(model.id))
@@ -139,7 +150,12 @@ const primitiveExtent = (prim) => {
 
 // meshoptimizer's error is relative to each primitive's own extent, so convert
 // one absolute budget into a per primitive relative error
-const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
+const simplifyByAbsoluteError = (
+    document,
+    errorModelUnits,
+    shouldSimplify,
+    lockBorder = true
+) => {
     for (const [mesh, scale] of collectMeshScales(document)) {
         const prims = mesh
             .listPrimitives()
@@ -153,7 +169,7 @@ const simplifyByAbsoluteError = (document, errorModelUnits, shouldSimplify) => {
                 simplifier: MeshoptSimplifier,
                 ratio: 0,
                 error: errorModelUnits / scale / extent,
-                lockBorder: true,
+                lockBorder,
             });
         }
     }
@@ -173,7 +189,11 @@ await MeshoptSimplifier.ready;
 
 for (const model of selected) {
     const input = path.join(srcRoot, model.modelPath);
-    const output = path.join(outRoot, model.modelPath);
+    const output = path.join(
+        outRoot,
+        lite ? litePathOf(model.modelPath) : model.modelPath
+    );
+    const textureSize = lite ? LITE_TEXTURE_SIZE : TEXTURE_MAX_SIZE;
     const inputBytes = (await fs.stat(input)).size;
     const started = Date.now();
 
@@ -192,10 +212,13 @@ for (const model of selected) {
     if (model.simplifyAll || simplifyMaterials.size) {
         simplifyByAbsoluteError(
             document,
-            SIMPLIFY_ERROR_METERS * unitsPerMeter,
+            (lite ? LITE_ERROR_METERS : SIMPLIFY_ERROR_METERS) * unitsPerMeter,
             (prim) =>
                 model.simplifyAll ||
-                simplifyMaterials.has(prim.getMaterial()?.getName())
+                simplifyMaterials.has(prim.getMaterial()?.getName()),
+            // car panels are open shells, locked borders keep most of them
+            // untouched. the lite cars accept small seams instead
+            !lite
         );
     }
     await document.transform(
@@ -203,14 +226,14 @@ for (const model of selected) {
         textureCompress({
             encoder: sharp,
             targetFormat: 'webp',
-            resize: [TEXTURE_MAX_SIZE, TEXTURE_MAX_SIZE],
+            resize: [textureSize, textureSize],
             slots: /^(?!normalTexture$).*/,
             quality: 85,
         }),
         textureCompress({
             encoder: sharp,
             targetFormat: 'webp',
-            resize: [TEXTURE_MAX_SIZE, TEXTURE_MAX_SIZE],
+            resize: [textureSize, textureSize],
             slots: /^normalTexture$/,
             quality: 95,
         }),
