@@ -10,6 +10,7 @@ import {
     type AssistPreset,
 } from '../Racing/Vehicle/assists';
 import './style.css';
+import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -205,6 +206,8 @@ const sanitizeLobbyCode = (value: string) =>
         .slice(0, 8);
 
 const getStoredLobbyCode = () => {
+    const invite = getInviteLobbyCode();
+    if (invite) return invite;
     try {
         return sanitizeLobbyCode(
             window.localStorage.getItem(LAST_LOBBY_CODE_KEY) || ''
@@ -543,6 +546,16 @@ const App = () => {
 
     const handlePlaySolo = () => {
         void requestMobileRacePresentation();
+        // opened from an invite link: the play button joins that lobby
+        const invite = getInviteLobbyCode();
+        if (invite && multiplayer.mode !== 'lobby') {
+            eventBus.dispatch('race:multiplayerJoinLobby', {
+                playerName,
+                lobbyCode: invite,
+                startRace: true,
+            });
+            return;
+        }
         eventBus.dispatch('race:multiplayerPlaySolo', {
             playerName,
             startRace: true,
@@ -599,9 +612,11 @@ const App = () => {
         });
     };
 
+    // copies a link that joins this lobby, not just the code
     const handleCopyLobbyCode = async () => {
-        const code = multiplayer.lobbyCode || '';
-        if (!code) return;
+        const lobby = multiplayer.lobbyCode || '';
+        if (!lobby) return;
+        const code = buildInviteLink(lobby);
 
         try {
             if (navigator.clipboard?.writeText) {
@@ -812,7 +827,7 @@ const App = () => {
                 <div className="lobby-code-banner" data-prevent-click>
                     <span>Lobby Code: {multiplayer.lobbyCode}</span>
                     <button type="button" onClick={handleCopyLobbyCode}>
-                        {lobbyCodeCopyState || 'Copy'}
+                        {lobbyCodeCopyState || 'Copy invite link'}
                     </button>
                 </div>
             )}

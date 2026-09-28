@@ -315,6 +315,8 @@ export default class RaceVehicle {
     // test benches drive on a flat pad away from the track and turn this off
     trackBound: boolean;
     wheelContactPoints: THREE.Vector3[];
+    // grid slot at the start line in a lobby, 0 is pole
+    spawnSlot: number;
     bodyRadius: number;
     bodySize: THREE.Vector3;
     position: THREE.Vector3;
@@ -429,6 +431,7 @@ export default class RaceVehicle {
         this.startResets = 0;
         this.trackBound = true;
         this.wheelContactPoints = [0, 1, 2, 3].map(() => new THREE.Vector3());
+        this.spawnSlot = 0;
         this.physics = new VehiclePhysics(
             buildPhysicsSpec(
                 carOptionsById[this.currentCarId] ||
@@ -3422,10 +3425,15 @@ export default class RaceVehicle {
             this.currentTuning.startForwardOffsetMeters || 0;
 
         this.forward.set(tangent.x, 0, tangent.z).normalize();
+        // in a lobby each player gets a grid slot: two abreast, 9 m rows
+        const left = new THREE.Vector3(this.forward.z, 0, -this.forward.x);
+        const lateral = this.spawnSlot % 2 === 0 ? 2.4 : -2.4;
+        const row = Math.floor(this.spawnSlot / 2);
         this.position
             .copy(point)
             .add(new THREE.Vector3(0, 180, 0))
-            .addScaledVector(this.forward, startForwardOffset);
+            .addScaledVector(this.forward, startForwardOffset - row * 9)
+            .addScaledVector(left, this.spawnSlot > 0 ? lateral : 0);
         this.yaw = Math.atan2(this.forward.x, this.forward.z);
 
         this.surfaceNormal.set(0, 1, 0);

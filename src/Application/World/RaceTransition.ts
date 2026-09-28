@@ -4,6 +4,7 @@ import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import { CameraKey } from '../Camera/Camera';
 import { carOptionsById, getStoredCarId } from '../carOptions';
+import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 
 // click the car in the room: it rocks on its springs, the camera swings in
 // behind it, then the room opens up from the car outward onto the ring while
@@ -203,22 +204,32 @@ export default class RaceTransition {
         } catch {
             // default name
         }
+        const startRace = () => {
+            // from an invite link the car click joins that lobby
+            const invite = getInviteLobbyCode();
+            if (invite) {
+                UIEventBus.dispatch('race:multiplayerJoinLobby', {
+                    playerName: name,
+                    lobbyCode: invite,
+                    startRace: true,
+                });
+            } else {
+                UIEventBus.dispatch('race:multiplayerPlaySolo', {
+                    playerName: name,
+                    startRace: true,
+                });
+            }
+        };
         if (this.skipped) {
             // straight into the race with the ring already built
-            UIEventBus.dispatch('race:multiplayerPlaySolo', {
-                playerName: name,
-                startRace: true,
-            });
+            startRace();
             await this.raceOnScreen();
             UIEventBus.dispatch('race:transitionSkip', {});
             this.finish();
             return;
         }
         this.captureRoom();
-        UIEventBus.dispatch('race:multiplayerPlaySolo', {
-            playerName: name,
-            startRace: true,
-        });
+        startRace();
         // open once the race is on screen and past its first shader compiles,
         // which stall a frame or two. the room's last frame covers that
         await this.raceOnScreen();
