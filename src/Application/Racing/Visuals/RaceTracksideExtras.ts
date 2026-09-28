@@ -11,7 +11,9 @@ import type RaceTerrain from './RaceTerrain';
 // tarmac at the spots known for it. merged and cell split, so it's a few
 // draws; weak gpus only get the graffiti (their 1 km view hides the rest)
 const FENCE_HEIGHT = 3.2;
-const FENCE_CELL = 2400;
+const FENCE_CELL = 800;
+// chain link is invisible past this, so far cells aren't drawn at all
+const FENCE_VIEW = 900;
 // graffiti clusters, lap meters, and how many pieces each gets
 const GRAFFITI_SPOTS: [number, number, number][] = [
     [10150, 10800, 4], // kesselchen
@@ -215,6 +217,7 @@ export default class RaceTracksideExtras {
     root: THREE.Group;
     // where each graffiti piece sits, for tests
     graffitiAt: THREE.Vector3[] = [];
+    fenceCells: THREE.Mesh[] = [];
 
     constructor(
         parent: THREE.Object3D,
@@ -230,6 +233,14 @@ export default class RaceTracksideExtras {
         }
         this.buildGraffiti(track);
         parent.add(this.root);
+    }
+
+    update(camera: THREE.Vector3) {
+        for (const cell of this.fenceCells) {
+            const sphere = cell.geometry.boundingSphere!;
+            cell.visible =
+                sphere.center.distanceTo(camera) - sphere.radius < FENCE_VIEW;
+        }
     }
 
     buildFences(track: NordschleifeTrack, terrain: RaceTerrain) {
@@ -282,9 +293,13 @@ export default class RaceTracksideExtras {
             }),
         );
         poleMesh.name = 'race-fence-posts';
-        [mesh, poleMesh].forEach((m) =>
-            this.root.add(splitByCell(m, FENCE_CELL)),
-        );
+        [mesh, poleMesh].forEach((m) => {
+            const cells = splitByCell(m, FENCE_CELL);
+            cells.children.forEach((c) =>
+                this.fenceCells.push(c as THREE.Mesh),
+            );
+            this.root.add(cells);
+        });
     }
 
     buildLandmarks(track: NordschleifeTrack, terrain: RaceTerrain) {

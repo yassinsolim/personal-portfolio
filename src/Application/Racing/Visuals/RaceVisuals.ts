@@ -303,6 +303,7 @@ export default class RaceVisuals {
         const vehicle = this.vehicle;
         this.updateReveal(deltaSeconds);
         this.atmosphere.follow(vehicle.position);
+        this.extras.update(this.application.camera.instance.position);
         this.forest.update(
             this.application.camera.instance,
             vehicle.position,
