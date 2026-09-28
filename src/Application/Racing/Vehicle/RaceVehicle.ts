@@ -203,6 +203,8 @@ type VehicleTelemetry = {
     abs: boolean;
     tractionControl: boolean;
     stability: boolean;
+    driftAssist: boolean;
+    driftTargetDeg: number;
     trackDistance: number;
     trackLateral: number;
 };
@@ -5096,6 +5098,10 @@ export default class RaceVehicle {
             abs: physics.absActive,
             tractionControl: physics.tcsActive,
             stability: physics.stabilityActive,
+            // the sport drift assist is holding a slide, and its target body
+            // slip in degrees (negative is a left hand drift)
+            driftAssist: physics.driftActive,
+            driftTargetDeg: (physics.driftTarget * 180) / Math.PI,
             trackDistance: this.trackFrame.distance,
             trackLateral: this.trackFrame.lateral,
         };

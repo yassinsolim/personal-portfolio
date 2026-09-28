@@ -6,8 +6,8 @@ type StoredAssists = { preset: AssistPreset; autoGears: boolean };
 
 const STORAGE_KEY = 'yassinverse:nordschleife:assists:v1';
 
-// standard catches slides for you, sport leaves the car loose (drifting),
-// off is just you and the tires
+// standard catches slides for you, sport lets the rear out and holds the
+// drift at the angle you steer for, off is just you and the tires
 export const ASSIST_PRESETS: Record<
     AssistPreset,
     Omit<AssistSettings, 'autoGears'>
@@ -17,18 +17,21 @@ export const ASSIST_PRESETS: Record<
         tractionControl: true,
         stability: true,
         countersteer: true,
+        drift: false,
     },
     sport: {
         abs: true,
         tractionControl: false,
         stability: false,
         countersteer: true,
+        drift: true,
     },
     off: {
         abs: false,
         tractionControl: false,
         stability: false,
         countersteer: false,
+        drift: false,
     },
 };
 

@@ -84,6 +84,8 @@ export type AssistSettings = {
     tractionControl: boolean;
     stability: boolean;
     countersteer: boolean;
+    // holds a slide at the angle the steering asks for (sport)
+    drift: boolean;
     autoGears: boolean;
 };
 
@@ -92,11 +94,32 @@ export const DEFAULT_ASSISTS: AssistSettings = {
     tractionControl: true,
     stability: true,
     countersteer: true,
+    drift: false,
     autoGears: true,
 };
 
 const GRAVITY = 9.81;
 const AIR_DENSITY = 1.225;
+// drift assist, angles in radians. per instance so the harness can tune it
+const DRIFT_GEAR_RPM = 0.62;
+export const DRIFT_TUNING = {
+    startSlip: 0.12,
+    endSlip: 0.05,
+    baseAngle: 0.35,
+    extraAngle: 0.25,
+    exitAngle: 0.3,
+    steerGain: 0.8,
+    // damping on how fast the slip angle changes, seconds. without it the car
+    // snaps back through straight into a slide the other way
+    steerDamping: 0.25,
+    // throttle eases by this per radian over the target, down to the floor
+    throttleGain: 2.5,
+    throttleFloor: 0.55,
+    rearGripDrop: 0.16,
+    // extra rear grip given up while the angle is under target, so a small
+    // flick can still grow into the drift
+    buildGripDrop: 0.2,
+};
 const INNER_STEP = 1 / 600;
 // slip denominators don't go below this, which keeps the tires stable (and
 // damped) when the car is nearly stopped
@@ -151,6 +174,14 @@ export default class VehiclePhysics {
     absActive: boolean;
     tcsActive: boolean;
     stabilityActive: boolean;
+    // the drift assist is holding a slide, and at what body slip (rad)
+    driftActive: boolean;
+    driftTarget: number;
+    driftThrottle: number;
+    driftSteer: number;
+    driftTuning: typeof DRIFT_TUNING;
+    private driftAngle: number;
+    private driftShortfall = 0;
     limiterActive: boolean;
     engineTorqueNow: number;
     manualShiftRequest: number;
@@ -191,6 +222,12 @@ export default class VehiclePhysics {
         this.tcsActive = false;
         this.stabilityActive = false;
         this.limiterActive = false;
+        this.driftActive = false;
+        this.driftTarget = 0;
+        this.driftThrottle = 1;
+        this.driftSteer = 0;
+        this.driftTuning = { ...DRIFT_TUNING };
+        this.driftAngle = 0;
         this.engineTorqueNow = 0;
         this.manualShiftRequest = 0;
         this.handbrakeInput = 0;
@@ -384,6 +421,24 @@ export default class VehiclePhysics {
 
         const rpm = Math.abs(drivenOmega) * Math.abs(this.gearRatio(this.gear));
         const rpmNow = rpm * RAD_PER_S_TO_RPM;
+        // mid drift the box goes by road speed, not the spinning wheels: the
+        // gear that puts road speed around 70% of the redline, so there's rpm
+        // left to spin the rear. on the handbrake it doesn't shift at all
+        if (controls.handbrake > 0.1) return;
+        if (this.driftActive) {
+            let want = 1;
+            while (
+                want < gears &&
+                this.rpmForSpeed(this.getSpeed(), want) >
+                    spec.redlineRpm * DRIFT_GEAR_RPM
+            ) {
+                want++;
+            }
+            if (want !== this.gear) {
+                this.startShift(this.gear + Math.sign(want - this.gear));
+            }
+            return;
+        }
         if (this.gear < gears && rpmNow > spec.shiftUpRpm) {
             this.startShift(this.gear + 1);
             return;
@@ -439,8 +494,11 @@ export default class VehiclePhysics {
             ? Math.min(spec.maxSteer, base + Math.abs(frontTravel) * 1.1)
             : base;
         let target = steerInput * limit;
+        this.driftThrottle = 1;
 
-        if (this.assists.countersteer && speed > 4 && this.vx > 2) {
+        if (this.updateDrift(steerInput, speed, frontTravel, dt)) {
+            target = this.driftSteer;
+        } else if (this.assists.countersteer && speed > 4 && this.vx > 2) {
             // steer toward where the car is going by about the body slip
             // angle while the rear is out. that puts the front tires past the
             // front axle's own travel, so they push the nose back and stop the
@@ -455,6 +513,68 @@ export default class VehiclePhysics {
         }
         target = clamp(target, -spec.maxSteer, spec.maxSteer);
         this.steerAngle = moveToward(this.steerAngle, target, 5 * dt);
+    }
+
+    // drift assist: once the rear is out, the steering picks the slip angle
+    // (straight ~20 degrees, into the corner up to ~34, out of it winds the
+    // slide down) and the front wheels are aimed where the front axle is
+    // going plus a correction toward that angle. the throttle is eased when
+    // the angle overshoots, so the car doesn't swap ends
+    updateDrift(
+        steerInput: number,
+        speed: number,
+        frontTravel: number,
+        dt: number
+    ) {
+        const beta = this.getBodySlip();
+        const oversteer = beta * this.yawRate < 0;
+        if (!this.assists.drift || speed < 5 || this.vx < 2) {
+            this.driftActive = false;
+            return false;
+        }
+        const tuning = this.driftTuning;
+        const angle = Math.abs(beta);
+        const angleRate = dt > 0 ? (angle - this.driftAngle) / dt : 0;
+        this.driftAngle = angle;
+        if (!this.driftActive) {
+            if (!(oversteer && angle > tuning.startSlip && speed > 7)) {
+                return false;
+            }
+            this.driftActive = true;
+        } else if (angle < tuning.endSlip) {
+            this.driftActive = false;
+            return false;
+        }
+        // the corner the car is drifting through: a left drift has the
+        // velocity to the right of the nose, so beta < 0
+        const turn = -Math.sign(beta) || 1;
+        const into = Math.max(0, steerInput * turn);
+        const out = Math.max(0, -steerInput * turn);
+        const targetAngle = clamp(
+            tuning.baseAngle +
+                tuning.extraAngle * into -
+                tuning.exitAngle * out,
+            0.02,
+            0.62
+        );
+        this.driftTarget = targetAngle * -turn;
+        const error = targetAngle - angle;
+        this.driftShortfall = Math.max(0, error);
+        const correction = clamp(
+            tuning.steerGain * error - tuning.steerDamping * angleRate,
+            -0.35,
+            0.35
+        );
+        const steer = frontTravel + correction * turn;
+        this.driftSteer = clamp(steer, -this.spec.maxSteer, this.spec.maxSteer);
+        // too much angle: ease off. too little: full throttle keeps the rear
+        // spinning
+        this.driftThrottle = clamp(
+            1 + error * tuning.throttleGain,
+            tuning.throttleFloor,
+            1
+        );
+        return true;
     }
 
     updateStaticLoads(normalScale: number) {
@@ -591,6 +711,14 @@ export default class VehiclePhysics {
         let brake = clamp(reverse ? controls.throttle : controls.brake, 0, 1);
         const handbrake = clamp(controls.handbrake, 0, 1);
         if (throttle > 0.05 && brake > 0.35) throttle = 0;
+        if (this.driftActive) throttle *= this.driftThrottle;
+        // held in a drift, the rear gives up a little grip with the throttle,
+        // the way heat and clutch kicks keep a lower torque car sliding
+        const tuning = this.driftTuning;
+        const shortfall = clamp(this.driftShortfall / 0.2, 0, 1);
+        const rearDriftGrip =
+            1 -
+            (tuning.rearGripDrop + tuning.buildGripDrop * shortfall) * throttle;
 
         const driveFront =
             spec.drive === 'FWD'
@@ -728,7 +856,8 @@ export default class VehiclePhysics {
             const grip =
                 (front ? spec.tireGrip : spec.tireGrip * spec.tireGripRear) *
                 (surface.grip[i] ?? 1) *
-                clamp(1 - spec.loadSensitivity * (loadRatio - 1), 0.7, 1.2);
+                clamp(1 - spec.loadSensitivity * (loadRatio - 1), 0.7, 1.2) *
+                (front || !this.driftActive ? 1 : rearDriftGrip);
             const sx = kappa / spec.slipRatioPeak;
             const sy = Math.tan(this.slipAngle[i]) / tanPeak;
             const s = Math.hypot(sx, sy);
