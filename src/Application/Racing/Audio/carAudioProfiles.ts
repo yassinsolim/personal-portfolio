@@ -158,7 +158,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
     'toyota-crown-platinum': {
         engine: 'T24A-FTS 2.4 turbo inline-4 hybrid',
         idleRpm: 850,
-        limiterRpm: 6200,
+        limiterRpm: 6500,
         gain: 0.85,
         onDb: [-10, -1],
         offDb: [-23, -15],

@@ -3,6 +3,7 @@
 // limiter, then a lift. scripts/render-audio-samples.mjs drives this page.
 import CarAudio from '../../../src/Application/Racing/Audio/CarAudio';
 import { carOptionsById } from '../../../src/Application/carOptions';
+import { carRollingRadius } from '../../../src/Application/Racing/Vehicle/carPhysics';
 
 type Frame = {
     t: number;
@@ -22,8 +23,10 @@ const planDrive = (carId: string) => {
     const race = carOptionsById[carId].race;
     const frames: Frame[] = [];
     const ratios = race.gearRatios;
-    const wheelRpm = (v: number) => (v / (Math.PI * 2 * race.wheelRadiusMeters)) * 60;
-    const rpmFor = (v: number, g: number) => race.idleRpm + wheelRpm(v) * ratios[g - 1] * race.finalDrive;
+    const radius = carRollingRadius(carOptionsById[carId]);
+    const wheelRpm = (v: number) => (v / (Math.PI * 2 * radius)) * 60;
+    const rpmFor = (v: number, g: number) =>
+        Math.max(race.idleRpm, wheelRpm(v) * ratios[g - 1] * race.finalDrive);
     const vmax = race.topSpeedKph / 3.6;
     const a0 = (27.78 / race.zeroToHundredSec) * 1.25;
     let v = 0;
@@ -36,8 +39,12 @@ const planDrive = (carId: string) => {
     let limiterLeft = 0.6;
     let liftAt = -1;
     const idleEnd = 2.2;
-    const launchRpm = Math.min(race.redlineRpm * 0.55, 4200);
-    const lastPullGear = Math.min(4, ratios.length);
+    const launchRpm = race.transmission.launchRpm;
+    // fourth to the limiter, or a lower gear when fourth runs out near the
+    // top speed (the crown's does)
+    const gearTopKph = (g: number) => ((race.redlineRpm / 60) * 2 * Math.PI * radius * 3.6) / (ratios[g - 1] * race.finalDrive);
+    let lastPullGear = Math.min(4, ratios.length);
+    while (lastPullGear > 2 && gearTopKph(lastPullGear) > race.topSpeedKph * 0.9) lastPullGear--;
     const end = () => (liftAt > 0 ? liftAt + 4.2 : 99);
     while (t < end() && t < 22) {
         let throttle = 0;

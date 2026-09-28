@@ -16,10 +16,11 @@ const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
 const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
-// laps from the tire model and the 16 m road aren't comparable with the old
-// ones, so new rows carry this tag on car_id and the board only reads tagged
-// rows. old rows stay in the table. no schema change needed
-const SEASON_TAG = '@v3';
+// laps from the real drivetrains (gearing, torque curves, tyres, limiters)
+// aren't comparable with the old ones, so new rows carry this tag on car_id
+// and the board only reads tagged rows. old rows stay in the table. no schema
+// change needed
+const SEASON_TAG = '@v4';
 const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
 

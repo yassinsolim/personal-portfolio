@@ -1,8 +1,9 @@
 import { carOptionsById } from '../../carOptions';
+import { carRollingRadius } from '../Vehicle/carPhysics';
 
 // rpm, gear and a throttle guess for cars we only know the speed of (ghosts,
-// other players). uses each car's real gear ratios, final drive and shift
-// points from carOptions, the same way the player car's gearbox does.
+// other players). uses each car's real gear ratios, final drive, tyres and
+// shift points from carOptions, the same way the player car's gearbox does.
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -14,6 +15,7 @@ export default class DerivedDrivetrain {
     lastSpeed: number;
     accel: number;
     shifted: 0 | 1 | -1;
+    rollingRadius: number;
 
     constructor(carId: string) {
         this.carId = carId;
@@ -23,17 +25,22 @@ export default class DerivedDrivetrain {
         this.lastSpeed = 0;
         this.accel = 0;
         this.shifted = 0;
+        this.rollingRadius = Math.max(
+            0.2,
+            carRollingRadius(carOptionsById[this.carId] || carOptionsById['amg-one'])
+        );
     }
 
     config() {
         return (carOptionsById[this.carId] || carOptionsById['amg-one']).race;
     }
 
+    // revs with the clutch in, never under idle
     rpmFor(speedMps: number, gear: number) {
         const race = this.config();
         const ratio = race.gearRatios[gear - 1] || race.gearRatios[race.gearRatios.length - 1] || 1;
-        const wheelRpm = (Math.abs(speedMps) / (Math.PI * 2 * Math.max(0.2, race.wheelRadiusMeters))) * 60;
-        return race.idleRpm + wheelRpm * ratio * race.finalDrive;
+        const wheelRpm = (Math.abs(speedMps) / (Math.PI * 2 * this.rollingRadius)) * 60;
+        return Math.max(race.idleRpm, wheelRpm * ratio * race.finalDrive);
     }
 
     update(speedMps: number, dt: number, gearHint?: number) {

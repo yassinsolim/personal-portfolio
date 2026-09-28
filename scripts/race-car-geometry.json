@@ -1,0 +1,56 @@
+{
+    "amg-one": {
+        "wheelbase": 2.8025,
+        "trackFront": 1.6,
+        "trackRear": 1.6,
+        "modelWheelRadius": 0.34
+    },
+    "bmw-e92-m3": {
+        "wheelbase": 2.7591,
+        "trackFront": 1.4889,
+        "trackRear": 1.5174,
+        "modelWheelRadius": 0.34
+    },
+    "amg-c63-507": {
+        "wheelbase": 2.7706,
+        "trackFront": 1.5416,
+        "trackRear": 1.5362,
+        "modelWheelRadius": 0.3314
+    },
+    "amg-c63s-coupe": {
+        "wheelbase": 2.8434,
+        "trackFront": 1.571,
+        "trackRear": 1.54,
+        "modelWheelRadius": 0.3436
+    },
+    "bmw-f82-m4": {
+        "wheelbase": 2.7924,
+        "trackFront": 1.5013,
+        "trackRear": 1.5013,
+        "modelWheelRadius": 0.3281
+    },
+    "bmw-f90-m5-competition": {
+        "wheelbase": 2.9772,
+        "trackFront": 1.8831,
+        "trackRear": 1.8553,
+        "modelWheelRadius": 0.3361
+    },
+    "bmw-m8-competition-coupe": {
+        "wheelbase": 2.8257,
+        "trackFront": 1.3383,
+        "trackRear": 1.3083,
+        "modelWheelRadius": 0.3458
+    },
+    "mercedes-gt63s-edition-one": {
+        "wheelbase": 2.9578,
+        "trackFront": 1.6436,
+        "trackRear": 1.6574,
+        "modelWheelRadius": 0.3538
+    },
+    "toyota-crown-platinum": {
+        "wheelbase": 2.8767,
+        "trackFront": 1.5808,
+        "trackRear": 1.5808,
+        "modelWheelRadius": 0.3603
+    }
+}

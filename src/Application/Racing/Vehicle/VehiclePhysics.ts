@@ -8,6 +8,7 @@
 // stepped at a high rate cheaply.
 
 export type DriveLayout = 'RWD' | 'AWD' | 'FWD';
+export type GearboxKind = 'manual' | 'dct' | 'mct' | 'amt' | 'automatic';
 
 export type PhysicsSpec = {
     massKg: number;
@@ -39,25 +40,36 @@ export type PhysicsSpec = {
     drive: DriveLayout;
     frontTorqueShare: number;
     lsdLock: number;
+    // published peaks, for show and for the engine braking scale
     powerW: number;
     powerRpm: number;
     torqueNm: number;
     torqueRpm: number;
+    // full load torque every torqueStep rpm from 0, Nm
+    torqueTable: number[];
+    torqueStep: number;
     idleRpm: number;
+    // where the rev limiter cuts
     redlineRpm: number;
     shiftUpRpm: number;
     shiftDownRpm: number;
     gearRatios: number[];
     finalDrive: number;
     reverseRatio: number;
+    transmission: GearboxKind;
     shiftTime: number;
+    // share of drive torque that gets through while a gear changes
+    shiftTorque: number;
     launchRpm: number;
+    // torque converter multiplication at stall, 1 for clutches
+    converterRatio: number;
     drivelineEfficiency: number;
     brakeTorque: number;
     brakeBias: number;
     handbrakeTorque: number;
     maxSteer: number;
-    vmax: number;
+    // electronic top speed limiter, m/s, Infinity when there's none
+    speedLimit: number;
 };
 
 export type PhysicsControls = {
@@ -103,7 +115,10 @@ export const DEFAULT_ASSISTS: AssistSettings = {
 const GRAVITY = 9.81;
 const AIR_DENSITY = 1.225;
 // drift assist, angles in radians. per instance so the harness can tune it
-const DRIFT_GEAR_RPM = 0.62;
+const DRIFT_GEAR_RPM = 0.64;
+// mid slide it only shifts back down once the lower gear is well inside its
+// range, or a slide at a gear's edge hunts between the two
+const DRIFT_DOWNSHIFT_RPM = 0.54;
 export const DRIFT_TUNING = {
     startSlip: 0.12,
     endSlip: 0.05,
@@ -137,6 +152,12 @@ const LONGITUDINAL_GRIP = 1.1;
 // than a pinball bounce off a clipped barrier
 const IMPACT_INERTIA_SCALE = 3;
 
+// the rev limiter cuts the fuel this long each time the revs reach it
+const LIMITER_CUT = 0.06;
+// the speed limiter fades the torque out from this far under the limit (m/s)
+// to nothing just over it, so the car settles on the limit
+const SPEED_LIMIT_BAND = 0.3;
+
 const clamp = (value: number, min: number, max: number) =>
     value < min ? min : value > max ? max : value;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -144,6 +165,69 @@ const moveToward = (value: number, target: number, maxDelta: number) =>
     value < target
         ? Math.min(target, value + maxDelta)
         : Math.max(target, value - maxDelta);
+
+// full load torque at an rpm, from the sampled curve
+export const torqueAt = (spec: PhysicsSpec, rpm: number) => {
+    const table = spec.torqueTable;
+    const x = clamp(rpm, spec.idleRpm, spec.redlineRpm) / spec.torqueStep;
+    const i = Math.min(table.length - 2, Math.floor(x));
+    return lerp(table[i], table[i + 1], x - i);
+};
+
+// peak torque and power of the curve the car actually drives with
+export const peakOutput = (spec: PhysicsSpec) => {
+    let torqueNm = 0;
+    let powerW = 0;
+    spec.torqueTable.forEach((torque, i) => {
+        const rpm = i * spec.torqueStep;
+        if (rpm < spec.idleRpm || rpm > spec.redlineRpm) return;
+        torqueNm = Math.max(torqueNm, torque);
+        powerW = Math.max(powerW, (torque * rpm) / RAD_PER_S_TO_RPM);
+    });
+    return { torqueNm, powerW };
+};
+
+// engine rpm with the clutch in at a road speed (m/s) in a gear
+export const rpmAtSpeed = (spec: PhysicsSpec, speed: number, gear: number) =>
+    (Math.abs(speed) / spec.wheelRadius) *
+    spec.gearRatios[clamp(gear, 1, spec.gearRatios.length) - 1] *
+    spec.finalDrive *
+    RAD_PER_S_TO_RPM;
+
+// where the car tops out on the flat, m/s: the speed limiter, the rev
+// limiter in top gear, or where aero drag takes all the drive the best gear
+// can give, whichever comes first. the tire model's rolling resistance only
+// acts while a wheel's speed is changing, so it isn't counted here either
+export const predictTopSpeed = (spec: PhysicsSpec) => {
+    const air = 0.5 * AIR_DENSITY;
+    let limitedBy: 'limiter' | 'drag' | 'revs' = 'drag';
+    let speed = 1;
+    for (; speed < 150; speed += 0.02) {
+        if (speed >= spec.speedLimit) {
+            return { speed: spec.speedLimit, limitedBy: 'limiter' as const };
+        }
+        const resist = air * spec.cdA * speed * speed;
+        let best = 0;
+        let anyGear = false;
+        for (let gear = 1; gear <= spec.gearRatios.length; gear++) {
+            const rpm = rpmAtSpeed(spec, speed, gear);
+            if (rpm >= spec.redlineRpm) continue;
+            anyGear = true;
+            const ratio = spec.gearRatios[gear - 1] * spec.finalDrive;
+            best = Math.max(
+                best,
+                (torqueAt(spec, rpm) * ratio * spec.drivelineEfficiency) /
+                    spec.wheelRadius
+            );
+        }
+        if (!anyGear) {
+            limitedBy = 'revs';
+            break;
+        }
+        if (best < resist) break;
+    }
+    return { speed, limitedBy };
+};
 
 export default class VehiclePhysics {
     spec: PhysicsSpec;
@@ -323,22 +407,9 @@ export default class VehiclePhysics {
         return spec.gearRatios.length;
     }
 
-    // full throttle engine torque at an rpm: flat from the torque rpm, capped
-    // by peak power above it, and softer below it
+    // full throttle engine torque at an rpm, from the car's torque curve
     engineTorque(rpm: number) {
-        const { spec } = this;
-        const r = clamp(rpm, spec.idleRpm, spec.redlineRpm);
-        let torque = spec.torqueNm;
-        if (r < spec.torqueRpm) {
-            const t =
-                (r - spec.idleRpm) / Math.max(1, spec.torqueRpm - spec.idleRpm);
-            torque *= lerp(0.6, 1, t * t * (3 - 2 * t));
-        }
-        const past = Math.max(0, r - spec.powerRpm);
-        const powerShape =
-            1 - (0.1 * past) / Math.max(1, spec.redlineRpm - spec.powerRpm);
-        const omega = Math.max(1, r / RAD_PER_S_TO_RPM);
-        return Math.min(torque, (spec.powerW * powerShape) / omega);
+        return torqueAt(this.spec, rpm);
     }
 
     engineBraking(rpm: number) {
@@ -423,17 +494,26 @@ export default class VehiclePhysics {
         const rpm = Math.abs(drivenOmega) * Math.abs(this.gearRatio(this.gear));
         const rpmNow = rpm * RAD_PER_S_TO_RPM;
         // mid drift the box goes by road speed, not the spinning wheels: the
-        // gear that puts road speed around 70% of the redline, so there's rpm
-        // left to spin the rear. on the handbrake it doesn't shift at all
+        // lowest gear that keeps road speed under 64% of the redline, so
+        // there's rpm left to spin the rear. on the handbrake it doesn't shift
+        // at all
         if (controls.handbrake > 0.1) return;
         if (this.driftActive) {
+            const speed = this.getSpeed();
             let want = 1;
             while (
                 want < gears &&
-                this.rpmForSpeed(this.getSpeed(), want) >
+                this.rpmForSpeed(speed, want) >
                     spec.redlineRpm * DRIFT_GEAR_RPM
             ) {
                 want++;
+            }
+            if (
+                want < this.gear &&
+                this.rpmForSpeed(speed, this.gear - 1) >
+                    spec.redlineRpm * DRIFT_DOWNSHIFT_RPM
+            ) {
+                want = this.gear;
             }
             if (want !== this.gear) {
                 this.startShift(this.gear + Math.sign(want - this.gear));
@@ -630,53 +710,86 @@ export default class VehiclePhysics {
             this.shiftTimer > 0 ? this.pendingGear : this.gear
         );
         const wheelRpm = Math.abs(drivenOmega * ratio) * RAD_PER_S_TO_RPM;
+        let torque: number;
+        this.limiterTimer = Math.max(0, this.limiterTimer - dt);
 
         if (this.shiftTimer > 0) {
-            // torque is cut while the gear changes, revs swing to the new gear
+            // revs swing to the new gear while it changes. a dual clutch
+            // keeps most of the drive through the handover, an automatic
+            // some, a manual or single clutch box none
             const target = Math.max(spec.idleRpm, wheelRpm);
             this.engineRpm = moveToward(this.engineRpm, target, 24000 * dt);
-            this.engineTorqueNow = 0;
-            return 0;
-        }
-
-        this.limiterTimer = Math.max(0, this.limiterTimer - dt);
-        const launchRpm =
-            throttle > 0.05
-                ? lerp(spec.idleRpm * 1.15, spec.launchRpm, throttle)
-                : spec.idleRpm;
-        let torque: number;
-        if (wheelRpm < launchRpm) {
-            // clutch slipping: the engine holds its launch revs and pushes
-            // with whatever torque it makes there
-            this.engineRpm = moveToward(this.engineRpm, launchRpm, 9000 * dt);
             torque =
-                throttle > 0.05
-                    ? this.engineTorque(this.engineRpm) * throttle
+                throttle > 0.05 && spec.shiftTorque > 0
+                    ? this.engineTorque(this.engineRpm) *
+                      throttle *
+                      spec.shiftTorque
                     : 0;
+            this.limiterActive = false;
         } else {
-            this.engineRpm = wheelRpm;
-            if (throttle > 0.05) {
-                torque = this.engineTorque(wheelRpm) * throttle;
+            // pulling away in first or reverse the clutch slips up to the
+            // launch revs, and mid slide too, the way a driver kicks the
+            // clutch to keep the rears spinning after a shift. otherwise it
+            // only slips to keep the engine off idle, so the revs follow the
+            // wheels
+            const launching = Math.abs(this.gear) === 1 || this.driftActive;
+            const launchRpm =
+                launching && throttle > 0.05
+                    ? lerp(spec.idleRpm * 1.15, spec.launchRpm, throttle)
+                    : spec.idleRpm;
+            if (wheelRpm < launchRpm) {
+                // clutch or converter slipping: the engine holds its launch
+                // revs and pushes with whatever torque it makes there
+                this.engineRpm = moveToward(
+                    this.engineRpm,
+                    launchRpm,
+                    9000 * dt
+                );
+                torque =
+                    throttle > 0.05
+                        ? this.engineTorque(this.engineRpm) * throttle
+                        : 0;
+                // a converter multiplies it, most at stall, none once the
+                // turbine catches up with the engine
+                if (torque > 0 && spec.converterRatio > 1) {
+                    const slip = clamp(
+                        1 - wheelRpm / Math.max(1, this.engineRpm),
+                        0,
+                        1
+                    );
+                    torque *= 1 + (spec.converterRatio - 1) * slip;
+                }
             } else {
-                torque = this.engineBraking(wheelRpm);
+                this.engineRpm = wheelRpm;
+                if (throttle > 0.05) {
+                    torque = this.engineTorque(wheelRpm) * throttle;
+                } else {
+                    torque = this.engineBraking(wheelRpm);
+                }
             }
-        }
 
-        if (this.engineRpm >= spec.redlineRpm) {
-            this.limiterTimer = 0.06;
+            if (this.engineRpm >= spec.redlineRpm) {
+                this.limiterTimer = LIMITER_CUT;
+            }
+            this.limiterActive = this.limiterTimer > 0;
+            if (this.limiterActive && torque > 0) torque = 0;
         }
-        this.limiterActive = this.limiterTimer > 0;
-        if (this.limiterActive && torque > 0) torque = 0;
         this.engineRpm = clamp(
             this.engineRpm,
             spec.idleRpm * 0.9,
             spec.redlineRpm * 1.02
         );
 
-        // electronic speed limiter, and a sane top speed in reverse
-        if (this.vx > spec.vmax && torque > 0) {
-            torque *= clamp(1 - (this.vx - spec.vmax) * 0.8, 0, 1);
+        // electronic speed limiter
+        if (torque > 0 && this.vx > spec.speedLimit - SPEED_LIMIT_BAND) {
+            torque *= clamp(
+                (spec.speedLimit + SPEED_LIMIT_BAND - this.vx) /
+                    (2 * SPEED_LIMIT_BAND),
+                0,
+                1
+            );
         }
+        // and a sane top speed in reverse
         if (this.gear < 0 && this.vx < -9 && torque > 0) torque = 0;
         this.engineTorqueNow = torque;
         return torque * ratio * spec.drivelineEfficiency;
