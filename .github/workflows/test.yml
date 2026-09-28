@@ -26,7 +26,8 @@ jobs:
           node-version: 24
           cache: npm
       # no dependency lifecycle scripts: nothing the tests or the build use needs one
-      - run: npm ci --no-audit --no-fund --ignore-scripts
+      # no dependency lifecycle scripts: nothing the tests or the build use needs one
+      - run: npm ci --no-audit --no-fund --ignore-scripts --ignore-scripts
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       - name: terrain and trackside invariants
