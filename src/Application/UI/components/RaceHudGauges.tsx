@@ -13,6 +13,7 @@ type Props = {
     gear: string;
     rpm: number;
     redlineRpm: number;
+    tachMaxRpm?: number;
     lapTimeMs: number;
     lapRunning: boolean;
     lastLapMs: number;
@@ -52,16 +53,22 @@ const arc = (cx: number, cy: number, r: number, from: number, to: number) => {
 const Tach = ({
     rpm,
     redlineRpm,
+    tachMaxRpm,
     gear,
     speedKph,
 }: {
     rpm: number;
     redlineRpm: number;
+    tachMaxRpm?: number;
     gear: string;
     speedKph: number;
 }) => {
-    // the dial runs a little past the redline, rounded to a whole thousand
-    const max = Math.ceil((redlineRpm + 500) / 1000) * 1000;
+    // each car's own dial range, red from its redline. without one the dial
+    // runs a little past the redline, rounded to a whole thousand
+    const max =
+        tachMaxRpm && tachMaxRpm > redlineRpm
+            ? tachMaxRpm
+            : Math.ceil((redlineRpm + 500) / 1000) * 1000;
     const angle = (value: number) =>
         START + (Math.min(max, Math.max(0, value)) / max) * SWEEP;
     const ticks = [];
@@ -157,6 +164,7 @@ const RaceHudGauges = (props: Props) => (
         <Tach
             rpm={props.rpm}
             redlineRpm={props.redlineRpm}
+            tachMaxRpm={props.tachMaxRpm}
             gear={props.gear}
             speedKph={props.speedKph}
         />

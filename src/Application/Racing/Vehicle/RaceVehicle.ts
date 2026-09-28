@@ -5249,11 +5249,15 @@ export default class RaceVehicle {
     }
 
     // wheels turn at the tire model's own speeds, so wheelspin and lockups
-    // show. steer follows the road wheel angle
+    // show. the model's wheels aren't quite the real tyre's size, so the spin
+    // is scaled to roll them at the same road speed. steer follows the road
+    // wheel angle
     advanceWheelSpin(deltaSeconds: number) {
         const omega = this.physics.wheelOmega;
-        const front = (omega[0] + omega[1]) * 0.5;
-        const rear = (omega[2] + omega[3]) * 0.5;
+        const scale =
+            this.physics.spec.wheelRadius / Math.max(0.1, this.wheelRadius);
+        const front = (omega[0] + omega[1]) * 0.5 * scale;
+        const rear = (omega[2] + omega[3]) * 0.5 * scale;
         this.frontSpinAngle += front * deltaSeconds;
         this.rearSpinAngle += rear * deltaSeconds;
         this.wheelSpinAngle = (this.frontSpinAngle + this.rearSpinAngle) * 0.5;

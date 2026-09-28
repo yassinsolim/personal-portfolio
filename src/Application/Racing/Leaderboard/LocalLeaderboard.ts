@@ -11,7 +11,7 @@ export type LeaderboardEntry = {
     tune?: string;
 };
 
-const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v3';
+const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v4';
 
 export default class LocalLeaderboard {
     entries: LeaderboardEntry[];

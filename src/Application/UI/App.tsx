@@ -67,6 +67,7 @@ type HudState = {
     lapProgress: number;
     ghostBestLapMs?: number;
     redlineRpm?: number;
+    tachMaxRpm?: number;
     lastLapMs?: number;
     sectors?: SectorHud & { bounds: number[] };
     map?: { x: number; z: number; heading: number; remotes: Array<{ x: number; z: number }> };
@@ -875,6 +876,7 @@ const App = () => {
                     gear={displayedGear}
                     rpm={hud.rpm}
                     redlineRpm={hud.redlineRpm || 7000}
+                    tachMaxRpm={hud.tachMaxRpm}
                     lapTimeMs={hud.lapTimeMs}
                     lapRunning={hud.lapRunning}
                     lastLapMs={hud.lastLapMs || 0}
