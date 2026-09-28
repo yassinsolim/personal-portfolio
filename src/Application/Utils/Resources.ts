@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import {
     DRACO_GLTF_CONFIG,
     DRACOLoader,
@@ -26,6 +27,24 @@ const canCompileWasm = () => {
     }
 };
 
+// ?ktx2=0 loads the webp cars instead, for comparing
+export const ktx2Enabled = () => {
+    try {
+        return (
+            canCompileWasm() &&
+            new URLSearchParams(window.location.search).get('ktx2') !== '0'
+        );
+    } catch {
+        return false;
+    }
+};
+
+// a full detail car's ktx2 twin, anything else as it is
+export const carModelUrl = (path: string) =>
+    ktx2Enabled() && /models\/Cars\/.+(?<!\.lite|\.ktx2)\.glb$/.test(path)
+        ? path.replace(/\.glb$/, '.ktx2.glb')
+        : path;
+
 export default class Resources extends EventEmitter {
     sources: Resource[];
     // Not sure about this one
@@ -50,6 +69,13 @@ export default class Resources extends EventEmitter {
     };
     application: Application;
     loading: Loading;
+
+    ktx2Loader: KTX2Loader | null = null;
+
+    // picks the gpu's compressed texture format for the ktx2 transcoder
+    setRenderer(renderer: THREE.WebGLRenderer) {
+        this.ktx2Loader?.detectSupport(renderer);
+    }
 
     constructor(sources: Resource[]) {
         super();
@@ -87,6 +113,13 @@ export default class Resources extends EventEmitter {
 
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
+        // cars come as ktx2 (scripts/build-ktx2-cars.mjs), which stays
+        // compressed on the gpu. detectSupport runs once the renderer exists,
+        // in the same tick, before any file can finish downloading
+        if (ktx2Enabled()) {
+            this.ktx2Loader = new KTX2Loader().setTranscoderPath('basis/');
+            gltfLoader.setKTX2Loader(this.ktx2Loader);
+        }
         gltfLoader.register(() => ({
             name: 'yassin_disable_transmission',
             afterRoot: (gltf: { scene: THREE.Group }) => {
@@ -109,14 +142,25 @@ export default class Resources extends EventEmitter {
         // Load each source
         for (const source of this.sources) {
             if (source.type === 'gltfModel') {
+                const ktx2 = carModelUrl(source.path);
                 this.loaders.gltfLoader.load(
-                    source.path,
+                    ktx2,
                     (file) => {
                         this.sourceLoaded(source, file);
                     },
                     undefined,
                     (error) => {
-                        this.sourceFailed(source, error);
+                        if (ktx2 === source.path) {
+                            this.sourceFailed(source, error);
+                            return;
+                        }
+                        // the webp original is the fallback
+                        this.loaders.gltfLoader.load(
+                            source.path,
+                            (file) => this.sourceLoaded(source, file),
+                            undefined,
+                            (fallbackError) => this.sourceFailed(source, fallbackError)
+                        );
                     }
                 );
             } else if (source.type === 'texture') {

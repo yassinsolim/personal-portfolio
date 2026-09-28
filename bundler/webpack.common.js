@@ -23,6 +23,15 @@ module.exports = {
                         ignore: ['**/audio/**'],
                     },
                 },
+                // the basis transcoder that ships with three, for ktx2 textures
+                {
+                    from: path.resolve(
+                        __dirname,
+                        '../node_modules/three/examples/jsm/libs/basis'
+                    ),
+                    to: 'basis',
+                    globOptions: { ignore: ['**/README.md'] },
+                },
             ],
         }),
         new HtmlWebpackPlugin({

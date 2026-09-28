@@ -8,6 +8,7 @@ import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
 import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
 import { applyCarLook, isGarageMaterial } from '../Garage/carLook';
+import { carModelUrl } from '../../Utils/Resources';
 import {
     applyTune,
     loadLook,
@@ -643,7 +644,7 @@ export default class RaceVehicle {
         const cheap = this.cheapMaterials;
         const path = cheap
             ? option.modelPath.replace(/\.glb$/, '.lite.glb')
-            : option.modelPath;
+            : carModelUrl(option.modelPath);
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
             this.resources.loaders.gltfLoader.load(
                 path,
@@ -656,6 +657,19 @@ export default class RaceVehicle {
                 },
                 undefined,
                 (error) => {
+                    // a ktx2 twin that won't load: the webp original
+                    if (path !== option.modelPath && !cheap) {
+                        this.resources.loaders.gltfLoader.load(
+                            option.modelPath,
+                            (gltf) => {
+                                this.resources.items.gltfModel[option.resourceName] = gltf;
+                                resolve(this.prepareModel(gltf.scene.clone(true), carId));
+                            },
+                            undefined,
+                            reject
+                        );
+                        return;
+                    }
                     reject(error);
                 }
             );
