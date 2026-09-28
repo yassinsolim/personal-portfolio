@@ -33,10 +33,14 @@
             await waitFor(() => rm.active && rm.vehicle && rm.vehicle.active);
         }
         const v = rm.vehicle;
+        // the track collider is a group of chunks, borrow the classes off one
+        const sampleMesh = v.colliderMesh.isMesh
+            ? v.colliderMesh
+            : v.colliderMesh.children[0];
         const THREE_ = {
             V3: v.position.constructor,
-            Mesh: v.colliderMesh.constructor,
-            Geometry: v.colliderMesh.geometry.constructor,
+            Mesh: sampleMesh.constructor,
+            Geometry: sampleMesh.geometry.constructor,
         };
         const origUpdate = rm.update;
         rm.update = function () {};
@@ -73,7 +77,7 @@
         const padGeometry = new THREE_.Geometry();
         padGeometry.setAttribute(
             'position',
-            new origCollider.geometry.attributes.position.constructor(
+            new sampleMesh.geometry.attributes.position.constructor(
                 positions,
                 3
             )
@@ -82,9 +86,9 @@
         padGeometry.computeVertexNormals();
         padGeometry.computeBoundingBox();
         padGeometry.computeBoundingSphere();
-        const pad = new THREE_.Mesh(padGeometry, origCollider.material);
+        const pad = new THREE_.Mesh(padGeometry, sampleMesh.material);
         pad.visible = false;
-        pad.layers.mask = origCollider.layers.mask;
+        pad.layers.mask = sampleMesh.layers.mask;
         pad.updateMatrixWorld(true);
         v.colliderMesh = pad;
         const origTrackBound = v.trackBound;

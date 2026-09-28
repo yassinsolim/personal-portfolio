@@ -3,11 +3,10 @@ import type NordschleifeTrack from '../Track/NordschleifeTrack';
 // answers "how far is this point from the road, and how high is the road
 // near it" for any point on the map, fast enough to shape a whole terrain
 // grid and place thousands of trees. uses the track's evenly spaced samples
-// with a spatial hash near the road and a smooth height field far from it
+// with a spatial hash near the road, and the real ground (the dem with the
+// canopy taken off, from the track data) everywhere
 
 const CELL = 48;
-const BASE_STEP = 90;
-const BASE_SAMPLE_STRIDE = 8;
 
 export type TrackNearest = {
     distance: number;
@@ -59,9 +58,6 @@ export default class TrackField {
     minZ: number;
     maxX: number;
     maxZ: number;
-    baseCols: number;
-    baseRows: number;
-    baseHeights: Float32Array;
 
     constructor(track: NordschleifeTrack, margin: number) {
         this.track = track;
@@ -92,46 +88,49 @@ export default class TrackField {
         this.maxX = maxX + margin;
         this.maxZ = maxZ + margin;
 
-        // far from the road the ground follows the road's height smoothly:
-        // inverse distance weighting of a subset of samples on a coarse grid
-        this.baseCols = Math.ceil((this.maxX - this.minX) / BASE_STEP) + 1;
-        this.baseRows = Math.ceil((this.maxZ - this.minZ) / BASE_STEP) + 1;
-        this.baseHeights = new Float32Array(this.baseCols * this.baseRows);
-        for (let row = 0; row < this.baseRows; row++) {
-            for (let col = 0; col < this.baseCols; col++) {
-                const x = this.minX + col * BASE_STEP;
-                const z = this.minZ + row * BASE_STEP;
-                let weight = 0;
-                let height = 0;
-                for (let i = 0; i < this.count; i += BASE_SAMPLE_STRIDE) {
-                    const dx = this.points[i * 3] - x;
-                    const dz = this.points[i * 3 + 2] - z;
-                    const w = 1 / (dx * dx + dz * dz + 400);
-                    weight += w;
-                    height += this.points[i * 3 + 1] * w;
-                }
-                this.baseHeights[row * this.baseCols + col] = height / weight;
-            }
-        }
+        // the terrain grid can't reach past the dem it's sampled from
+        const terrain = track.terrain;
+        this.minX = Math.max(this.minX, terrain.x);
+        this.minZ = Math.max(this.minZ, terrain.z);
+        this.maxX = Math.min(
+            this.maxX,
+            terrain.x + (terrain.cols - 1) * terrain.cell
+        );
+        this.maxZ = Math.min(
+            this.maxZ,
+            terrain.z + (terrain.rows - 1) * terrain.cell
+        );
+    }
+
+    // bilinear lookup in one of the track data's grids
+    sampleGrid(values: ArrayLike<number>, x: number, z: number) {
+        const terrain = this.track.terrain;
+        const fx = (x - terrain.x) / terrain.cell;
+        const fz = (z - terrain.z) / terrain.cell;
+        const col = Math.max(0, Math.min(terrain.cols - 2, Math.floor(fx)));
+        const row = Math.max(0, Math.min(terrain.rows - 2, Math.floor(fz)));
+        const tx = Math.max(0, Math.min(1, fx - col));
+        const tz = Math.max(0, Math.min(1, fz - row));
+        const i = row * terrain.cols + col;
+        const a = values[i];
+        const b = values[i + 1];
+        const c = values[i + terrain.cols];
+        const d = values[i + terrain.cols + 1];
+        return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
     }
 
     cellKey(cx: number, cz: number) {
         return (cx + 4096) * 8192 + (cz + 4096);
     }
 
+    // the real ground height
     baseHeight(x: number, z: number) {
-        const fx = (x - this.minX) / BASE_STEP;
-        const fz = (z - this.minZ) / BASE_STEP;
-        const col = Math.max(0, Math.min(this.baseCols - 2, Math.floor(fx)));
-        const row = Math.max(0, Math.min(this.baseRows - 2, Math.floor(fz)));
-        const tx = Math.max(0, Math.min(1, fx - col));
-        const tz = Math.max(0, Math.min(1, fz - row));
-        const i = row * this.baseCols + col;
-        const a = this.baseHeights[i];
-        const b = this.baseHeights[i + 1];
-        const c = this.baseHeights[i + this.baseCols];
-        const d = this.baseHeights[i + this.baseCols + 1];
-        return (a + (b - a) * tx) * (1 - tz) + (c + (d - c) * tx) * tz;
+        return this.sampleGrid(this.track.terrain.heights, x, z);
+    }
+
+    // 0..1, how wooded the real map is here
+    woods(x: number, z: number) {
+        return this.sampleGrid(this.track.terrain.forest, x, z) / 255;
     }
 
     // nearest road sample within a couple of cells, or a far result

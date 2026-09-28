@@ -149,10 +149,12 @@ export default class RaceForest {
             this.impostorTarget.texture
         );
 
+        // the real lap is 20.8 km, so this is about the density of the woods
+        // along it
         const trees = this.placeTrees(
             track,
             terrain,
-            quality === 'high' ? 17000 : 7000
+            quality === 'high' ? 32000 : 12000
         );
         this.count = trees.reduce((sum, chunk) => sum + chunk.length, 0);
         trees.forEach((chunk, index) =>
@@ -191,10 +193,9 @@ export default class RaceForest {
                     const along = (random() - 0.5) * 8;
                     const x = px + tz * lateral + tx * along;
                     const z = pz - tx * lateral + tz * along;
+                    // where the real map has woods, plus the odd lone tree
                     const density = terrain.forestDensity(x, z);
-                    // the woods crowd the barriers and open up further out
-                    const nearRoad = 1 - Math.min(1, depth / 60);
-                    if (random() > Math.max(density, nearRoad * 0.8)) continue;
+                    if (random() > Math.max(density * 0.95, 0.025)) continue;
                     field.nearest(x, z, nearest, 1);
                     if (nearest.distance < barrier + TREE_CLEARANCE - 0.5)
                         continue;

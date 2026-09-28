@@ -12,9 +12,14 @@
 
 ## Racing Mini-game Additions (This Branch)
 
-- Nordschleife race track geometry (`static/models/Tracks/Nordschleife/*.json`)
-  - Source: procedurally generated in-project for this implementation
-  - License: project-owned data in this repository
+- Nordschleife track data (`static/models/Tracks/Nordschleife/nordschleife.json`)
+  - Centerline, corner names, overpasses and forest areas: © OpenStreetMap contributors,
+    https://www.openstreetmap.org/copyright. The file is a derived database and is available
+    under the Open Database License 1.0 (https://opendatacommons.org/licenses/odbl/1-0/)
+  - Elevation and terrain: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and
+    Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights
+    reserved. Used under the Copernicus DEM licence
+  - Built by `scripts/track/build_nordschleife.py`; the in-game race menu carries the credit
 
 - Race engine audio profiles and shift transients
   - Source: procedural Web Audio synthesis at runtime (no third-party audio samples)

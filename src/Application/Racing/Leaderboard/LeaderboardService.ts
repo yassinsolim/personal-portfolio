@@ -13,12 +13,13 @@ type SupabaseConfig = {
 const DEFAULT_TABLE = 'nordschleife_leaderboard';
 const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
 const CONFIG_URL = '/config/racing.config.json';
-const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v2';
+const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
 // laps from the tire model and the 16 m road aren't comparable with the old
 // ones, so new rows carry this tag on car_id and the board only reads tagged
 // rows. old rows stay in the table. no schema change needed
-const SEASON_TAG = '@v2';
+const SEASON_TAG = '@v3';
+const MAX_UPLOAD_SAMPLES = 5000;
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -375,8 +376,11 @@ export default class LeaderboardService {
             replay.lapTimeMs || fallbackLapTimeMs
         );
 
+        // a real ring lap runs 7 to 10 minutes, so thin it to the upload cap
+        // instead of cutting the end off
+        const step = Math.max(1, Math.ceil(replay.samples.length / MAX_UPLOAD_SAMPLES));
         const safeSamples = replay.samples
-            .slice(0, 5000)
+            .filter((_, index) => index % step === 0 || index === replay.samples.length - 1)
             .map((sample) => {
                 const qx = this.clampNumber(sample?.qx, -1, 1);
                 const qy = this.clampNumber(sample?.qy, -1, 1);

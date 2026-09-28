@@ -7,6 +7,7 @@
 // then run e.g.:
 //   await __race(['bmw-e92-m3', 'amg-one'], 30)
 //   await __race(['bmw-e92-m3'], 16, { scenario: 'drift', atKph: 200 })
+//   await __race(['amg-one'], 20, { startAt: 0.1, startKph: 150 }) (flugplatz crest)
 // gaps are in cm, positive means the lowest wheel is above the road.
 //
 // the autopilot brakes for corners (options.latG, default 75% of the car's
@@ -224,6 +225,16 @@
             v.currentCarId = id;
             v.setModel(id);
             v.resetToStart();
+            // startAt: fraction of the lap to start from, startKph: rolling start
+            if (options.startAt !== undefined) {
+                const p = curve.getPointAt(options.startAt);
+                const d = curve.getTangentAt(options.startAt);
+                v.teleport(
+                    p,
+                    Math.atan2(d.x, d.z),
+                    (options.startKph ?? 0) / 3.6
+                );
+            }
             Object.assign(controls, {
                 throttle: 0,
                 brake: 0,
@@ -255,6 +266,7 @@
             let barrierSteps = 0;
             let barrierHits = 0;
             const barrierLog = [];
+            const sinkLog = [];
             let wasOnBarrier = false;
             let maxSpeed = 0;
             let hint = -1;
@@ -387,6 +399,17 @@
                     gapsAll.push(Math.max(...gaps));
                     worstFloat.push(Math.min(...gaps));
                     worstSink.push(Math.min(...gaps));
+                    if (Math.min(...gaps) < -0.05 && sinkLog.length < 12) {
+                        sinkLog.push({
+                            t: +(s / 60).toFixed(2),
+                            at: v.trackFrame
+                                ? Math.round(v.trackFrame.distance)
+                                : null,
+                            cm: +(Math.min(...gaps) * 100).toFixed(1),
+                            grounded: v.grounded,
+                            kph: Math.round(Math.abs(v.speedMps) * 3.6),
+                        });
+                    }
                 }
                 up.set(0, 1, 0).applyQuaternion(v.carPivot.quaternion);
                 jitter.push((up.angleTo(prevUp) * 180) / Math.PI);
@@ -428,6 +451,7 @@
                 highestWheelCmP95: +(
                     (percentile(gapsAll, 0.95) || 0) * 100
                 ).toFixed(1),
+                sinkLog,
                 pctStepsWheelSunk5cm: +(
                     (100 * worstSink.filter((g) => g < -0.05).length) /
                     Math.max(1, worstSink.length)
