@@ -13,7 +13,9 @@
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",
-        "validate:race": "node scripts/run-regression-validation.js"
+        "validate:race": "node scripts/run-regression-validation.js",
+        "check:drivetrain": "node scripts/race-drivetrain-check.mjs",
+        "test:drivetrain": "node --test scripts/race-drivetrain.test.mjs"
     },
     "dependencies": {
         "@babel/core": "^7.16.12",
