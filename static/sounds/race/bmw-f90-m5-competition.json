@@ -1,0 +1,170 @@
+{
+ "version": 1,
+ "carId": "bmw-f90-m5-competition",
+ "sampleRate": 48000,
+ "source": "synth+recorded-idle",
+ "notes": "bmw-s63b44t4-m5",
+ "files": {
+  "opus": "bmw-f90-m5-competition.webm",
+  "aac": "bmw-f90-m5-competition.m4a"
+ },
+ "bytes": {
+  "opus": 144664,
+  "aac": 186763
+ },
+ "duration": 22.641,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 1109.83,
+   "start": 0.08,
+   "dur": 1.94625,
+   "db": 0.0
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1400.1,
+   "start": 2.14625,
+   "dur": 1.114208,
+   "db": -14.23
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2300.32,
+   "start": 3.380458,
+   "dur": 1.0955,
+   "db": -7.67
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3200.0,
+   "start": 4.595958,
+   "dur": 1.0875,
+   "db": -12.4
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 4099.64,
+   "start": 5.803458,
+   "dur": 1.112292,
+   "db": -12.91
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 5000.0,
+   "start": 7.03575,
+   "dur": 1.104,
+   "db": -13.72
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5901.64,
+   "start": 8.25975,
+   "dur": 1.098,
+   "db": -17.84
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 6800.47,
+   "start": 9.47775,
+   "dur": 1.094042,
+   "db": -14.9
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1400.1,
+   "start": 10.691792,
+   "dur": 1.114208,
+   "db": -32.73
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2800.19,
+   "start": 11.926,
+   "dur": 1.114208,
+   "db": -31.45
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 4400.31,
+   "start": 13.160208,
+   "dur": 1.090833,
+   "db": -30.87
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 6000.0,
+   "start": 14.371042,
+   "dur": 1.1,
+   "db": -33.4
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 15.601042,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 16.071042,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 16.541042,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 17.011042,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 17.481042,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 18.201042,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 19.021042,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 19.511042,
+   "dur": 0.45
+  },
+  {
+   "id": "start8",
+   "kind": "start",
+   "start": 20.081042,
+   "dur": 2.5
+  }
+ ]
+}
