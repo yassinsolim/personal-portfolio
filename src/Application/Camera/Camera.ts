@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import Application from '../Application';
 import Sizes from '../Utils/Sizes';
 import EventEmitter from '../Utils/EventEmitter';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import TWEEN from '@tweenjs/tween.js';
 import Renderer from '../Renderer';
 import Resources from '../Utils/Resources';

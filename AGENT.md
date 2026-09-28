@@ -33,6 +33,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   written to the same relative path under `static/` by `npm run optimize:models [carId ...]`
   (Draco geometry, WebP textures capped at 1024px). `GLTFLoader` has a Draco decoder and needs
   `'wasm-unsafe-eval'` in the CSP for the wasm path; it falls back to the JS decoder otherwise.
+  The decoder files come from `three/examples/jsm/libs/draco` (webpack emits them from
+  `DRACOLoader`'s `import.meta.url` references), so there's no vendored copy to keep in sync.
+- three is r186 with color management on. Colors tuned on r137 go through `Utils/LegacyColor.ts`
+  (`legacyColor`, `setLegacyHex`) so they keep their look, and the room scene's lights are scaled
+  by `LEGACY_LIGHT_SCALE` (pi) for the same reason. New work should use plain sRGB hex colors
+  and physical light units.
 - Only simplify materials listed in `simplifyMaterialsByModel`. Stripes and decals sit <1mm
   above the paint, so simplifying either layer makes the paint poke through.
 - Camera near plane is 200 on purpose: at 10 those layers z-fight from the default views.

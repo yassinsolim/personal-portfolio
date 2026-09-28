@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
 import { randomRange } from '../../Utils/Random';
+import { legacyColor } from '../../Utils/LegacyColor';
 
 const COLLIDER_LAYER = 1;
 const DEFAULT_UV_SCALE = 0.0015;
@@ -169,7 +170,7 @@ export default class NordschleifeTrack {
         const geometry = this.createTrackSurfaceGeometry(data, curve);
         const asphaltTexture = this.createAsphaltTexture();
         const material = new THREE.MeshStandardMaterial({
-            color: 0x303338,
+            color: legacyColor(0x303338),
             roughness: 0.94,
             metalness: 0.03,
             map: asphaltTexture,
@@ -238,7 +239,7 @@ export default class NordschleifeTrack {
         group.name = 'nordschleife-edge-markings';
 
         const material = new THREE.MeshStandardMaterial({
-            color: 0xf1f1f1,
+            color: legacyColor(0xf1f1f1),
             roughness: 0.55,
             metalness: 0.02,
             side: THREE.DoubleSide,
@@ -373,7 +374,7 @@ export default class NordschleifeTrack {
         const geometry = this.createCenterStripGeometry(data, curve);
         const dashTexture = this.createDashTexture();
         const material = new THREE.MeshStandardMaterial({
-            color: 0xf4f4f4,
+            color: legacyColor(0xf4f4f4),
             roughness: 0.42,
             metalness: 0.02,
             side: THREE.DoubleSide,

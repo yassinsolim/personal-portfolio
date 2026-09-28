@@ -14,6 +14,7 @@ import {
     type CarRaceConfig,
     type DrivetrainType,
 } from '../../carOptions';
+import { legacyColor } from '../../Utils/LegacyColor';
 
 const SPAWN_T = 0.003;
 const MAX_REVERSE_SPEED_KPH = 34;
@@ -133,11 +134,11 @@ const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
     '523_refl_black_0_1',
     '539_refl_black_0_1',
 ];
-const AMG_ONE_RACE_BLUE = new THREE.Color(0x050f2f);
-const BMW_E92_RIM_SILVER = new THREE.Color(0xd3d8de);
-const BMW_M8_FROZEN_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = new THREE.Color(0x040924);
-const TOYOTA_CROWN_SILVER = new THREE.Color(0x8f9296);
+const AMG_ONE_RACE_BLUE = legacyColor(0x050f2f);
+const BMW_E92_RIM_SILVER = legacyColor(0xd3d8de);
+const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);
+const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = legacyColor(0x040924);
+const TOYOTA_CROWN_SILVER = legacyColor(0x8f9296);
 const WHEEL_NAME_HINT_REGEX =
     /(^|[^a-z])(wheel|tire|tyre|rim)([^a-z]|$)/i;
 const WHEEL_MATERIAL_HINT_REGEX =

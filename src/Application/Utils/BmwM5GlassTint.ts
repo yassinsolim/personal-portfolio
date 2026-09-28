@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { setLegacyHex } from './LegacyColor';
 
 const M5_GLASS_MATERIAL_HINT = 'bmat_glass1';
 const M5_SIDE_WINDOW_MESH_HINTS = [
@@ -39,7 +40,7 @@ const applyGlassTint = (
 ) => {
     material.map = null;
     material.alphaMap = null;
-    material.color.setHex(tint.color);
+    setLegacyHex(material.color, tint.color);
     material.metalness = tint.metalness;
     material.roughness = tint.roughness;
     material.opacity = tint.opacity;

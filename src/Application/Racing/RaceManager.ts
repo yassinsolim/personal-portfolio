@@ -13,6 +13,7 @@ import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
     type MultiplayerPlayerState,
 } from './Multiplayer/MultiplayerService';
+import { legacyColor } from '../Utils/LegacyColor';
 
 type RaceModeState = {
     active: boolean;
@@ -105,7 +106,7 @@ export default class RaceManager {
     remoteSessionScratch: Set<string>;
     hiddenLobbyObjects: THREE.Object3D[];
     defaultSceneBackground: THREE.Color | THREE.Texture | THREE.CubeTexture | null;
-    defaultSceneFog: THREE.FogBase | null;
+    defaultSceneFog: THREE.Fog | THREE.FogExp2 | null;
     topLeaderboardGhostLapId: string | null;
     topLeaderboardGhostRequestSerial: number;
     physicsAccumulator: number;
@@ -350,7 +351,7 @@ export default class RaceManager {
         this.paused = false;
         this.setLobbyObjectsVisible(false);
         this.scene.background = new THREE.Color(0x0b0f14);
-        this.scene.fog = new THREE.Fog(0x0b0f14, 380, 8800);
+        this.scene.fog = new THREE.Fog(legacyColor(0x0b0f14), 380, 8800);
         this.raceRoot.visible = true;
         this.vehicle.resetToStart();
         this.physicsAccumulator = 0;

@@ -82,11 +82,7 @@ export default class Renderer {
             powerPreference: 'high-performance',
             preserveDrawingBuffer: false,
         });
-        // Settings
-        // this.instance.physicallyCorrectLights = true;
-        this.instance.outputEncoding = THREE.sRGBEncoding;
-        // this.instance.toneMapping = THREE.ACESFilmicToneMapping;
-        // this.instance.toneMappingExposure = 0.9;
+        this.instance.outputColorSpace = THREE.SRGBColorSpace;
         this.instance.setSize(this.sizes.width, this.sizes.height);
         this.instance.setPixelRatio(this.getPixelRatio());
         this.instance.setClearColor(0x000000, 0.0);
