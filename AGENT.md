@@ -613,3 +613,20 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   or leaving race mode leaves the lobby and it's rejoined on return (`suspend`/`resume`).
 - Supabase URL, key, tables and lobby prefix come from env at build time
   (`scripts/write-racing-config.js`), so moving projects is a config change.
+
+## Garage Notes (2026-09-28)
+- Opened from the lobby card (key 4) or the pause menu. The car parks and the camera orbits it
+  (drag to turn). Choices apply live and persist per car (`yassinverse:garageLook:<car>`,
+  `yassinverse:garageTune:<car>`).
+- Look (`Garage/carLook.ts`): paint and finish on the body material names in `PAINT`, rim and
+  caliper colors (calipers only on cars with their own caliper material), rims from another car
+  (its wheel meshes scaled into this car's wheels), a ducktail or GT wing sized from
+  `raceBodySize` and rays on the boot, ride height (moves the body, not the wheels). It works by
+  names, so remote clones get it too, and it copies materials before changing them.
+- Tune (`Garage/garage.ts` `applyTune`): engine map, tire compound, spring balance and damping
+  (roll share and load transfer time), diff lock, final drive, brake bias, plus the aero of the
+  body kit and the ride height's effect on cg height. Mass never changes, so collisions don't
+  depend on the tune. A stock tune returns the spec unchanged (harness identical).
+- Leaderboard: any tune, body kit or ride height change makes the car tuned. Tuned laps are
+  tagged `<car>@v3~t<code>` and live on the tuned board; the stock board still reads `%@v3`.
+- Multiplayer: the look rides on telemetry as a short code (`encodeLook`), no extra messages.
