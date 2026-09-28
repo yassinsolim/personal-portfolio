@@ -1,4 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { createMockRealtime, mockRealtimeEnabled } from './mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import { randomInt } from '../../Utils/Random';
 import type { LeaderboardEntry } from '../Leaderboard/LocalLeaderboard';
@@ -119,9 +120,12 @@ const DEFAULT_LOBBY_PREFIX = 'nordschleife_lobby_v2';
 const PHYSICS_SEASON = 'p3';
 const SESSION_KEY = 'yassinverse:nordschleife:multiplayer:session:v1';
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
-const TELEMETRY_SEND_INTERVAL_FAST_MS = 40;
-const TELEMETRY_SEND_INTERVAL_SLOW_MS = 80;
-const TELEMETRY_HEARTBEAT_INTERVAL_MS = 180;
+// realtime messages are billed (shared quota), so telemetry runs at ~11 Hz
+// moving and the receiving side predicts in between. a car that hasn't moved
+// only sends a keep alive
+const TELEMETRY_SEND_INTERVAL_FAST_MS = 90;
+const TELEMETRY_SEND_INTERVAL_SLOW_MS = 100;
+const TELEMETRY_HEARTBEAT_INTERVAL_MS = 2000;
 const TELEMETRY_STATE_EMIT_INTERVAL_MS = 120;
 const MAX_NAME_LENGTH = 16;
 const MAX_LAPS = 32;
@@ -192,6 +196,8 @@ export default class MultiplayerService {
     players: Map<string, MultiplayerPlayerState>;
     // set by the first presence sync of the current lobby
     presenceSynced = false;
+    // the lobby to rejoin after a hidden tab or a trip out of race mode
+    suspended: { code: string; host: boolean } | null = null;
     // lowest delay seen per sender (ms, their clock to ours)
     peerDelays = new Map<string, { floor: number; at: number }>();
     laps: MultiplayerLapState[];
@@ -280,6 +286,14 @@ export default class MultiplayerService {
     }
 
     async loadConfig() {
+        // tests: an in browser stand in, nothing reaches supabase
+        if (mockRealtimeEnabled()) {
+            this.supabase = createMockRealtime() as unknown as SupabaseClient;
+            this.supported = true;
+            this.error = null;
+            this.emitState();
+            return;
+        }
         const controller = new AbortController();
         const timeout = setTimeout(
             () => controller.abort(),
@@ -424,6 +438,8 @@ export default class MultiplayerService {
     async leaveLobby(internal = false) {
         if (!internal) {
             this.joinRequestCounter++;
+            // leaving on purpose: no rejoin later
+            this.suspended = null;
         }
         this.cancelPendingSubscription?.();
         this.cancelPendingSubscription = null;
@@ -457,15 +473,14 @@ export default class MultiplayerService {
                 // no-op
             }
         }
+        // name changes ride on telemetry, presence is join and leave only
         this.touchLocalPlayer();
-        this.pushLocalPresenceUpdate();
         this.emitState();
     }
 
     setLocalCarId(carId: string) {
         this.localCarId = carOptionsById[carId] ? carId : defaultCarId;
         this.touchLocalPlayer();
-        this.pushLocalPresenceUpdate();
         this.emitState();
     }
 
@@ -499,6 +514,8 @@ export default class MultiplayerService {
         ghost?: boolean;
     }) {
         if (!this.connected || !this.channel) return;
+        // nobody to send to
+        if (!this.hasRemotePlayers()) return;
 
         const now = Date.now();
         const highMotion =
@@ -560,16 +577,16 @@ export default class MultiplayerService {
             ghost: Boolean(payload.ghost),
             sent_at: new Date(now).toISOString(),
         };
+        // the pose to a few cm, not the lap clock (it always changes), so a
+        // parked car counts as unchanged
         const signature = JSON.stringify({
-            speed_kph: safePayload.speed_kph,
-            lap_progress: safePayload.lap_progress,
-            lap_time_ms: safePayload.lap_time_ms,
-            position: safePayload.position,
-            quaternion: safePayload.quaternion,
+            speed_kph: Math.round(safePayload.speed_kph),
+            position: safePayload.position.map((v) => Math.round(v * 20)),
+            quaternion: safePayload.quaternion.map((v) => Math.round(v * 500)),
             gear: safePayload.gear,
-            drift_intensity: safePayload.drift_intensity,
-            velocity: safePayload.velocity,
             ghost: safePayload.ghost,
+            car_id: safePayload.car_id,
+            name: safePayload.name,
         });
         const heartbeatDue =
             now - this.lastTelemetryHeartbeatAt >= TELEMETRY_HEARTBEAT_INTERVAL_MS;
@@ -601,6 +618,7 @@ export default class MultiplayerService {
 
     publishLap(entry: LeaderboardEntry) {
         if (!this.connected || !this.channel) return;
+        if (!this.hasRemotePlayers()) return;
 
         const safeName = this.sanitizePlayerName(entry.name || this.localPlayerName);
         const safeCarId = carOptionsById[entry.carId] ? entry.carId : this.localCarId;
@@ -688,6 +706,7 @@ export default class MultiplayerService {
 
     sendBump(bump: MultiplayerBump) {
         if (!this.connected || !this.channel) return;
+        if (!this.hasRemotePlayers()) return;
         this.channel.send({
             type: 'broadcast',
             event: 'bump',
@@ -910,13 +929,10 @@ export default class MultiplayerService {
             connected_at: new Date().toISOString(),
         };
 
+        // presence carries the profile, once on join (and it goes on leave).
+        // later name or car changes ride on telemetry
         try {
             await channel.track(profile);
-            channel.send({
-                type: 'broadcast',
-                event: 'profile',
-                payload: profile,
-            });
         } catch {
             // presence errors should not crash flow
         }
@@ -1154,11 +1170,31 @@ export default class MultiplayerService {
             connected_at: new Date().toISOString(),
         };
         this.channel.track(payload).catch(() => undefined);
-        this.channel.send({
-            type: 'broadcast',
-            event: 'profile',
-            payload,
-        });
+    }
+
+    hasRemotePlayers() {
+        for (const id of this.players.keys()) {
+            if (id !== this.localSessionId) return true;
+        }
+        return false;
+    }
+
+    // a hidden tab or leaving race mode drops the realtime connection, and
+    // coming back joins the same lobby again
+    async suspend() {
+        if (this.mode !== 'lobby' || !this.lobbyCode || this.suspended) return;
+        const saved = { code: this.lobbyCode, host: this.isHost };
+        await this.leaveLobby();
+        this.suspended = saved;
+        this.emitState();
+    }
+
+    async resume() {
+        const suspended = this.suspended;
+        if (!suspended) return;
+        this.suspended = null;
+        if (this.mode === 'lobby') return;
+        await this.joinLobbyInternal(suspended.code, this.localPlayerName, this.localCarId, suspended.host);
     }
 
     touchLocalPlayer() {

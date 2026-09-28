@@ -600,3 +600,16 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   0.5 m (p50), 12.5 m to about 3 m (p95).
 - `?raceDebug=1&netsim=loss,lag,jitter` (e.g. `0.2,120,80`) drops and delays outgoing broadcasts
   for testing. `.tmp-validation/mp4.mjs <url> <netsim>` runs four clients through the real flow.
+
+## Realtime Traffic (2026-09-28)
+- The Supabase org shares a 2M/month Realtime message quota with WebStrafe. Never run
+  multiplayer tests against the live project (axrljzcrlmliscstmctb) or a preview. Use
+  `?raceDebug=1&mpmock=1` (in browser mock, windows of one browser share lobbies, laps stay local)
+  or a local `supabase start`. `scripts/race-mp-traffic.mjs` uses the mock and also aborts any
+  request or websocket to supabase.co.
+- Budget: nothing is broadcast while you're alone in a lobby; telemetry is ~11 Hz moving and a
+  2 s keep alive when the pose hasn't changed (the lap clock isn't part of that check); presence
+  is tracked on join and dropped on leave, name and car changes ride on telemetry; a hidden tab
+  or leaving race mode leaves the lobby and it's rejoined on return (`suspend`/`resume`).
+- Supabase URL, key, tables and lobby prefix come from env at build time
+  (`scripts/write-racing-config.js`), so moving projects is a config change.

@@ -341,6 +341,12 @@ export default class RaceManager {
             }
         );
 
+        // a hidden tab drops realtime too
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') void this.multiplayer.suspend();
+            else if (this.active) void this.multiplayer.resume();
+        });
+
         UIEventBus.on('race:multiplayerLeaveLobby', async () => {
             await this.multiplayer.leaveLobby();
             this.clearRemoteVehicles();
@@ -393,6 +399,7 @@ export default class RaceManager {
 
     enterRaceMode() {
         if (this.active) return;
+        void this.multiplayer.resume();
         UIEventBus.dispatch('race:trackOutline', { points: this.getTrackOutline() });
 
         this.initialized = true;
@@ -461,6 +468,8 @@ export default class RaceManager {
 
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
+        // no realtime traffic outside race mode, the lobby is rejoined on return
+        void this.multiplayer.suspend();
 
         this.active = false;
         this.paused = false;
