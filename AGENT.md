@@ -558,3 +558,31 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   the lap long ribbons and terrain skirt are cut into cells so off screen parts are culled.
 - The original site's SwiftShader numbers are misleading: in most runs the car never appeared
   (5 to 30 draws, 18k to 40k triangles), so its fps is for a nearly empty road.
+
+## Race Audio (2026-09-27)
+- Runtime lives in `src/Application/Racing/Audio/`. `CarAudio.ts` is the entry point with a small
+  surface: `setCar`, `update({ rpm, throttle, speedKph, gear, slip, boost })`, `impact`,
+  `setListener`, `updateRemotes`, `setActive/setPaused/setMuted/setVolume`. `RaceEngineAudio.ts`
+  adapts RaceManager's telemetry to it; RaceManager passes the whole telemetry object, so new
+  fields from the driving model (`limiter`, `shifting`, `impact`, `barrierContact`, `onKerb`,
+  `onGrass`, `boost`) are picked up without touching the audio call.
+- Each car is one sprite in `static/sounds/race/<carId>.webm` (opus) with an `.m4a` (aac)
+  fallback and a `.json` manifest of loop and one-shot offsets. Not `static/audio/`: the webpack
+  copy step ignores `**/audio/**`. Only the car being driven is fetched, and only once race mode
+  starts; `common` holds tires and impacts.
+- Loops are stored with 50 ms of wrap-around margin on each side, so codec delay can't break the
+  loop points. Chromium decodes both formats sample-aligned.
+- `EngineVoice.ts` crossfades on-load and off-load loops by rpm (equal power, log rpm) and load,
+  pitches them to the exact rpm, and adds the shift cut, limiter, overrun pops, turbo whistle and
+  hybrid whine. Recorded idles keep their recorded pitch at the game's idle (`audioRpm` remap up
+  to about 2,600 rpm). Per-car mixing is in `carAudioProfiles.ts`.
+- Rebuild assets: `python3 scripts/audio/fetch_sources.py` once (about 600 MB into `audio-src/`),
+  then `python3 scripts/audio/build_audio.py [carId ...]` (numpy, scipy, soundfile, ffmpeg with
+  libopus). Recipes per car are in `build_audio.py`, engine layouts for the synth in `specs.py`.
+  `python3 scripts/audio/analyze_orders.py` checks the firing-order content of every loop.
+- Demo clips: `node scripts/render-audio-samples.mjs` renders `docs/audio-samples/<carId>.mp3` with
+  the real runtime on an OfflineAudioContext (idle, full throttle through the gears to the
+  limiter, lift). `node scripts/verify-race-audio.mjs` runs a production build in headed
+  Chromium, drives, switches car and reports levels, fps and console errors.
+- Sources and licenses are in `CREDITS.md` ("Race Audio"). Keep to CC0, CC BY or royalty-free
+  bundle licenses that allow public web use, and never ship audio ripped from video sites.

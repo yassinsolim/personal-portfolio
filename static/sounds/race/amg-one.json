@@ -1,0 +1,164 @@
+{
+ "version": 1,
+ "carId": "amg-one",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "amg-pu106b-road",
+ "files": {
+  "opus": "amg-one.webm",
+  "aac": "amg-one.m4a"
+ },
+ "bytes": {
+  "opus": 134492,
+  "aac": 162309
+ },
+ "duration": 19.665,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 1250.0,
+   "start": 0.08,
+   "dur": 1.632,
+   "db": -21.81
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 2200.15,
+   "start": 1.832,
+   "dur": 1.090833,
+   "db": -5.38
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 3600.0,
+   "start": 3.042833,
+   "dur": 1.1,
+   "db": -4.6
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 5000.0,
+   "start": 4.262833,
+   "dur": 1.104,
+   "db": -2.55
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 6400.0,
+   "start": 5.486833,
+   "dur": 1.10625,
+   "db": 0.0
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 7804.88,
+   "start": 6.713083,
+   "dur": 1.107,
+   "db": -2.18
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 9201.28,
+   "start": 7.940083,
+   "dur": 1.0955,
+   "db": -3.5
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 10607.73,
+   "start": 9.155583,
+   "dur": 1.097312,
+   "db": -3.05
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 2200.15,
+   "start": 10.372896,
+   "dur": 1.090833,
+   "db": -24.81
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 4600.64,
+   "start": 11.583729,
+   "dur": 1.0955,
+   "db": -21.44
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 6998.78,
+   "start": 12.799229,
+   "dur": 1.097333,
+   "db": -20.5
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 9396.41,
+   "start": 14.016562,
+   "dur": 1.098292,
+   "db": -23.37
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 15.244854,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 15.714854,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 16.184854,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 16.654854,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 17.124854,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 17.844854,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 18.664854,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 19.154854,
+   "dur": 0.45
+  }
+ ]
+}

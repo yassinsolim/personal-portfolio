@@ -1,0 +1,114 @@
+{
+ "version": 1,
+ "carId": "toyota-crown-platinum",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "toyota-t24a-fts",
+ "files": {
+  "opus": "toyota-crown-platinum.webm",
+  "aac": "toyota-crown-platinum.m4a"
+ },
+ "bytes": {
+  "opus": 115928,
+  "aac": 120215
+ },
+ "duration": 14.512,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 850.06,
+   "start": 0.08,
+   "dur": 1.552833,
+   "db": -21.56
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1400.1,
+   "start": 1.752833,
+   "dur": 1.114208,
+   "db": -4.97
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2300.32,
+   "start": 2.987042,
+   "dur": 1.0955,
+   "db": -2.91
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3200.0,
+   "start": 4.202542,
+   "dur": 1.0875,
+   "db": -2.01
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 4099.64,
+   "start": 5.410042,
+   "dur": 1.112292,
+   "db": -0.95
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 5000.0,
+   "start": 6.642333,
+   "dur": 1.104,
+   "db": -0.55
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5901.64,
+   "start": 7.866333,
+   "dur": 1.098,
+   "db": 0.0
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1400.1,
+   "start": 9.084333,
+   "dur": 1.114208,
+   "db": -24.63
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 3000.0,
+   "start": 10.318542,
+   "dur": 1.12,
+   "db": -22.97
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 4600.64,
+   "start": 11.558542,
+   "dur": 1.0955,
+   "db": -20.8
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 5901.64,
+   "start": 12.774042,
+   "dur": 1.098,
+   "db": -20.48
+  }
+ ],
+ "shots": [
+  {
+   "id": "bov0",
+   "kind": "bov",
+   "start": 14.002042,
+   "dur": 0.45
+  }
+ ]
+}

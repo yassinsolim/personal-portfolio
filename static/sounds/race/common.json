@@ -1,0 +1,60 @@
+{
+ "version": 1,
+ "carId": "common",
+ "sampleRate": 48000,
+ "source": "recorded",
+ "notes": "shared tire and impact sounds",
+ "files": {
+  "opus": "common.webm",
+  "aac": "common.m4a"
+ },
+ "bytes": {
+  "opus": 65563,
+  "aac": 84059
+ },
+ "duration": 10.1,
+ "loops": [
+  {
+   "id": "squeal0",
+   "kind": "squeal",
+   "rpm": 0.0,
+   "start": 0.08,
+   "dur": 3.4,
+   "db": 0.0
+  },
+  {
+   "id": "squeal1",
+   "kind": "squeal",
+   "rpm": 0.0,
+   "start": 3.6,
+   "dur": 3.2,
+   "db": -2.26
+  }
+ ],
+ "shots": [
+  {
+   "id": "impact_heavy0",
+   "kind": "impact_heavy",
+   "start": 6.93,
+   "dur": 1.1
+  },
+  {
+   "id": "impact_medium1",
+   "kind": "impact_medium",
+   "start": 8.15,
+   "dur": 0.9
+  },
+  {
+   "id": "impact_light2",
+   "kind": "impact_light",
+   "start": 9.17,
+   "dur": 0.45
+  },
+  {
+   "id": "bump3",
+   "kind": "bump",
+   "start": 9.74,
+   "dur": 0.3
+  }
+ ]
+}

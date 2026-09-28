@@ -1,0 +1,204 @@
+{
+ "version": 1,
+ "carId": "amg-c63-507",
+ "sampleRate": 48000,
+ "source": "recorded",
+ "notes": "pole position mercedes amg c63 2009 (w204, m156)",
+ "files": {
+  "opus": "amg-c63-507.webm",
+  "aac": "amg-c63-507.m4a"
+ },
+ "bytes": {
+  "opus": 169416,
+  "aac": 232351
+ },
+ "duration": 28.21,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 1181.3,
+   "start": 0.08,
+   "dur": 2.031667,
+   "db": -0.07
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 3699.42,
+   "start": 2.231667,
+   "dur": 1.102875,
+   "db": -0.83
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 3699.42,
+   "start": 3.454542,
+   "dur": 1.102875,
+   "db": -3.9
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 4400.31,
+   "start": 4.677417,
+   "dur": 1.090833,
+   "db": -0.94
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 4400.31,
+   "start": 5.88825,
+   "dur": 1.090833,
+   "db": -3.84
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 5101.86,
+   "start": 7.099083,
+   "dur": 1.105479,
+   "db": -0.92
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 5101.86,
+   "start": 8.324563,
+   "dur": 1.105479,
+   "db": -3.56
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 5697.33,
+   "start": 9.550042,
+   "dur": 1.09525,
+   "db": 0.0
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 5697.33,
+   "start": 10.765292,
+   "dur": 1.09525,
+   "db": -2.7
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 6301.97,
+   "start": 11.980542,
+   "dur": 1.104417,
+   "db": -0.76
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 6301.97,
+   "start": 13.204958,
+   "dur": 1.104417,
+   "db": -3.35
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 1600.0,
+   "start": 14.429375,
+   "dur": 1.125,
+   "db": -5.01
+  },
+  {
+   "id": "off5",
+   "kind": "off",
+   "rpm": 1600.0,
+   "start": 15.674375,
+   "dur": 1.125,
+   "db": -31.64
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 2300.32,
+   "start": 16.919375,
+   "dur": 1.0955,
+   "db": -6.22
+  },
+  {
+   "id": "off6",
+   "kind": "off",
+   "rpm": 2300.32,
+   "start": 18.134875,
+   "dur": 1.0955,
+   "db": -31.1
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 3000.0,
+   "start": 19.350375,
+   "dur": 1.12,
+   "db": -8.98
+  },
+  {
+   "id": "off7",
+   "kind": "off",
+   "rpm": 3000.0,
+   "start": 20.590375,
+   "dur": 1.12,
+   "db": -31.73
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 21.840375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 22.310375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 22.780375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 23.250375,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 23.720375,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 24.440375,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 25.260375,
+   "dur": 0.37
+  },
+  {
+   "id": "start7",
+   "kind": "start",
+   "start": 25.750375,
+   "dur": 2.4
+  }
+ ]
+}

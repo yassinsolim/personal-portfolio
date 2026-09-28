@@ -1,0 +1,210 @@
+{
+ "version": 1,
+ "carId": "amg-c63s-coupe",
+ "sampleRate": 48000,
+ "source": "recorded-sister-engine",
+ "notes": "pole position mercedes amg gt r 2018 (m178, same family as the m177)",
+ "files": {
+  "opus": "amg-c63s-coupe.webm",
+  "aac": "amg-c63s-coupe.m4a"
+ },
+ "bytes": {
+  "opus": 172267,
+  "aac": 232001
+ },
+ "duration": 28.166,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 998.61,
+   "start": 0.08,
+   "dur": 1.442,
+   "db": 0.0
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 3699.42,
+   "start": 1.642,
+   "dur": 1.102875,
+   "db": -1.23
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 3699.42,
+   "start": 2.864875,
+   "dur": 1.102875,
+   "db": -4.77
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 4400.31,
+   "start": 4.08775,
+   "dur": 1.090833,
+   "db": -0.17
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 4400.31,
+   "start": 5.298583,
+   "dur": 1.090833,
+   "db": -3.72
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 5101.86,
+   "start": 6.509417,
+   "dur": 1.105479,
+   "db": -2.33
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 5101.86,
+   "start": 7.734896,
+   "dur": 1.105479,
+   "db": -5.91
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 5697.33,
+   "start": 8.960375,
+   "dur": 1.09525,
+   "db": -1.02
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 5697.33,
+   "start": 10.175625,
+   "dur": 1.09525,
+   "db": -4.49
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 6301.97,
+   "start": 11.390875,
+   "dur": 1.104417,
+   "db": -2.56
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 6301.97,
+   "start": 12.615292,
+   "dur": 1.104417,
+   "db": -5.81
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 1500.0,
+   "start": 13.839708,
+   "dur": 1.12,
+   "db": -7.29
+  },
+  {
+   "id": "off5",
+   "kind": "off",
+   "rpm": 1500.0,
+   "start": 15.079708,
+   "dur": 1.12,
+   "db": -38.11
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 2200.15,
+   "start": 16.319708,
+   "dur": 1.090833,
+   "db": -8.6
+  },
+  {
+   "id": "off6",
+   "kind": "off",
+   "rpm": 2200.15,
+   "start": 17.530542,
+   "dur": 1.090833,
+   "db": -35.81
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 2900.3,
+   "start": 18.741375,
+   "dur": 1.117125,
+   "db": -11.73
+  },
+  {
+   "id": "off7",
+   "kind": "off",
+   "rpm": 2900.3,
+   "start": 19.9785,
+   "dur": 1.117125,
+   "db": -37.23
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 21.225625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 21.695625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 22.165625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 22.635625,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 23.105625,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 23.825625,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 24.645625,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 25.135625,
+   "dur": 0.45
+  },
+  {
+   "id": "start8",
+   "kind": "start",
+   "start": 25.705625,
+   "dur": 2.4
+  }
+ ]
+}
