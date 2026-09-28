@@ -21,16 +21,25 @@ export type GarageState = {
     look: CarLook;
     tune: CarTune;
     calipers: boolean;
+    // the factory speed limiter in km/h, null when the car has none
+    speedLimiter: number | null;
     tuned: boolean;
     stats: {
         powerKw: number;
         torqueNm: number;
         grip: number;
         topKph: number;
+        topLimitedBy: 'limiter' | 'drag' | 'revs';
         downforce: number;
         brakeFront: number;
-        finalDrive: number;
+        rpmAt100: number;
     };
+};
+
+const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
+    limiter: 'limited',
+    drag: 'drag',
+    revs: 'redline',
 };
 
 type Props = {
@@ -498,6 +507,35 @@ const Garage = ({ state, onClose }: Props) => {
                                 format={(v) => `${Math.round(v * 100)}% front`}
                                 onChange={(brakeBias) => setT({ brakeBias })}
                             />
+                            {state?.speedLimiter ? (
+                                <>
+                                    <h4>Speed limiter</h4>
+                                    <div className="garage-options">
+                                        <button
+                                            type="button"
+                                            className={
+                                                tune.speedLimiter ? 'on' : ''
+                                            }
+                                            onClick={() =>
+                                                setT({ speedLimiter: true })
+                                            }
+                                        >
+                                            {state.speedLimiter} km/h (stock)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={
+                                                tune.speedLimiter ? '' : 'on'
+                                            }
+                                            onClick={() =>
+                                                setT({ speedLimiter: false })
+                                            }
+                                        >
+                                            Removed
+                                        </button>
+                                    </div>
+                                </>
+                            ) : null}
                         </>
                     )}
                 </div>
@@ -516,7 +554,7 @@ const Garage = ({ state, onClose }: Props) => {
                             <strong>{stats.grip.toFixed(2)} g</strong>
                         </div>
                         <div>
-                            <span>Top speed</span>
+                            <span>Top speed ({TOP_LIMIT[stats.topLimitedBy]})</span>
                             <strong>{stats.topKph} km/h</strong>
                         </div>
                         <div>
@@ -524,8 +562,8 @@ const Garage = ({ state, onClose }: Props) => {
                             <strong>{stats.downforce.toFixed(2)}</strong>
                         </div>
                         <div>
-                            <span>Final drive</span>
-                            <strong>{stats.finalDrive.toFixed(2)}</strong>
+                            <span>100 km/h in top</span>
+                            <strong>{stats.rpmAt100.toLocaleString('en-US')} rpm</strong>
                         </div>
                     </div>
                 )}

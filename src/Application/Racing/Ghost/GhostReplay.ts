@@ -3,7 +3,7 @@ import { carOptionsById, defaultCarId } from '../../carOptions';
 import Application from '../../Application';
 import { legacyColor } from '../../Utils/LegacyColor';
 
-const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v3';
+const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v4';
 const SAMPLE_INTERVAL_MS = 60;
 const GHOST_OPACITY = 0.38;
 // 16 minutes, the slowest car's lap of the real ring fits
