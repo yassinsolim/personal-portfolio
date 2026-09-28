@@ -93,11 +93,11 @@ begin
   begin
     insert into public.nordschleife_ghost_replays (lap_id, lap_time_ms, car_id, samples)
       values (lap, 400000, 'amg-one@v3~t0a1b2c3d4e',
-        (select jsonb_agg(jsonb_build_object('t', g, 'pad', repeat('x', 400))) from generate_series(1, 5000) g));
+        (select jsonb_agg(jsonb_build_object('t', g, 'pad', repeat('x', 500))) from generate_series(1, 5000) g));
     ok := true;
   exception when insufficient_privilege then ok := false;
   end;
-  if ok then raise exception 'a 2 MB ghost was accepted'; end if;
+  if ok then raise exception 'a 2.6 MB ghost was accepted'; end if;
   -- a tuned lap's ghost carries the tuned car id
   insert into public.nordschleife_ghost_replays (lap_id, lap_time_ms, car_id, samples)
     values (lap, 400000, 'amg-one@v3~t0a1b2c3d4e',
