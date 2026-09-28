@@ -137,6 +137,11 @@ type TrackAssetData = {
     sections: TrackSection[];
     widths: [number, number][];
     banksDeg: [number, number][];
+    // measured camber per point (dgm1 lidar), degrees, left edge higher is
+    // positive. when it's there it replaces the corner banks
+    rollDeg?: number[];
+    // meters between points along the raw polyline
+    spacing: number;
     concrete: [number, boolean][];
     bridges: TrackBridge[];
     terrain: {
@@ -345,6 +350,17 @@ export default class NordschleifeTrack {
             }
             return value;
         };
+        // the measured camber is per data point, the lidar says which way
+        // (off camber corners too)
+        const roll = data.rollDeg && data.rollDeg.length === data.points.length ? data.rollDeg : null;
+        const sampleRoll = (distance: number) => {
+            if (!roll) return 0;
+            const f = distance / scale / data.spacing;
+            const i = Math.floor(f);
+            const k = f - i;
+            const n = roll.length;
+            return roll[((i % n) + n) % n] * (1 - k) + roll[(((i + 1) % n) + n) % n] * k;
+        };
         const concrete = data.concrete.map(
             ([distance, on]) => [distance, on ? 1 : 0] as [number, number]
         );
@@ -365,7 +381,9 @@ export default class NordschleifeTrack {
             );
             // positive curvature turns left, and a left turn leans left, which
             // is a negative roll about the tangent
-            this.frameBank[i] = -Math.sign(curvature) * bank;
+            this.frameBank[i] = roll
+                ? THREE.MathUtils.degToRad(sampleRoll(distance))
+                : -Math.sign(curvature) * bank;
             this.frameConcrete[i] = sample(concrete, distance) > 0.5 ? 1 : 0;
         }
     }

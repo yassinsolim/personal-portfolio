@@ -16,11 +16,10 @@ const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
 const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
-// laps from the real drivetrains (gearing, torque curves, tyres, limiters)
-// aren't comparable with the old ones, so new rows carry this tag on car_id
-// and the board only reads tagged rows. old rows stay in the table. no schema
-// change needed
-const SEASON_TAG = '@v4';
+// the season tag on car_id. bumped whenever lap times stop being comparable
+// (last: the lidar road profile and camber, before that the real
+// drivetrains). the board only reads the current tag and old rows stay
+const SEASON_TAG = '@v5';
 const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
 
