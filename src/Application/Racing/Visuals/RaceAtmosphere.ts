@@ -102,6 +102,26 @@ export default class RaceAtmosphere {
         this.shadowSize = size;
     }
 
+    // a short draw distance pulls the fog in so the far plane is hidden in
+    // it (95% fog there), otherwise the normal haze. off: the sky mesh is
+    // replaced by the fog color, which on a software rasterizer is most of
+    // the frame's cost
+    setDistance(drawDistance: number, sky: boolean, scene: THREE.Scene) {
+        this.fog.density = Math.max(
+            FOG_DENSITY,
+            drawDistance > 0 ? 1.75 / drawDistance : 0
+        );
+        this.sky.visible = sky;
+        // the box has to sit inside the far plane, corners included (the
+        // shader only uses the view direction, so size doesn't show)
+        this.sky.scale.setScalar(
+            drawDistance > 0
+                ? Math.min(SKY_SCALE, drawDistance * 1.1)
+                : SKY_SCALE
+        );
+        scene.background = sky ? null : this.fog.color;
+    }
+
     // the per pixel cloud noise is the priciest part of the sky
     setClouds(on: boolean) {
         this.sky.material.uniforms.cloudCoverage.value = on

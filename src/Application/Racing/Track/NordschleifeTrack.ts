@@ -39,6 +39,56 @@ const MARKING_LIFT = 0.02;
 const KERB_LIFT = 0.025;
 const VERGE_DROP = 0.012;
 const ASPHALT_REPEAT_METERS = 32;
+// map cell size the ribbons are cut into for culling, meters
+const RIBBON_CELL = 1200;
+
+// one mesh per map cell, by triangle centroid. the pieces share the vertex
+// buffers and only differ in index, with their own bounds for culling
+const splitByCell = (mesh: THREE.Mesh, cell: number) => {
+    const geometry = mesh.geometry;
+    const group = new THREE.Group();
+    group.name = mesh.name;
+    const index = geometry.getIndex();
+    const position = geometry.getAttribute('position');
+    if (!index) {
+        group.add(mesh);
+        return group;
+    }
+    const buckets = new Map<string, number[]>();
+    for (let i = 0; i < index.count; i += 3) {
+        const a = index.getX(i);
+        const b = index.getX(i + 1);
+        const c = index.getX(i + 2);
+        const x = (position.getX(a) + position.getX(b) + position.getX(c)) / 3;
+        const z = (position.getZ(a) + position.getZ(b) + position.getZ(c)) / 3;
+        const key = `${Math.floor(x / cell)}:${Math.floor(z / cell)}`;
+        const list = buckets.get(key);
+        if (list) list.push(a, b, c);
+        else buckets.set(key, [a, b, c]);
+    }
+    const box = new THREE.Box3();
+    const point = new THREE.Vector3();
+    buckets.forEach((list, key) => {
+        const part = new THREE.BufferGeometry();
+        Object.entries(geometry.attributes).forEach(([name, attribute]) =>
+            part.setAttribute(name, attribute)
+        );
+        part.setIndex(list);
+        box.makeEmpty();
+        list.forEach((v) =>
+            box.expandByPoint(point.fromBufferAttribute(position, v))
+        );
+        part.boundingBox = box.clone();
+        part.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+        const piece = new THREE.Mesh(part, mesh.material);
+        piece.name = `${mesh.name}-${key}`;
+        piece.receiveShadow = mesh.receiveShadow;
+        piece.castShadow = mesh.castShadow;
+        piece.renderOrder = mesh.renderOrder;
+        group.add(piece);
+    });
+    return group;
+};
 
 export type TrackSurface = 'asphalt' | 'kerb' | 'grass' | 'off';
 
@@ -211,11 +261,17 @@ export default class NordschleifeTrack {
         this.kerbMesh = this.createKerbMesh();
         this.colliderMesh = this.createColliderMesh();
 
-        this.root.add(this.visualMesh);
-        if (this.concreteMesh) this.root.add(this.concreteMesh);
-        this.root.add(this.vergeMesh);
-        this.root.add(this.edgeMarkings);
-        if (this.kerbMesh) this.root.add(this.kerbMesh);
+        // each lap long ribbon is cut into map cells so only what's in view
+        // is drawn, it used to be the whole 20 km every frame
+        [
+            this.visualMesh,
+            this.concreteMesh,
+            this.vergeMesh,
+            this.edgeMarkings,
+            this.kerbMesh,
+        ].forEach((mesh) => {
+            if (mesh) this.root.add(splitByCell(mesh, RIBBON_CELL));
+        });
         this.root.add(this.colliderMesh);
         parent.add(this.root);
 

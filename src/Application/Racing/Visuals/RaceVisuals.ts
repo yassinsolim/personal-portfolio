@@ -18,6 +18,7 @@ import RaceForest from './RaceForest';
 import RaceTrackside from './RaceTrackside';
 import Sparks from '../Effects/Sparks';
 import SkidMarks from '../Effects/SkidMarks';
+import { useCheapMaterials } from './cheapMaterials';
 import {
     applyReveal,
     applyRevealTo,
@@ -97,7 +98,7 @@ export default class RaceVisuals {
             this.terrain,
             lite ? 'low' : 'high'
         );
-        this.trackside = new RaceTrackside(this.root, track);
+        this.trackside = new RaceTrackside(this.root, track, lite);
         this.sparks = new Sparks(this.root);
         this.skids = new SkidMarks(this.root);
         this.post = null;
@@ -115,6 +116,11 @@ export default class RaceVisuals {
         this.reveal = createRevealUniforms();
         this.revealPending = false;
         this.revealTime = -1;
+        if (lite) {
+            vehicle.useCheapMaterials();
+            useCheapMaterials(track.root);
+            useCheapMaterials(this.trackside.root);
+        }
         applyRevealTo(track.root, this.reveal);
         applyRevealTo(this.terrain.root, this.reveal);
         applyReveal(this.forest.nearMaterial, this.reveal, 'instanced');
@@ -163,6 +169,20 @@ export default class RaceVisuals {
         }
         this.atmosphere.setShadowSize(settings.shadowSize);
         this.atmosphere.setClouds(settings.post);
+        document.body.classList.toggle(
+            'race-lite',
+            this.active && (this.tier === 'low' || preset === 'performance')
+        );
+        if (this.active) {
+            this.atmosphere.setDistance(
+                settings.drawDistance,
+                settings.sky,
+                this.scene
+            );
+            UIEventBus.dispatch('race:drawDistance', {
+                far: settings.drawDistance,
+            });
+        }
         this.forest.applyPreset(settings);
         if (this.active) {
             this.application.renderer.setSceneMaxPixelRatio(
@@ -227,6 +247,7 @@ export default class RaceVisuals {
     exit() {
         if (!this.active) return;
         this.active = false;
+        document.body.classList.remove('race-lite');
         const renderer = this.application.renderer;
         renderer.setSceneRenderer(null, null);
         if (this.saved) {

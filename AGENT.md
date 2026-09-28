@@ -541,3 +541,20 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - Fresh isolated dev server used for validation: `http://127.0.0.1:8174/?raceDebug=1`.
   - Validation run writes `.tmp-validation/toyota-only-validation.json`.
   - Dev server process terminated at end of run.
+
+## Weak Hardware Notes (2026-09-28)
+- `?raceTier=low|high` forces the gpu tier, so the weak path can be checked on a fast machine.
+- Weak tier (software GL, old integrated/mobile parts): 1 km draw distance with fog closing in,
+  flat fog color instead of the sky shader, Lambert track/trackside/terrain, 8000 trees, 0.65 max
+  pixel ratio, armco rings every 8 m, 56 m terrain cells, solid HUD panels (`race-lite` class, the
+  backdrop blur alone costs ~25 ms a frame in SwiftShader) and the lite cars.
+- Lite cars: `node scripts/optimize-models.mjs --lite` writes `<model>.lite.glb` next to each
+  web glb (1 cm simplify error, 512 px textures). Only weak gpus load them, with Phong materials and
+  a tiny generated sky cube for reflections. Rebuild them whenever a car glb changes.
+- Every car is merged per material at prepare time (`mergeStaticMeshes`): linked wheel parts are
+  attached to their wheel and merged inside it, materials match by look (exports repeat them per
+  primitive), transparent parts stay separate for sorting. The M8 went from 1141 draws to 33.
+- Balanced and Quality now have a far plane (6 and 9 km) just past where the haze is opaque, and
+  the lap long ribbons and terrain skirt are cut into cells so off screen parts are culled.
+- The original site's SwiftShader numbers are misleading: in most runs the car never appeared
+  (5 to 30 draws, 18k to 40k triangles), so its fps is for a nearly empty road.

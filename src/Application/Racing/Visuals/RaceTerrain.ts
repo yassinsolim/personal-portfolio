@@ -21,6 +21,8 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
 
 // quads per side of a culling tile
 const TILE_QUADS = 40;
+// skirt pieces along the lap, for culling
+const SKIRT_CHUNKS = 20;
 const srgbToLinear = (value: number) => Math.pow(value, 2.2);
 
 export default class RaceTerrain {
@@ -28,7 +30,7 @@ export default class RaceTerrain {
     field: TrackField;
     root: THREE.Group;
     ground: THREE.Group;
-    skirt: THREE.Mesh;
+    skirt: THREE.Group;
     material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
     barrier: number;
     private nearest: TrackNearest;
@@ -57,11 +59,9 @@ export default class RaceTerrain {
                       roughness: 0.96,
                       metalness: 0,
                   })
-                : new THREE.MeshLambertMaterial({
-                      vertexColors: true,
-                      map: detail,
-                  });
-        this.ground = this.buildGround(quality === 'high' ? 24 : 40);
+                : // weak gpus: the vertex colors alone, no detail texture
+                  new THREE.MeshLambertMaterial({ vertexColors: true });
+        this.ground = this.buildGround(quality === 'high' ? 24 : 56);
         this.skirt = this.buildSkirt();
         this.root.add(this.ground);
         this.root.add(this.skirt);
@@ -323,12 +323,44 @@ export default class RaceTerrain {
                 );
             }
         }
-        geometry.computeBoundingSphere();
-        const mesh = new THREE.Mesh(geometry, this.material.clone());
-        (mesh.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-        mesh.name = 'race-terrain-skirt';
-        mesh.receiveShadow = true;
-        mesh.frustumCulled = false;
-        return mesh;
+        // cut along the lap so only the stretch in view is drawn. the chunks
+        // share the vertex buffers and only differ in index
+        const material = this.material.clone();
+        material.side = THREE.DoubleSide;
+        const group = new THREE.Group();
+        group.name = 'race-terrain-skirt';
+        const all = geometry.getIndex()!.array;
+        const perRing = (columns - 1) * 6;
+        const sideLength = samples * perRing;
+        const perChunk = Math.ceil(samples / SKIRT_CHUNKS);
+        const box = new THREE.Box3();
+        const corner = new THREE.Vector3();
+        for (let chunk = 0; chunk < SKIRT_CHUNKS; chunk++) {
+            const r0 = chunk * perChunk;
+            const r1 = Math.min(samples, r0 + perChunk);
+            if (r1 <= r0) break;
+            const index: number[] = [];
+            box.makeEmpty();
+            for (let side = 0; side < 2; side++) {
+                const from = side * sideLength + r0 * perRing;
+                const to = side * sideLength + r1 * perRing;
+                for (let k = from; k < to; k++) {
+                    index.push(all[k]);
+                    box.expandByPoint(corner.fromArray(positions, all[k] * 3));
+                }
+            }
+            const part = new THREE.BufferGeometry();
+            ['position', 'normal', 'color', 'uv'].forEach((name) =>
+                part.setAttribute(name, geometry.getAttribute(name))
+            );
+            part.setIndex(index);
+            part.boundingBox = box.clone();
+            part.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+            const mesh = new THREE.Mesh(part, material);
+            mesh.name = `race-terrain-skirt-${chunk}`;
+            mesh.receiveShadow = true;
+            group.add(mesh);
+        }
+        return group;
     }
 }
