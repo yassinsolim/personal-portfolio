@@ -73,6 +73,31 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `renderer.adaptive.reset()` (car change and race enter/exit already do) so load spikes don't
   read as a slow device. Check tuning changes with `node scripts/simulate-adaptive-resolution.mjs`.
 
+## Vercel Deploys (2026-09-28)
+- Previews are off by default. `vercel.json` sets `git.deploymentEnabled` to
+  `{ "main": true, "**": false }` (`**`, because `*` doesn't match branch names with a slash), so
+  only `main` deploys on its own. Pushing any other branch creates no Vercel deployment and no
+  Vercel check on the PR.
+- The Hobby team gets 100 deployments per 24 hours (a rolling 86,400 s window, not a calendar
+  day), shared by every project on it (this one, WebStrafe, NavOSS and more). Git, CLI and API
+  deployments all count, and so do builds canceled by an Ignored Build Step. Once it runs out,
+  merges to `main` stop reaching yassin.app until slots free up.
+- Batch commits: push a branch when it's ready for review, not after every commit, and keep
+  related fixes in one PR. Every merge to `main` is a production deploy.
+- A branch cut before this change still has the old `vercel.json` and builds a preview on every
+  push. Merge `origin/main` into it before pushing again.
+- When QA really needs a real Vercel preview (for example to check the production headers from
+  `vercel.json`), deploy once from a clean worktree and reuse the URL:
+  ```sh
+  vercel deploy --dry --project personal-portfolio --scope yassins-projects-11732a5e  # lists the upload, creates nothing
+  vercel deploy --project personal-portfolio --scope yassins-projects-11732a5e        # prints the preview URL
+  vercel curl / --deployment <preview-url> --scope yassins-projects-11732a5e -- -sS -o /dev/null -D -
+  ```
+  The CLI uploads the folder as it is, gitignored files included: a clean checkout is about
+  356 MB (mostly `models-src/`), and `build/`, `.tmp-validation/` or `audio-src/` go up too if
+  they're there. Previews sit behind Vercel Authentication; `vercel curl` gets through it on its
+  own (the last line prints the response headers).
+
 ## Race Physics Notes (2026-09-26)
 - Ride height comes from real geometry (`getGeometricContactBottom`): the lowest vertex under
   each wheel, or an axle's own rim/tire meshes for merged axles (AMG One). Detected wheel radii
