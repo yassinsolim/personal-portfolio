@@ -1049,3 +1049,221 @@ body.race-mode-touch #ui-app {
         grid-template-columns: 1fr;
     }
 }
+
+/* tach, speed, gear, lap and sector times, bottom right, clear of the car */
+.race-gauges {
+    position: fixed;
+    right: 14px;
+    bottom: 14px;
+    display: flex;
+    align-items: flex-end;
+    gap: 12px;
+    z-index: 12;
+    pointer-events: none;
+    font-family: monospace;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.race-tach {
+    width: 168px;
+    height: 168px;
+    background: radial-gradient(circle, rgba(0, 0, 0, 0.55) 58%, rgba(0, 0, 0, 0) 71%);
+    border-radius: 50%;
+}
+
+.race-tach .dial {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.28);
+    stroke-width: 3;
+}
+
+.race-tach .dial.red {
+    stroke: #ff4d3d;
+}
+
+.race-tach .fill {
+    fill: none;
+    stroke: #7fd0ff;
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.race-tach .fill.near {
+    stroke: #ff4d3d;
+}
+
+.race-tach .tick {
+    stroke: rgba(255, 255, 255, 0.75);
+    stroke-width: 1.6;
+}
+
+.race-tach .tick.red {
+    stroke: #ff4d3d;
+}
+
+.race-tach .tick-label {
+    fill: rgba(255, 255, 255, 0.8);
+    font-size: 9px;
+    text-anchor: middle;
+}
+
+.race-tach .needle {
+    stroke: #ff5a3c;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+}
+
+.race-tach .hub {
+    fill: #fff;
+}
+
+.race-tach .gear {
+    fill: #fff;
+    font-size: 26px;
+    font-weight: bold;
+    text-anchor: middle;
+}
+
+.race-tach .speed {
+    fill: #fff;
+    font-size: 20px;
+    text-anchor: middle;
+}
+
+.race-tach .unit {
+    fill: rgba(255, 255, 255, 0.6);
+    font-size: 8px;
+    text-anchor: middle;
+}
+
+.race-laps {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 8px 10px;
+    min-width: 210px;
+    margin-bottom: 14px;
+}
+
+.race-lap-now {
+    font-size: 22px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.race-lap-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    opacity: 0.85;
+}
+
+.race-sectors {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.race-sector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3px 2px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+}
+
+.race-sector span {
+    opacity: 0.7;
+    font-size: 9px;
+}
+
+.race-sector em {
+    font-style: normal;
+    font-size: 9px;
+}
+
+.race-sector.live {
+    outline: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.race-sector.good {
+    background: rgba(40, 200, 90, 0.35);
+}
+
+.race-sector.slow {
+    background: rgba(230, 190, 40, 0.3);
+}
+
+/* the whole lap, bottom left */
+.race-minimap {
+    position: fixed;
+    left: 14px;
+    bottom: 14px;
+    width: 180px;
+    height: 180px;
+    z-index: 12;
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+.race-minimap .track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.8);
+    stroke-width: 2.2;
+    stroke-linejoin: round;
+}
+
+.race-minimap .start {
+    fill: #fff;
+    stroke: #111;
+    stroke-width: 1;
+}
+
+.race-minimap .split {
+    fill: #ffd34d;
+}
+
+.race-minimap .remote {
+    fill: #7fd0ff;
+    stroke: #102030;
+    stroke-width: 1;
+}
+
+.race-minimap .me {
+    fill: #ff5a3c;
+    stroke: #fff;
+    stroke-width: 0.8;
+}
+
+.race-lite .race-laps,
+.race-lite .race-minimap {
+    background: rgba(0, 0, 0, 0.72);
+}
+
+/* touch: the pedals and steering sit at the bottom corners */
+@media (pointer: coarse) {
+    .race-gauges {
+        right: auto;
+        left: 50%;
+        bottom: 8px;
+        transform: translateX(-50%) scale(0.8);
+        transform-origin: bottom center;
+    }
+
+    .race-laps {
+        display: none;
+    }
+
+    .race-minimap {
+        top: 120px;
+        bottom: auto;
+        width: 120px;
+        height: 120px;
+    }
+}

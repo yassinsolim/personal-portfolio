@@ -5,6 +5,7 @@ import NordschleifeTrack from './Track/NordschleifeTrack';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
+import SectorTimer from './Lap/SectorTimer';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
@@ -82,6 +83,8 @@ export default class RaceManager {
     chaseCamera: RaceChaseCamera;
     paused: boolean;
     lapTimer: LapTimer;
+    sectors: SectorTimer;
+    lastLapTimeMs = 0;
     localLeaderboard: LocalLeaderboard;
     leaderboardService: LeaderboardService;
     currentLapTimeMs: number;
@@ -147,6 +150,16 @@ export default class RaceManager {
         this.remoteCars = [];
 
         this.lapTimer = new LapTimer(this.track.getCurve());
+        // sectors split at breidscheid and bruennchen, about 7.7, 6.5 and
+        // 6.6 km
+        const splitAt = (name: string, fallback: number) => {
+            const section = this.track.sections.find((s) => s.name === name);
+            return (section ? section.distance : fallback) / this.track.length;
+        };
+        this.sectors = new SectorTimer(
+            [splitAt('Breidscheid', 7720), splitAt('Brünnchen', 14228)],
+            ['T13 to Breidscheid', 'Breidscheid to Brünnchen', 'Brünnchen to the line']
+        );
         this.localLeaderboard = new LocalLeaderboard();
         this.leaderboardService = new LeaderboardService(this.localLeaderboard);
         this.currentLapTimeMs = 0;
@@ -380,6 +393,7 @@ export default class RaceManager {
 
     enterRaceMode() {
         if (this.active) return;
+        UIEventBus.dispatch('race:trackOutline', { points: this.getTrackOutline() });
 
         this.initialized = true;
         this.active = true;
@@ -434,6 +448,7 @@ export default class RaceManager {
     startLapTimer() {
         this.physicsAccumulator = 0;
         this.lapTimer.reset();
+        this.sectors.reset();
         const nowMs = this.application.time.elapsed;
         const telemetry = this.vehicle.getTelemetry();
         const lapStart = this.lapTimer.startLap(nowMs, telemetry.position);
@@ -584,9 +599,33 @@ export default class RaceManager {
         });
     }
 
+    // the lap as a few hundred x, z points for the minimap
+    getTrackOutline() {
+        const curve = this.track.getCurve();
+        const points: number[][] = [];
+        for (let i = 0; i < 400; i++) {
+            const p = curve.getPointAt(i / 400);
+            points.push([Math.round(p.x), Math.round(p.z)]);
+        }
+        return points;
+    }
+
     dispatchHud() {
         const telemetry = this.vehicle.getTelemetry();
+        const remotes: Array<{ x: number; z: number }> = [];
+        this.remoteVehicles.forEach((visual) => {
+            remotes.push({ x: visual.root.position.x, z: visual.root.position.z });
+        });
         UIEventBus.dispatch('race:hudUpdate', {
+            redlineRpm: this.vehicle.currentTuning.redlineRpm,
+            sectors: this.sectors.getState(),
+            lastLapMs: this.lastLapTimeMs,
+            map: {
+                x: telemetry.position.x,
+                z: telemetry.position.z,
+                heading: Math.atan2(telemetry.forward.x, telemetry.forward.z),
+                remotes,
+            },
             speedKph: telemetry.speedKph,
             gear: telemetry.gear,
             rpm: telemetry.rpm,
@@ -1155,9 +1194,12 @@ export default class RaceManager {
                 ghost: this.collisions.ghost,
             });
 
+            this.sectors.setCar(telemetry.carId);
             if (!lapWasRunning && lapUpdate.lapRunning) {
                 this.ghostReplay.startLap(nowMs);
+                this.sectors.reset();
             }
+            this.sectors.update(this.lapProgress, this.currentLapTimeMs, this.lapRunning);
 
             if (lapUpdate.lapRunning) {
                 this.ghostReplay.capture(nowMs, {
@@ -1168,6 +1210,11 @@ export default class RaceManager {
             }
 
             if (lapUpdate.completedLapTimeMs) {
+                this.sectors.completeLap(
+                    lapUpdate.completedLapTimeMs,
+                    Boolean(lapUpdate.validLap)
+                );
+                this.lastLapTimeMs = lapUpdate.completedLapTimeMs;
                 this.ghostReplay.completeLap(
                     Boolean(lapUpdate.validLap),
                     lapUpdate.completedLapTimeMs
