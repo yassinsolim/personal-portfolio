@@ -3,10 +3,11 @@ import { carOptionsById, defaultCarId } from '../../carOptions';
 import Application from '../../Application';
 import { legacyColor } from '../../Utils/LegacyColor';
 
-const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v2';
-const SAMPLE_INTERVAL_MS = 45;
+const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v3';
+const SAMPLE_INTERVAL_MS = 60;
 const GHOST_OPACITY = 0.38;
-const MAX_RECORDING_SAMPLES = 12000;
+// 16 minutes, the slowest car's lap of the real ring fits
+const MAX_RECORDING_SAMPLES = 16000;
 
 type GhostSample = {
     t: number;

@@ -109,13 +109,24 @@ if (!skip.has('physics')) {
     await run('physics', `__race(${JSON.stringify(cars)}, ${seconds})`);
 }
 if (!skip.has('stress')) {
+    // from the start of the doettinger hoehe straight, the only place the
+    // real lap gets to these speeds quickly
     await run(
         'drift200',
-        `__race(['amg-c63s-coupe', 'bmw-f90-m5-competition'], 22, { scenario: 'drift', atKph: 200 })`
+        `__race(['amg-c63s-coupe', 'bmw-f90-m5-competition'], 22, { scenario: 'drift', atKph: 200, startAt: 0.866, startKph: 150 })`
     );
     await run(
         'slalom220',
-        `__race(['amg-one', 'bmw-m8-competition-coupe'], 22, { scenario: 'slalom', atKph: 220 })`
+        `__race(['amg-one', 'bmw-m8-competition-coupe'], 22, { scenario: 'slalom', atKph: 220, startAt: 0.866, startKph: 170 })`
+    );
+    // the crests the real cars jump: flugplatz, then pflanzgarten
+    await run(
+        'flugplatz',
+        `__race(['amg-one', 'bmw-e92-m3'], 16, { startAt: 0.1, startKph: 150 })`
+    );
+    await run(
+        'pflanzgarten',
+        `__race(['amg-one', 'bmw-e92-m3'], 20, { startAt: 0.7, startKph: 140 })`
     );
 }
 if (!skip.has('drive')) {

@@ -1088,6 +1088,11 @@ const App = () => {
                             Y reset.
                         </p>
 
+                        <p className="race-menu-credits">
+                            Track: © OpenStreetMap contributors (ODbL).
+                            Elevation: Copernicus GLO-30 DEM.
+                        </p>
+
                         <div className="race-menu-actions">
                             <button type="button" onClick={handleResumeRace}>
                                 Resume Race

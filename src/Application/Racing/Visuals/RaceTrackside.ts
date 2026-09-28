@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type NordschleifeTrack from '../Track/NordschleifeTrack';
 import {
     createCheckerTexture,
@@ -13,7 +14,7 @@ const POST_SPACING = 4;
 const POST_CHUNKS = 16;
 // w-beam cross section: out from the barrier line toward the road, height
 // segments of the rail along the lap, for culling
-const ARMCO_SEGMENTS = 30;
+const ARMCO_SEGMENTS = 60;
 const ARMCO_PROFILE: [number, number][] = [
     [0, 0.44],
     [0.06, 0.48],
@@ -63,14 +64,232 @@ export default class RaceTrackside {
         this.buildPosts();
         this.buildStart();
         this.buildRoadWords();
+        this.buildBridges();
+        this.buildBoards();
+    }
+
+    // frame at a distance along the lap in the track data's meters
+    frameAt(
+        distance: number,
+        point: THREE.Vector3,
+        tangent: THREE.Vector3,
+        normal: THREE.Vector3,
+        side: THREE.Vector3
+    ) {
+        const track = this.track;
+        const t =
+            ((((distance * track.distanceScale) / track.length) % 1) + 1) % 1;
+        track.getRibbonFrame(
+            track.visualCurve,
+            t,
+            point,
+            tangent,
+            normal,
+            side,
+            new THREE.Vector3(1, 0, 0)
+        );
+        return t;
+    }
+
+    // the overpasses openstreetmap has over the lap: a concrete deck on two
+    // abutments, running the way the crossing road does
+    buildBridges() {
+        const track = this.track;
+        if (!track.bridges.length) return;
+        const material = new THREE.MeshStandardMaterial({
+            color: 0x8e8b84,
+            roughness: 0.9,
+            metalness: 0,
+        });
+        const parts: THREE.BufferGeometry[] = [];
+        const point = new THREE.Vector3();
+        const tangent = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+        const side = new THREE.Vector3();
+        const matrix = new THREE.Matrix4();
+        const quaternion = new THREE.Quaternion();
+        const up = new THREE.Vector3(0, 1, 0);
+        track.bridges.forEach((bridge) => {
+            const t = this.frameAt(
+                bridge.distance,
+                point,
+                tangent,
+                normal,
+                side
+            );
+            const road =
+                bridge.kind === 'track' ||
+                bridge.kind === 'path' ||
+                bridge.kind === 'footway';
+            const deckWidth = road ? 4.5 : 11;
+            // across the lap: the verges plus a few meters each side
+            const span = (track.getVergeHalfWidth(t) + 4) * 2;
+            quaternion.setFromAxisAngle(up, bridge.angle);
+            const deck = new THREE.BoxGeometry(deckWidth, 1.1, span);
+            matrix.compose(
+                point.clone().add(new THREE.Vector3(0, 6.2, 0)),
+                quaternion,
+                new THREE.Vector3(1, 1, 1)
+            );
+            parts.push(deck.applyMatrix4(matrix));
+            [1, -1].forEach((end) => {
+                const wall = new THREE.BoxGeometry(deckWidth + 1, 7, 1.4);
+                const offset = new THREE.Vector3(
+                    0,
+                    0,
+                    end * (span / 2 - 0.7)
+                ).applyQuaternion(quaternion);
+                matrix.compose(
+                    point.clone().add(offset).add(new THREE.Vector3(0, 2.6, 0)),
+                    quaternion,
+                    new THREE.Vector3(1, 1, 1)
+                );
+                parts.push(wall.applyMatrix4(matrix));
+            });
+        });
+        const mesh = new THREE.Mesh(mergeGeometries(parts), material);
+        mesh.name = 'race-bridges';
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.root.add(mesh);
+    }
+
+    // a board for every named corner on the right, and the kilometers on the
+    // left, all from one text atlas and merged into one mesh
+    buildBoards() {
+        const track = this.track;
+        const labels: {
+            text: string;
+            distance: number;
+            side: number;
+            km: boolean;
+        }[] = [];
+        track.sections.forEach((section) =>
+            labels.push({
+                text: section.name,
+                distance: section.distance,
+                side: -1,
+                km: false,
+            })
+        );
+        const dataLength = track.length / track.distanceScale;
+        for (let km = 1; km * 1000 < dataLength; km++) {
+            labels.push({
+                text: `${km}`,
+                distance: km * 1000,
+                side: 1,
+                km: true,
+            });
+        }
+        const rowHeight = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = THREE.MathUtils.ceilPowerOfTwo(
+            labels.length * rowHeight
+        );
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        labels.forEach((label, i) => {
+            const y = i * rowHeight;
+            ctx.fillStyle = label.km ? '#f2f2ee' : '#1f3b2a';
+            ctx.fillRect(0, y + 2, 1024, rowHeight - 4);
+            ctx.strokeStyle = label.km ? '#222' : '#e8e8e2';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(6, y + 8, 1012, rowHeight - 16);
+            ctx.fillStyle = label.km ? '#111' : '#f4f4ee';
+            ctx.font = `bold ${
+                label.km ? 40 : 38
+            }px Helvetica, Arial, sans-serif`;
+            ctx.fillText(
+                label.km ? `${label.text} km` : label.text,
+                512,
+                y + rowHeight / 2 + 1
+            );
+        });
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.anisotropy = 8;
+        const boardMaterial = new THREE.MeshStandardMaterial({
+            map: texture,
+            roughness: 0.7,
+            metalness: 0,
+        });
+        const point = new THREE.Vector3();
+        const tangent = new THREE.Vector3();
+        const normal = new THREE.Vector3();
+        const side = new THREE.Vector3();
+        const boards: THREE.BufferGeometry[] = [];
+        const posts: THREE.BufferGeometry[] = [];
+        const basis = new THREE.Matrix4();
+        const back = new THREE.Vector3();
+        labels.forEach((label, i) => {
+            const t = this.frameAt(
+                label.distance,
+                point,
+                tangent,
+                normal,
+                side
+            );
+            const width = label.km ? 1.4 : 3.6;
+            const height = label.km ? 0.7 : 0.8;
+            const geometry = new THREE.PlaneGeometry(width, height);
+            const uv = geometry.getAttribute('uv') as THREE.BufferAttribute;
+            const v0 = 1 - ((i + 1) * rowHeight) / canvas.height;
+            const v1 = 1 - (i * rowHeight) / canvas.height;
+            const u0 = label.km ? 0.3 : 0;
+            const u1 = label.km ? 0.7 : 1;
+            for (let k = 0; k < uv.count; k++) {
+                uv.setXY(
+                    k,
+                    u0 + (u1 - u0) * uv.getX(k),
+                    v0 + (v1 - v0) * uv.getY(k)
+                );
+            }
+            // faces the cars coming toward it, just past the armco
+            back.copy(tangent).setY(0).normalize().multiplyScalar(-1);
+            const right = new THREE.Vector3()
+                .crossVectors(new THREE.Vector3(0, 1, 0), back)
+                .normalize();
+            basis.makeBasis(right, new THREE.Vector3(0, 1, 0), back);
+            const lateral = label.side * (track.getVergeHalfWidth(t) + 0.9);
+            const base = point.clone().addScaledVector(side, lateral);
+            basis.setPosition(base.x, base.y + 1.5, base.z);
+            boards.push(geometry.applyMatrix4(basis));
+            [-1, 1].forEach((end) => {
+                const post = new THREE.BoxGeometry(0.08, 1.5, 0.08);
+                post.translate(
+                    end * (width / 2 - 0.2),
+                    -0.75 - height / 2 + 0.4,
+                    -0.05
+                );
+                posts.push(post.applyMatrix4(basis));
+            });
+        });
+        const boardMesh = new THREE.Mesh(
+            mergeGeometries(boards),
+            boardMaterial
+        );
+        boardMesh.name = 'race-boards';
+        boardMesh.castShadow = true;
+        boardMesh.receiveShadow = true;
+        this.root.add(boardMesh);
+        const postMesh = new THREE.Mesh(
+            mergeGeometries(posts),
+            this.postMaterial
+        );
+        postMesh.name = 'race-board-posts';
+        this.root.add(postMesh);
     }
 
     // in segments along the lap, so all but the few in view get culled
     buildArmco() {
         const track = this.track;
         const curve = track.visualCurve;
-        const samples = 2400;
         const segments = ARMCO_SEGMENTS;
+        // about every 4 m, a whole number per segment
+        const samples = segments * Math.ceil(track.length / 4 / segments);
         const perSegment = samples / segments;
         const point = new THREE.Vector3();
         const tangent = new THREE.Vector3();

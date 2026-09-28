@@ -74,14 +74,9 @@ const sources: Resource[] = [
         ],
     },
     {
-        name: 'nordschleifeVisualData',
+        name: 'nordschleifeData',
         type: 'json',
-        path: 'models/Tracks/Nordschleife/nordschleife_visual.json',
-    },
-    {
-        name: 'nordschleifeColliderData',
-        type: 'json',
-        path: 'models/Tracks/Nordschleife/nordschleife_collider.json',
+        path: 'models/Tracks/Nordschleife/nordschleife.json',
     },
     ...carModelSources,
     {

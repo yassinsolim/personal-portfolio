@@ -104,8 +104,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The road is 16 m with 3.5 m grass verges to the barriers (`NordschleifeTrack.ts`); the barrier
   collision is in `RaceVehicle.applyBarriers` using `track.queryFrame`, which also gives each
   wheel's surface (asphalt, kerb, grass). Test benches set `vehicle.trackBound = false`.
-- New laps carry an `@v2` tag on `car_id` and the leaderboard only reads tagged rows, because
-  laps from the old model aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
+- New laps carry an `@v3` tag on `car_id` (v2 was the tire model on the old track, v3 is the real
+  ring) and the leaderboard only reads tagged rows, because older laps aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
   `MultiplayerService.ts`, and the local storage keys) whenever lap times stop being comparable.
 - Measure changes with `scripts/race-physics-check.js` (paste into the console on
   `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.
@@ -115,6 +115,20 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   real key presses and reports load time, fps and screenshots. Headless Chromium on macOS can't
   load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
 - `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
+
+## Track Notes (2026-09-28)
+- The lap is the real Nordschleife, full length (20.77 km) and full elevation (333 to 627 m),
+  from `static/models/Tracks/Nordschleife/nordschleife.json`. Rebuild it with
+  `scripts/track/build_nordschleife.py` (OpenStreetMap ways, the Copernicus GLO-30 DEM, OSM
+  forests). The file also carries section names, per-section widths and banking (Karussell
+  14 degrees, concrete), the overpasses, and a 30 m terrain grid with the canopy taken off.
+  Keep the ODbL and Copernicus credits (CREDITS.md and the race menu) with it.
+- The collider is 160 chunk meshes in a group; raycast it recursively. Vertical motion uses
+  real gravity now. A car leaves the road only at a real crest: `v^2 * curvature > 1.25 *
+  (g + downforce)` on the track's smoothed profile (`frameCrest`), and lands on its first wheel.
+  Flugplatz and Pflanzgarten throw fast cars, the rest of the lap doesn't.
+- Harness extras: `startAt`/`startKph` options, stress runs from Döttinger Höhe, and crest runs
+  at Flugplatz and Pflanzgarten. `sinkLog` lists where wheels went under.
 
 ## Race Visuals Notes (2026-09-27)
 - `Racing/Visuals/RaceVisuals.ts` owns race mode's look: sky, sun and fog (`RaceAtmosphere`), the

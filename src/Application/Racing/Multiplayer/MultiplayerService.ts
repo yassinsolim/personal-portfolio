@@ -94,7 +94,7 @@ const CONFIG_URL = '/config/racing.config.json';
 const DEFAULT_LOBBY_PREFIX = 'nordschleife_lobby_v2';
 // bumped with the tire model and the narrower road, and added to the channel
 // name so it holds even when the config sets its own prefix
-const PHYSICS_SEASON = 'p2';
+const PHYSICS_SEASON = 'p3';
 const SESSION_KEY = 'yassinverse:nordschleife:multiplayer:session:v1';
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 const TELEMETRY_SEND_INTERVAL_FAST_MS = 40;

@@ -281,3 +281,39 @@ export const createSmokeTexture = () => {
     const texture = finish(canvas as HTMLCanvasElement, false, false);
     return texture;
 };
+
+// the karussell's concrete slabs: pale, with joints across every few meters
+export const createConcreteTexture = () => {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const texture = new THREE.CanvasTexture(canvas);
+    if (!ctx) return texture;
+    const random = rng(97);
+    ctx.fillStyle = '#9d9a92';
+    ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < 2600; i++) {
+        const shade = 120 + Math.floor(random() * 60);
+        ctx.fillStyle = `rgba(${shade},${shade - 2},${shade - 8},0.35)`;
+        ctx.fillRect(
+            random() * size,
+            random() * size,
+            1 + random() * 3,
+            1 + random() * 3
+        );
+    }
+    // slab joints and a dark wear line where the tires run
+    ctx.fillStyle = 'rgba(40,38,34,0.7)';
+    ctx.fillRect(0, 0, size, 3);
+    ctx.fillRect(Math.round(size / 2) - 1, 0, 2, size);
+    ctx.fillStyle = 'rgba(30,30,30,0.18)';
+    ctx.fillRect(size * 0.22, 0, size * 0.14, size);
+    ctx.fillRect(size * 0.64, 0, size * 0.14, size);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = 8;
+    return texture;
+};

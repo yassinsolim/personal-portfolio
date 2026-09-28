@@ -1,0 +1,366 @@
+# builds static/models/Tracks/Nordschleife/nordschleife.json from open data:
+#   centerline, sections, bridges and forests: openstreetmap (odbl 1.0)
+#   elevation: copernicus glo-30 dem (copernicus dem licence)
+#
+#   python3 -m venv /tmp/trackenv && /tmp/trackenv/bin/pip install numpy tifffile imagecodecs
+#   /tmp/trackenv/bin/python scripts/track/build_nordschleife.py --cache /tmp/nords
+#
+# the cache dir keeps the overpass answers and dem tiles so reruns are offline.
+# everything is in local meters: x east, y up (real elevation), z south, with
+# the origin at the middle of the track's bounding box
+
+import argparse
+import base64
+import json
+import math
+import os
+import time
+import urllib.parse
+import urllib.request
+
+import numpy as np
+import tifffile
+
+OVERPASS = 'https://overpass-api.de/api/interpreter'
+BBOX = (50.30, 6.88, 50.41, 7.05)
+DEM_URL = (
+    'https://copernicus-dem-30m.s3.amazonaws.com/'
+    'Copernicus_DSM_COG_10_N50_00_{e}_00_DEM/Copernicus_DSM_COG_10_N50_00_{e}_00_DEM.tif'
+)
+SPACING = 4.0
+# not part of the nordschleife lap
+EXCLUDE = (
+    'Sprintstrecke', 'Boxengasse', 'Müllenbach', 'Variante', 'Anbindung',
+    'Rallycross', 'GP', 'Goodyear', 'Ford-Kurve', 'NGK', 'Michael-Schumacher',
+)
+# real grade limits of the lap
+MAX_CLIMB = 0.17
+MAX_DROP = 0.11
+# the dem is a surface model: over woods it's the canopy, not the ground
+CANOPY_M = 18.0
+# crests the 30 m dem can't resolve, as bumps on the local high point of the
+# section: height m, half width m
+CRESTS = {'Flugplatz': (1.4, 20.0), 'Pflanzgarten': (1.7, 16.0), 'Sprunghügel': (1.4, 16.0)}
+# road width keyframes by section, meters. the ring is ~8 to 12 m wide
+DEFAULT_WIDTH = 9.5
+WIDTHS = {
+    'T13': 13.0, 'Sabine-Schmitz-Kurve': 11.0, 'Döttinger Höhe': 11.5,
+    'Antoniusbuche': 11.0, 'Tiergarten': 11.0, 'Hohenrain': 11.5,
+    'Karussell': 9.0, 'Mini-Karussell': 9.0,
+}
+# banking into the corner, degrees. the karussell is the banked concrete bowl
+BANKS = {'Karussell': 14.0, 'Mini-Karussell': 5.0, 'Hohe Acht': 2.0, 'Schwalbenschwanz': 3.0}
+CONCRETE = {'Karussell'}
+TERRAIN_CELL = 30.0
+TERRAIN_MARGIN = 900.0
+
+
+def overpass(cache, name, query):
+    path = os.path.join(cache, name)
+    if os.path.exists(path):
+        return json.load(open(path))
+    url = OVERPASS + '?data=' + urllib.parse.quote(query)
+    for attempt in range(5):
+        request = urllib.request.Request(url, headers={'User-Agent': 'nordschleife-track-build', 'Accept': 'application/json'})
+        body = urllib.request.urlopen(request, timeout=240).read()
+        if body.startswith(b'{'):
+            open(path, 'wb').write(body)
+            return json.loads(body)
+        time.sleep(10 * (attempt + 1))
+    raise RuntimeError('overpass kept failing for ' + name)
+
+
+def dem_tiles(cache):
+    arrays = []
+    for e in ('E006', 'E007'):
+        path = os.path.join(cache, f'dem_{e}.tif')
+        if not os.path.exists(path):
+            urllib.request.urlretrieve(DEM_URL.format(e=e), path)
+        arrays.append(tifffile.imread(path).astype(np.float64))
+    # both tiles are 2400 wide at this latitude, 6 to 8 degrees east
+    return np.hstack(arrays)
+
+
+def gauss_loop(v, spacing, sigma):
+    r = max(1, int(3 * sigma / spacing))
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) * spacing / sigma) ** 2)
+    k /= k.sum()
+    ext = np.concatenate([v[-r:], v, v[:r]])
+    return np.convolve(ext, k, mode='same')[r:-r]
+
+
+def gauss_grid(a, cells):
+    r = max(1, int(3 * cells))
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) / cells) ** 2)
+    k /= k.sum()
+    pad = np.pad(a, r, mode='edge')
+    pad = np.apply_along_axis(lambda row: np.convolve(row, k, mode='same'), 1, pad)
+    pad = np.apply_along_axis(lambda col: np.convolve(col, k, mode='same'), 0, pad)
+    return pad[r:-r, r:-r]
+
+
+def stitch(data):
+    nodes = {e['id']: (e['lat'], e['lon']) for e in data['elements'] if e['type'] == 'node'}
+    ways = {e['id']: e for e in data['elements'] if e['type'] == 'way'}
+
+    def keep(w):
+        name = w.get('tags', {}).get('name') or ''
+        return not any(x in name for x in EXCLUDE)
+
+    cand = {wid: w for wid, w in ways.items() if keep(w)}
+    starts = {}
+    for wid, w in cand.items():
+        starts.setdefault(w['nodes'][0], []).append(wid)
+    first = next(wid for wid, w in cand.items() if w.get('tags', {}).get('name') == 'T13')
+    order, seen, cur = [first], {first}, first
+    while True:
+        end = ways[cur]['nodes'][-1]
+        nxt = [w for w in starts.get(end, []) if w not in seen]
+        if not nxt:
+            if first in starts.get(end, []):
+                break
+            raise RuntimeError('the lap does not close after way %d' % cur)
+        nxt.sort(key=lambda w: ways[w].get('tags', {}).get('name') is None)
+        cur = nxt[0]
+        order.append(cur)
+        seen.add(cur)
+    points, sections = [], []
+    for wid in order:
+        ids = ways[wid]['nodes']
+        name = ways[wid].get('tags', {}).get('name')
+        if name and name != 'Nürburgring Nordschleife' and (not sections or sections[-1][0] != name):
+            sections.append((name, len(points)))
+        points.extend(nodes[n] for n in (ids if not points else ids[1:]))
+    return points[:-1] if points[0] == points[-1] else points, sections
+
+
+def rings_of(data):
+    nodes = {e['id']: (e['lat'], e['lon']) for e in data['elements'] if e['type'] == 'node'}
+    ways = {e['id']: e for e in data['elements'] if e['type'] == 'way'}
+    outer, inner, used = [], [], set()
+
+    def assemble(parts):
+        parts = [list(p) for p in parts if len(p) > 1]
+        rings = []
+        while parts:
+            ring = parts.pop(0)
+            changed = True
+            while ring[0] != ring[-1] and changed:
+                changed = False
+                for i, p in enumerate(parts):
+                    if p[0] == ring[-1]:
+                        ring += p[1:]
+                    elif p[-1] == ring[-1]:
+                        ring += p[::-1][1:]
+                    else:
+                        continue
+                    parts.pop(i)
+                    changed = True
+                    break
+            if ring[0] == ring[-1] and len(ring) > 3:
+                rings.append(ring)
+        return rings
+
+    for e in data['elements']:
+        if e['type'] != 'relation':
+            continue
+        for role, target in (('outer', outer), ('inner', inner)):
+            parts = [ways[m['ref']]['nodes'] for m in e['members'] if m['type'] == 'way' and m.get('role') == role and m['ref'] in ways]
+            for m in e['members']:
+                if m['type'] == 'way':
+                    used.add(m['ref'])
+            target.extend(assemble(parts))
+    for wid, w in ways.items():
+        tags = w.get('tags', {})
+        if wid in used or not (tags.get('landuse') == 'forest' or tags.get('natural') == 'wood'):
+            continue
+        if w['nodes'][0] == w['nodes'][-1]:
+            outer.append(w['nodes'])
+    to_ll = lambda ring: [nodes[n] for n in ring if n in nodes]
+    return [to_ll(r) for r in outer], [to_ll(r) for r in inner]
+
+
+def rasterize(rings, gx, gz, project):
+    mask = np.zeros(gx.shape, dtype=bool)
+    for ring in rings:
+        pts = np.array([project(p) for p in ring])
+        x0, z0 = pts.min(axis=0)
+        x1, z1 = pts.max(axis=0)
+        sel = (gx >= x0) & (gx <= x1) & (gz >= z0) & (gz <= z1)
+        if not sel.any():
+            continue
+        px, pz = gx[sel], gz[sel]
+        inside = np.zeros(px.shape, dtype=bool)
+        xa, za = pts[:-1, 0], pts[:-1, 1]
+        xb, zb = pts[1:, 0], pts[1:, 1]
+        for ax, az, bx, bz in zip(xa, za, xb, zb):
+            cross = ((az > pz) != (bz > pz)) & (px < (bx - ax) * (pz - az) / ((bz - az) or 1e-9) + ax)
+            inside ^= cross
+        mask[sel] ^= inside
+    return mask
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cache', default='/tmp/nords')
+    parser.add_argument('--out', default='static/models/Tracks/Nordschleife/nordschleife.json')
+    args = parser.parse_args()
+    os.makedirs(args.cache, exist_ok=True)
+    s, w, n, e = BBOX
+    raceway = overpass(args.cache, 'raceway.json', f'[out:json][timeout:90];way["highway"="raceway"]({s},{w},{n},{e});out body;>;out skel qt;')
+    forest = overpass(args.cache, 'forest.json', f'[out:json][timeout:120];(way["landuse"="forest"]({s},{w},{n},{e});relation["landuse"="forest"]({s},{w},{n},{e});way["natural"="wood"]({s},{w},{n},{e});relation["natural"="wood"]({s},{w},{n},{e}););out body;>;out skel qt;')
+    bridges = overpass(args.cache, 'bridges.json', f'[out:json][timeout:90];(way["bridge"]["highway"]({s},{w},{n},{e});way["bridge"]["railway"]({s},{w},{n},{e}););out body;>;out skel qt;')
+    dem = dem_tiles(args.cache)
+
+    def dem_at(lat, lon):
+        fx = (lon - 6.0) * 2400 - 0.5
+        fy = (51.0 - lat) * 3600 - 0.5
+        x0, y0 = int(math.floor(fx)), int(math.floor(fy))
+        dx, dy = fx - x0, fy - y0
+        return (dem[y0, x0] * (1 - dx) * (1 - dy) + dem[y0, x0 + 1] * dx * (1 - dy)
+                + dem[y0 + 1, x0] * (1 - dx) * dy + dem[y0 + 1, x0 + 1] * dx * dy)
+
+    lap, sections = stitch(raceway)
+    lats = [p[0] for p in lap]
+    lons = [p[1] for p in lap]
+    lat0 = (min(lats) + max(lats)) / 2
+    lon0 = (min(lons) + max(lons)) / 2
+    R = 6378137.0
+    k = math.cos(math.radians(lat0))
+    project = lambda p: ((p[1] - lon0) * math.pi / 180 * R * k, -(p[0] - lat0) * math.pi / 180 * R)
+    unproject = lambda x, z: (lat0 - z / R * 180 / math.pi, lon0 + x / (R * k) * 180 / math.pi)
+
+    raw = np.array([project(p) for p in lap])
+    closed = np.vstack([raw, raw[:1]])
+    cum = np.concatenate([[0], np.cumsum(np.linalg.norm(np.diff(closed, axis=0), axis=1))])
+    length = cum[-1]
+    count = int(round(length / SPACING))
+    spacing = length / count
+    dist = np.arange(count) * spacing
+    X = np.interp(dist, cum, closed[:, 0])
+    Z = np.interp(dist, cum, closed[:, 1])
+    # osm corners are polyline kinks, a light blur rounds them into the arcs
+    X = gauss_loop(X, spacing, 5.0)
+    Z = gauss_loop(Z, spacing, 5.0)
+    section_starts = [(name, float(cum[i])) for name, i in sections]
+
+    def section_at(d):
+        current = section_starts[-1][0]
+        for name, start in section_starts:
+            if start <= d:
+                current = name
+        return current
+
+    names = [section_at(d) for d in dist]
+
+    # road height: the lowest of the middle and 8 m either side, so a canopy
+    # over the road cell doesn't lift it, then smoothed and held to real grades
+    tx = np.roll(X, -1) - np.roll(X, 1)
+    tz = np.roll(Z, -1) - np.roll(Z, 1)
+    tn = np.hypot(tx, tz)
+    lx, lz = tz / tn, -tx / tn
+    center = np.array([dem_at(*unproject(x, z)) for x, z in zip(X, Z)])
+    near = center.copy()
+    for o in (-8.0, 8.0):
+        near = np.minimum(near, [dem_at(*unproject(x + ax * o, z + az * o)) for x, z, ax, az in zip(X, Z, lx, lz)])
+    y = gauss_loop(near, spacing, 22.0)
+    for name, (height, half) in CRESTS.items():
+        idx = [i for i, nm in enumerate(names) if nm == name]
+        if not idx:
+            continue
+        top = idx[int(np.argmax(center[idx]))]
+        offsets = (np.arange(count) - top + count // 2) % count - count // 2
+        y += height * np.exp(-((offsets * spacing) / half) ** 2)
+    for _ in range(6):
+        for i in range(1, count):
+            y[i] = np.clip(y[i], y[i - 1] - MAX_DROP * spacing, y[i - 1] + MAX_CLIMB * spacing)
+        for i in range(count - 2, -1, -1):
+            y[i] = np.clip(y[i], y[i + 1] - MAX_CLIMB * spacing, y[i + 1] + MAX_DROP * spacing)
+    y = gauss_loop(y, spacing, 6.0)
+    # the loop has to close on itself
+    y += np.linspace(0, y[0] - y[-1], count)
+
+    widths = [[round(float(start), 1), WIDTHS.get(name, DEFAULT_WIDTH)] for name, start in section_starts]
+    banks = [[round(float(start), 1), BANKS.get(name, 0.0)] for name, start in section_starts]
+    concrete = [[round(float(start), 1), name in CONCRETE] for name, start in section_starts]
+
+    # terrain: the dem around the lap with the canopy taken off over the woods
+    x_min, z_min = X.min() - TERRAIN_MARGIN, Z.min() - TERRAIN_MARGIN
+    x_max, z_max = X.max() + TERRAIN_MARGIN, Z.max() + TERRAIN_MARGIN
+    cols = int(math.ceil((x_max - x_min) / TERRAIN_CELL)) + 1
+    rows = int(math.ceil((z_max - z_min) / TERRAIN_CELL)) + 1
+    gx, gz = np.meshgrid(x_min + np.arange(cols) * TERRAIN_CELL, z_min + np.arange(rows) * TERRAIN_CELL)
+    outer, inner = rings_of(forest)
+    woods = rasterize(outer, gx, gz, project) & ~rasterize(inner, gx, gz, project)
+    woods_soft = gauss_grid(woods.astype(np.float64), 1.2)
+    surface = np.array([[dem_at(*unproject(x, z)) for x, z in zip(rx, rz)] for rx, rz in zip(gx, gz)])
+    ground = gauss_grid(surface - CANOPY_M * woods_soft, 1.0)
+    heights_dm = np.clip(np.round(ground * 10), 0, 65535).astype('<u2')
+    forest_u8 = np.clip(np.round(woods_soft * 255), 0, 255).astype(np.uint8)
+
+    # roads and paths crossing over the lap
+    bnodes = {el['id']: (el['lat'], el['lon']) for el in bridges['elements'] if el['type'] == 'node'}
+    crossings = []
+    for el in bridges['elements']:
+        if el['type'] != 'way' or el.get('tags', {}).get('highway') == 'raceway':
+            continue
+        pts = [project(bnodes[nid]) for nid in el['nodes'] if nid in bnodes]
+        for (ax, az), (bx, bz) in zip(pts[:-1], pts[1:]):
+            # every centerline segment near this bridge segment's box
+            near = np.nonzero((X >= min(ax, bx) - 10) & (X <= max(ax, bx) + 10)
+                              & (Z >= min(az, bz) - 10) & (Z <= max(az, bz) + 10))[0]
+            for i in near:
+                j = (i + 1) % count
+                px, pz, qx, qz = X[i], Z[i], X[j], Z[j]
+                d1 = (bx - ax) * (pz - az) - (bz - az) * (px - ax)
+                d2 = (bx - ax) * (qz - az) - (bz - az) * (qx - ax)
+                d3 = (qx - px) * (az - pz) - (qz - pz) * (ax - px)
+                d4 = (qx - px) * (bz - pz) - (qz - pz) * (bx - px)
+                if d1 * d2 < 0 and d3 * d4 < 0:
+                    tags = el.get('tags', {})
+                    crossings.append({
+                        'distance': round(float(dist[i]), 1),
+                        'angle': round(math.atan2(bx - ax, bz - az), 4),
+                        'kind': tags.get('highway') or tags.get('railway'),
+                        'name': tags.get('name'),
+                    })
+    crossings.sort(key=lambda c: c['distance'])
+    merged = []
+    for c in crossings:
+        if merged and abs(merged[-1]['distance'] - c['distance']) < 25:
+            continue
+        merged.append(c)
+
+    out = {
+        'name': 'Nürburgring Nordschleife',
+        'attribution': [
+            'Track centerline, corner names, bridges and forests: © OpenStreetMap contributors, ODbL 1.0 (openstreetmap.org/copyright)',
+            'Elevation: Copernicus GLO-30 DEM, © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved',
+        ],
+        'license': 'This derived database is available under the ODbL 1.0',
+        'closed': True,
+        'length': round(float(length), 1),
+        'origin': {'lat': lat0, 'lon': lon0},
+        'spacing': round(float(spacing), 4),
+        'points': [[round(float(a), 2), round(float(b), 2), round(float(c), 2)] for a, b, c in zip(X, y, Z)],
+        'sections': [{'name': name, 'distance': round(float(start), 1)} for name, start in section_starts],
+        'widths': widths,
+        'banksDeg': banks,
+        'concrete': concrete,
+        'bridges': merged,
+        'terrain': {
+            'x': round(float(x_min), 2), 'z': round(float(z_min), 2), 'cell': TERRAIN_CELL,
+            'cols': cols, 'rows': rows,
+            'heightsDm': base64.b64encode(heights_dm.tobytes()).decode(),
+            'forest': base64.b64encode(forest_u8.tobytes()).decode(),
+        },
+    }
+    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    json.dump(out, open(args.out, 'w'), separators=(',', ':'), ensure_ascii=False)
+    grade = np.diff(np.concatenate([y, y[:1]])) / spacing
+    print('length %.0f m, %d points, elevation %.1f to %.1f m, grade %+.1f%% to %+.1f%%' % (length, count, y.min(), y.max(), grade.min() * 100, grade.max() * 100))
+    print('terrain %dx%d, woods %.0f%%, bridges over the lap %d, size %.0f KB' % (cols, rows, woods.mean() * 100, len(merged), os.path.getsize(args.out) / 1024))
+
+
+if __name__ == '__main__':
+    main()

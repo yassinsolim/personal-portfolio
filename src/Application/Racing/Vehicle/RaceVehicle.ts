@@ -34,7 +34,14 @@ import {
 import { legacyColor } from '../../Utils/LegacyColor';
 
 const SPAWN_T = 0.003;
-const GRAVITY = 32;
+// real gravity for the vertical motion. the old squeezed track needed 32 to
+// keep cars on its 30-120% grades, which also meant no crest could throw a car
+const GRAVITY = 9.81;
+const AIR_DENSITY = 1.225;
+const CREST_MIN_CURVATURE = 0.003;
+// a barely-there launch just skims the road, a real jump needs some margin
+const CREST_LAUNCH_MARGIN = 1.25;
+const AIRBORNE_PITCH_FOLLOW = 0.3;
 const RAYCAST_HEIGHT = 320;
 const RAYCAST_DISTANCE = 1200;
 const LONG_AXIS_THRESHOLD = 1.12;
@@ -264,7 +271,8 @@ export default class RaceVehicle {
     resources: Resources;
     input: DrivingInput;
     track: NordschleifeTrack;
-    colliderMesh: THREE.Mesh;
+    // the track's chunked collider, or a flat pad in the test benches
+    colliderMesh: THREE.Object3D;
     raycaster: THREE.Raycaster;
     root: THREE.Group;
     carPivot: THREE.Group;
@@ -3075,8 +3083,8 @@ export default class RaceVehicle {
             if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
             const material = child.material;
             if (material instanceof THREE.MeshPhysicalMaterial && material.clearcoat > 0) {
-                material.clearcoatRoughness = Math.max(material.clearcoatRoughness, 0.14);
-                material.roughness = Math.max(material.roughness, 0.2);
+                material.clearcoatRoughness = Math.max(material.clearcoatRoughness, 0.22);
+                material.roughness = Math.max(material.roughness, 0.26);
             }
             if (material instanceof THREE.MeshStandardMaterial) {
                 material.envMapIntensity = RACE_ENV_INTENSITY;
@@ -3650,7 +3658,7 @@ export default class RaceVehicle {
         this.raycaster.layers.set(this.track.getColliderLayer());
         this.raycaster.set(this.tmpVectorA, this.tmpVectorB);
         this.raycaster.far = RAYCAST_DISTANCE + 2000;
-        const hit = this.raycaster.intersectObject(this.colliderMesh, false)[0];
+        const hit = this.raycaster.intersectObject(this.colliderMesh, true)[0];
         return hit || null;
     }
 
@@ -4361,8 +4369,24 @@ export default class RaceVehicle {
         const fallY = startY + fallVelocity * deltaSeconds;
         const leavesRoad =
             wasGrounded && targetY < fallY - CREST_LAUNCH_TOLERANCE;
-        const stillFlying = !wasGrounded && fallY > targetY;
-        if (leavesRoad || stillFlying) {
+        // a crest throws the car when the speed needs more pull than gravity
+        // gives to follow it (v^2 * curvature > g), from the track's smooth
+        // profile rather than the raycast, which is too noisy for this
+        const crest = this.trackBound
+            ? this.track.frameCrest[this.trackFrame.index] || 0
+            : 0;
+        // only real crests (tighter than ~330 m), and downforce holds the car
+        // down too, so fast cars stay planted over the dem's small ripples
+        const speed2 = this.speedMps * this.speedMps;
+        const spec = this.physics.spec;
+        const downforce = (0.5 * AIR_DENSITY * spec.clA * speed2) / spec.massKg;
+        const crestLaunch =
+            wasGrounded &&
+            crest < -CREST_MIN_CURVATURE &&
+            speed2 * -crest > CREST_LAUNCH_MARGIN * (GRAVITY + downforce);
+        const stillFlying =
+            !wasGrounded && fallY > targetY && !this.wheelTouchesDown(fallY);
+        if (leavesRoad || stillFlying || crestLaunch) {
             this.grounded = false;
             this.verticalVelocity = fallVelocity;
             this.position.y = fallY;
@@ -4389,6 +4413,18 @@ export default class RaceVehicle {
         return true;
     }
 
+    // in the air: does a wheel corner reach the road at this height? lands
+    // the car on its first corner instead of letting a pitched nose dig in
+    wheelTouchesDown(centerY: number) {
+        const lift = centerY - this.position.y;
+        const points = this.getWheelContactPoints();
+        for (const point of points) {
+            const hit = this.raycastGroundAt(point.x, point.z);
+            if (hit && point.y + lift <= hit.point.y + 0.01) return true;
+        }
+        return false;
+    }
+
     groundToCollider(deltaSeconds: number) {
         this.tmpVectorA.copy(this.position).add(new THREE.Vector3(0, RAYCAST_HEIGHT, 0));
         this.tmpVectorB.set(0, -1, 0);
@@ -4397,7 +4433,7 @@ export default class RaceVehicle {
         this.raycaster.set(this.tmpVectorA, this.tmpVectorB);
         this.raycaster.far = RAYCAST_DISTANCE;
 
-        const hits = this.raycaster.intersectObject(this.colliderMesh, false);
+        const hits = this.raycaster.intersectObject(this.colliderMesh, true);
         const hit = hits[0];
         const wasGrounded = this.grounded;
 
@@ -4449,16 +4485,20 @@ export default class RaceVehicle {
                 0,
                 1
             );
-            const normalLerp = THREE.MathUtils.clamp(
-                deltaSeconds *
-                    THREE.MathUtils.lerp(
-                        SURFACE_NORMAL_LERP_MIN,
-                        SURFACE_NORMAL_LERP_MAX,
-                        normalSpeedFactor
-                    ),
-                0,
-                1
-            );
+            // touching down after a jump lines the car up with the road at
+            // once, or its nose digs in while the pitch catches up
+            const normalLerp = wasGrounded
+                ? THREE.MathUtils.clamp(
+                      deltaSeconds *
+                          THREE.MathUtils.lerp(
+                              SURFACE_NORMAL_LERP_MIN,
+                              SURFACE_NORMAL_LERP_MAX,
+                              normalSpeedFactor
+                          ),
+                      0,
+                      1
+                  )
+                : 1;
             let hasGroundOrientationTarget = false;
             if (frontHits.length && rearHits.length) {
                 const frontPoint = new THREE.Vector3();
@@ -4532,7 +4572,9 @@ export default class RaceVehicle {
             this.tmpVectorC
                 .normalize()
                 .multiplyScalar(Math.max(1, Math.abs(this.speedMps)));
-            this.tmpVectorC.y = this.verticalVelocity;
+            // in the air a car mostly keeps its attitude, nosing all the way
+            // down with the fall would dig the front in on landing
+            this.tmpVectorC.y = this.verticalVelocity * AIRBORNE_PITCH_FOLLOW;
             this.blendSurfaceForward(this.tmpVectorC.normalize(), deltaSeconds);
         }
         this.tmpVectorD.set(1, 0, 0).applyQuaternion(this.carPivot.quaternion);

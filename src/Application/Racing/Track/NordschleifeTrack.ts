@@ -3,40 +3,38 @@ import Application from '../../Application';
 import Resources from '../../Utils/Resources';
 import {
     createAsphaltTextures,
+    createConcreteTexture,
     createGrassTexture,
 } from '../Visuals/proceduralTextures';
 
 const COLLIDER_LAYER = 1;
-const DEFAULT_UV_SCALE = 0.0015;
-const DEFAULT_SAMPLES = 1200;
 const ROOT_MARKER = 'nordschleifeTrackRoot';
-const START_PAD_EXTRA_WIDTH_SCALE = 0.55;
-const START_PAD_BLEND = 0.045;
-const START_PAD_FLAT_BLEND = 0.08;
-const START_PAD_BANK_BLEND = 0.12;
-const TRACK_LENGTH_SCALE = 0.475;
-// the source heights span ~560m (the real ring climbs ~300m) and the lap is
-// squeezed to 0.475 of its length, so raw heights gave 30-120% grades. this
-// keeps them near the real ring's 5-17%
-const TRACK_ELEVATION_SCALE = 0.3;
 const GROUND_PROBE_HEIGHT = 5000;
-// the road is 16 m (the real ring is ~9 m, the old one here was 36 m) with
-// grass verges out to the barriers. the collider covers road and verges.
-// the track json widths say the same (16 and 23)
-const ROAD_WIDTH = 16;
-const VERGE_WIDTH = 3.5;
+// the real ring from openstreetmap and the glo-30 dem, full length and full
+// elevation (scripts/track/build_nordschleife.py). widths come from the data,
+// 9.5 m on most of the lap, grass out to the barriers
+const DEFAULT_ROAD_WIDTH = 9.5;
+const VERGE_WIDTH = 3;
 const BARRIER_INSET = 0.15;
-const EDGE_LINE_WIDTH = 0.22;
-const EDGE_LINE_INSET = 0.35;
-const KERB_WIDTH = 1.3;
+const EDGE_LINE_WIDTH = 0.18;
+const EDGE_LINE_INSET = 0.3;
+const KERB_WIDTH = 1.1;
 // corners tighter than this get a kerb on the inside, tighter still on the
 // outside at the exit too
-const KERB_INSIDE_RADIUS = 300;
-const KERB_OUTSIDE_RADIUS = 170;
-const KERB_MIN_LENGTH = 24;
-const KERB_EXTEND = 10;
-const FRAME_SAMPLES = 4096;
-const FRAME_SEARCH_SPAN = 48;
+const KERB_INSIDE_RADIUS = 160;
+const KERB_OUTSIDE_RADIUS = 90;
+const KERB_MIN_LENGTH = 18;
+const KERB_EXTEND = 8;
+// about 2.5 m apart over the 20.8 km lap
+const FRAME_SAMPLES = 8192;
+const FRAME_SEARCH_SPAN = 64;
+// width and bank changes between sections blend over this
+const SECTION_BLEND_METERS = 50;
+// the ground collider is cut in chunks so a raycast only tests the one or two
+// under the car instead of the whole lap
+const COLLIDER_CHUNKS = 160;
+// ribbon samples per meter of lap
+const RIBBON_SAMPLES_PER_METER = 0.5;
 const MARKING_LIFT = 0.02;
 const KERB_LIFT = 0.025;
 const VERGE_DROP = 0.012;
@@ -60,14 +58,49 @@ export type TrackFrame = {
     point: THREE.Vector3;
 };
 
+export type TrackSection = { name: string; distance: number };
+export type TrackBridge = {
+    distance: number;
+    angle: number;
+    kind: string | null;
+    name: string | null;
+};
+export type TrackTerrainData = {
+    x: number;
+    z: number;
+    cell: number;
+    cols: number;
+    rows: number;
+    heights: Float32Array;
+    forest: Uint8Array;
+};
+
 type TrackAssetData = {
-    name?: string;
-    closed?: boolean;
-    samples?: number;
-    width?: number;
-    uvScale?: number;
-    offset?: number[];
+    name: string;
+    closed: boolean;
+    length: number;
     points: number[][];
+    sections: TrackSection[];
+    widths: [number, number][];
+    banksDeg: [number, number][];
+    concrete: [number, boolean][];
+    bridges: TrackBridge[];
+    terrain: {
+        x: number;
+        z: number;
+        cell: number;
+        cols: number;
+        rows: number;
+        heightsDm: string;
+        forest: string;
+    };
+};
+
+const decodeBase64 = (text: string) => {
+    const binary = atob(text);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
 };
 
 type RibbonEdges = (t: number) => [number, number];
@@ -81,7 +114,8 @@ export default class NordschleifeTrack {
     vergeMesh: THREE.Mesh;
     edgeMarkings: THREE.Mesh;
     kerbMesh: THREE.Mesh | null;
-    colliderMesh: THREE.Mesh;
+    concreteMesh: THREE.Mesh | null;
+    colliderMesh: THREE.Group;
     visualCurve: THREE.CatmullRomCurve3;
     colliderCurve: THREE.CatmullRomCurve3;
     colliderRaycaster: THREE.Raycaster;
@@ -96,7 +130,15 @@ export default class NordschleifeTrack {
     framePoints: Float32Array;
     frameTangents: Float32Array;
     frameCurvature: Float32Array;
-    frameWidthScale: Float32Array;
+    frameWidth: Float32Array;
+    frameBank: Float32Array;
+    // vertical curvature of the road profile, 1/m, negative over crests
+    frameCrest: Float32Array;
+    frameConcrete: Uint8Array;
+    sections: TrackSection[];
+    bridges: TrackBridge[];
+    distanceScale: number;
+    terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
     kerbRight: Uint8Array;
     frameHint: number;
@@ -115,6 +157,7 @@ export default class NordschleifeTrack {
         this.debugHitMarker = null;
         this.debugRayPoints = [new THREE.Vector3(), new THREE.Vector3()];
         this.frameHint = -1;
+        this.distanceScale = 1;
 
         const urlParams = new URLSearchParams(window.location.search);
         this.debugColliderRayEnabled =
@@ -122,42 +165,54 @@ export default class NordschleifeTrack {
             urlParams.has('debugColliderRay') ||
             urlParams.has('debugRay');
 
-        const visualData = this.getTrackAsset('nordschleifeVisualData');
-        const colliderData = this.getTrackAsset('nordschleifeColliderData');
+        const data = this.getTrackAsset('nordschleifeData');
 
         this.root = new THREE.Group();
         this.root.name = 'nordschleife-track-root';
         this.root.userData[ROOT_MARKER] = true;
 
-        this.visualCurve = this.createCurveFromAsset(visualData);
-        this.colliderCurve = this.createCurveFromAsset(colliderData);
+        this.colliderCurve = this.createCurveFromAsset(data);
+        this.visualCurve = this.colliderCurve;
         this.length = this.colliderCurve.getLength();
+        this.sections = data.sections;
+        this.bridges = data.bridges;
+        this.terrain = {
+            x: data.terrain.x,
+            z: data.terrain.z,
+            cell: data.terrain.cell,
+            cols: data.terrain.cols,
+            rows: data.terrain.rows,
+            heights: Float32Array.from(
+                new Uint16Array(decodeBase64(data.terrain.heightsDm).buffer),
+                (dm) => dm / 10
+            ),
+            forest: decodeBase64(data.terrain.forest),
+        };
 
         const frameCount = FRAME_SAMPLES;
         this.framePoints = new Float32Array(frameCount * 3);
         this.frameTangents = new Float32Array(frameCount * 2);
         this.frameCurvature = new Float32Array(frameCount);
-        this.frameWidthScale = new Float32Array(frameCount);
+        this.frameWidth = new Float32Array(frameCount);
+        this.frameBank = new Float32Array(frameCount);
+        this.frameCrest = new Float32Array(frameCount);
+        this.frameConcrete = new Uint8Array(frameCount);
         this.kerbLeft = new Uint8Array(frameCount);
         this.kerbRight = new Uint8Array(frameCount);
         this.buildFrames();
+        this.buildProfiles(data);
         this.buildKerbZones();
 
-        const visualSamples = Math.max(
-            64,
-            visualData.samples ?? DEFAULT_SAMPLES
-        );
-        const colliderSamples = Math.max(
-            64,
-            colliderData.samples ?? DEFAULT_SAMPLES
-        );
-        this.visualMesh = this.createRoadMesh(visualSamples);
-        this.vergeMesh = this.createVergeMesh(visualSamples);
-        this.edgeMarkings = this.createEdgeLineMesh(visualSamples);
+        const samples = Math.round(this.length * RIBBON_SAMPLES_PER_METER);
+        this.visualMesh = this.createRoadMesh(samples);
+        this.concreteMesh = this.createConcreteMesh();
+        this.vergeMesh = this.createVergeMesh(samples);
+        this.edgeMarkings = this.createEdgeLineMesh(samples);
         this.kerbMesh = this.createKerbMesh();
-        this.colliderMesh = this.createColliderMesh(colliderSamples);
+        this.colliderMesh = this.createColliderMesh();
 
         this.root.add(this.visualMesh);
+        if (this.concreteMesh) this.root.add(this.concreteMesh);
         this.root.add(this.vergeMesh);
         this.root.add(this.edgeMarkings);
         if (this.kerbMesh) this.root.add(this.kerbMesh);
@@ -182,64 +237,102 @@ export default class NordschleifeTrack {
         return source as TrackAssetData;
     }
 
+    // the points are 4 m apart already, the curve only smooths between them
     createCurveFromAsset(data: TrackAssetData) {
-        const offset = this.getOffset(data.offset);
         const points = data.points.map(
-            (point) =>
-                new THREE.Vector3(
-                    point[0] + offset.x,
-                    point[1] + offset.y,
-                    point[2] + offset.z
-                )
+            (point) => new THREE.Vector3(point[0], point[1], point[2])
         );
-        const center = new THREE.Vector3();
-        points.forEach((point) => center.add(point));
-        center.multiplyScalar(1 / Math.max(1, points.length));
-
-        points.forEach((point) => {
-            point.x = center.x + (point.x - center.x) * TRACK_LENGTH_SCALE;
-            point.y = center.y + (point.y - center.y) * TRACK_ELEVATION_SCALE;
-            point.z = center.z + (point.z - center.z) * TRACK_LENGTH_SCALE;
-        });
-        this.flattenStartPadElevation(points);
-
-        return new THREE.CatmullRomCurve3(
+        const curve = new THREE.CatmullRomCurve3(
             points,
             data.closed ?? true,
             'centripetal',
             0.5
         );
+        // the default 200 divisions would put getPointAt tens of meters off
+        curve.arcLengthDivisions = points.length * 4;
+        return curve;
     }
 
-    flattenStartPadElevation(points: THREE.Vector3[]) {
-        if (points.length < 4) return;
-
-        const startSampleCount = Math.min(10, points.length);
-        const startY =
-            points
-                .slice(0, startSampleCount)
-                .reduce((sum, point) => sum + point.y, 0) / startSampleCount;
-        const lastIndex = Math.max(1, points.length - 1);
-
-        points.forEach((point, index) => {
-            const t = index / lastIndex;
-            const wrappedDistance = Math.min(t, 1 - t);
-            const normalized = THREE.MathUtils.clamp(
-                1 - wrappedDistance / START_PAD_FLAT_BLEND,
-                0,
-                1
+    // per frame road width, bank and surface from the section keyframes, each
+    // change blended over SECTION_BLEND_METERS
+    buildProfiles(data: TrackAssetData) {
+        const count = FRAME_SAMPLES;
+        const spacing = this.length / count;
+        // the data's distances are along the raw polyline, the curve is a hair
+        // shorter
+        const scale = this.length / Math.max(1, data.length);
+        this.distanceScale = scale;
+        const sample = (keys: [number, number][], distance: number) => {
+            let k = 0;
+            while (k + 1 < keys.length && keys[k + 1][0] * scale <= distance)
+                k++;
+            const value = keys[k][1];
+            const start = keys[k][0] * scale;
+            const nextKey = keys[(k + 1) % keys.length];
+            const next =
+                k + 1 < keys.length
+                    ? nextKey[0] * scale
+                    : this.length + keys[0][0] * scale;
+            const half = SECTION_BLEND_METERS / 2;
+            const previous = keys[(k - 1 + keys.length) % keys.length][1];
+            if (distance - start < half) {
+                const f = 0.5 + (distance - start) / SECTION_BLEND_METERS;
+                return THREE.MathUtils.lerp(previous, value, f);
+            }
+            if (next - distance < half) {
+                const f = 0.5 - (next - distance) / SECTION_BLEND_METERS;
+                return THREE.MathUtils.lerp(value, nextKey[1], f);
+            }
+            return value;
+        };
+        const concrete = data.concrete.map(
+            ([distance, on]) => [distance, on ? 1 : 0] as [number, number]
+        );
+        // bank leans into the corner, so its sign follows the curvature over
+        // a longer window than the kerbs use
+        const window = Math.max(1, Math.round(25 / spacing));
+        for (let i = 0; i < count; i++) {
+            const distance = i * spacing;
+            this.frameWidth[i] =
+                sample(data.widths, distance) || DEFAULT_ROAD_WIDTH;
+            let curvature = 0;
+            for (let k = -window; k <= window; k++) {
+                curvature +=
+                    this.frameCurvature[(((i + k) % count) + count) % count];
+            }
+            const bank = THREE.MathUtils.degToRad(
+                sample(data.banksDeg, distance)
             );
-            const strength = normalized * normalized * (3 - 2 * normalized);
-            point.y = THREE.MathUtils.lerp(point.y, startY, strength);
-        });
+            // positive curvature turns left, and a left turn leans left, which
+            // is a negative roll about the tangent
+            this.frameBank[i] = -Math.sign(curvature) * bank;
+            this.frameConcrete[i] = sample(concrete, distance) > 0.5 ? 1 : 0;
+        }
+    }
+
+    frameValue(values: Float32Array, t: number) {
+        const count = FRAME_SAMPLES;
+        const f = (((t % 1) + 1) % 1) * count;
+        const i = Math.floor(f) % count;
+        const j = (i + 1) % count;
+        return THREE.MathUtils.lerp(values[i], values[j], f - Math.floor(f));
     }
 
     getRoadHalfWidth(t: number) {
-        return ROAD_WIDTH * 0.5 * this.getStartPadWidthScale(t);
+        return this.frameValue(this.frameWidth, t) * 0.5;
     }
 
     getVergeHalfWidth(t: number) {
         return this.getRoadHalfWidth(t) + VERGE_WIDTH;
+    }
+
+    getSectionAt(distance: number) {
+        const d = ((distance % this.length) + this.length) % this.length;
+        let current = this.sections[this.sections.length - 1];
+        for (const section of this.sections) {
+            if (section.distance * this.distanceScale <= d) current = section;
+        }
+        return current;
     }
 
     // evenly spaced samples of the physics curve with tangents, curvature and
@@ -258,7 +351,6 @@ export default class NordschleifeTrack {
             this.framePoints[i * 3 + 2] = point.z;
             this.frameTangents[i * 2] = tangent.x / horizontal;
             this.frameTangents[i * 2 + 1] = tangent.z / horizontal;
-            this.frameWidthScale[i] = this.getStartPadWidthScale(t);
         }
         const spacing = this.length / count;
         const span = Math.max(1, Math.round(12 / spacing));
@@ -277,6 +369,18 @@ export default class NordschleifeTrack {
             turn = Math.atan2(Math.sin(turn), Math.cos(turn));
             // positive curves left, same sign as yaw
             this.frameCurvature[i] = turn / (2 * span * spacing);
+        }
+        // over about 8 m either side, which is what a car's length feels
+        const crestSpan = Math.max(1, Math.round(8 / spacing));
+        for (let i = 0; i < count; i++) {
+            const a = (((i - crestSpan) % count) + count) % count;
+            const b = (i + crestSpan) % count;
+            const h = crestSpan * spacing;
+            this.frameCrest[i] =
+                (this.framePoints[a * 3 + 1] -
+                    2 * this.framePoints[i * 3 + 1] +
+                    this.framePoints[b * 3 + 1]) /
+                (h * h);
         }
     }
 
@@ -324,13 +428,6 @@ export default class NordschleifeTrack {
         // outside kerbs on the tighter corners
         mark(this.kerbLeft, (k) => k < -1 / KERB_OUTSIDE_RADIUS);
         mark(this.kerbRight, (k) => k > 1 / KERB_OUTSIDE_RADIUS);
-        // the start straight stays clean
-        const padSamples = Math.round(count * START_PAD_BLEND);
-        for (let k = -padSamples; k <= padSamples; k++) {
-            const index = ((k % count) + count) % count;
-            this.kerbLeft[index] = 0;
-            this.kerbRight[index] = 0;
-        }
     }
 
     // nearest track frame to a world position. searches near the last hit
@@ -380,8 +477,7 @@ export default class NordschleifeTrack {
         const pz = THREE.MathUtils.lerp(bz, this.framePoints[other * 3 + 2], f);
         const leftX = tz;
         const leftZ = -tx;
-        const widthScale = this.frameWidthScale[best];
-        const roadHalf = ROAD_WIDTH * 0.5 * widthScale;
+        const roadHalf = this.frameWidth[best] * 0.5;
 
         target.index = best;
         target.distance = (best / count) * this.length + along;
@@ -403,8 +499,9 @@ export default class NordschleifeTrack {
             index: 0,
             distance: 0,
             lateral: 0,
-            roadHalfWidth: ROAD_WIDTH * 0.5,
-            barrierOffset: ROAD_WIDTH * 0.5 + VERGE_WIDTH - BARRIER_INSET,
+            roadHalfWidth: DEFAULT_ROAD_WIDTH * 0.5,
+            barrierOffset:
+                DEFAULT_ROAD_WIDTH * 0.5 + VERGE_WIDTH - BARRIER_INSET,
             tangentX: 0,
             tangentZ: 1,
             leftX: 1,
@@ -453,10 +550,7 @@ export default class NordschleifeTrack {
             if (side.dot(previousSide) < 0) side.multiplyScalar(-1);
             previousSide.copy(side);
         }
-        const bankAngle =
-            Math.sin(t * Math.PI * 16) *
-            0.045 *
-            this.getBankStrengthAtDistance(t);
+        const bankAngle = this.frameValue(this.frameBank, t);
         normal.set(0, 1, 0).applyAxisAngle(tangent, bankAngle).normalize();
         side.crossVectors(normal, tangent).normalize();
     }
@@ -761,46 +855,68 @@ export default class NordschleifeTrack {
         return geometry;
     }
 
-    createColliderMesh(samples: number) {
-        const geometry = this.createRibbonGeometry(
-            this.colliderCurve,
-            samples,
-            (t) => [this.getVergeHalfWidth(t), -this.getVergeHalfWidth(t)],
-            0,
-            DEFAULT_UV_SCALE
-        );
+    createColliderMesh() {
+        const group = new THREE.Group();
+        group.name = 'nordschleife-collider';
         const material = new THREE.MeshBasicMaterial({
             color: 0x00ff88,
             wireframe: true,
             transparent: true,
             opacity: 0.15,
         });
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.name = 'nordschleife-collider';
-        mesh.visible = false;
-        mesh.layers.set(COLLIDER_LAYER);
-        mesh.frustumCulled = false;
+        // 2 m samples so the collider follows the visual ribbon closely
+        const samples = Math.round(this.length / 2);
+        for (let chunk = 0; chunk < COLLIDER_CHUNKS; chunk++) {
+            const range: [number, number] = [
+                chunk / COLLIDER_CHUNKS,
+                (chunk + 1) / COLLIDER_CHUNKS,
+            ];
+            const geometry = this.createRibbonGeometry(
+                this.colliderCurve,
+                samples,
+                (t) => [this.getVergeHalfWidth(t), -this.getVergeHalfWidth(t)],
+                0,
+                0,
+                range
+            );
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.name = `nordschleife-collider-${chunk}`;
+            mesh.visible = false;
+            mesh.layers.set(COLLIDER_LAYER);
+            group.add(mesh);
+        }
+        group.updateMatrixWorld(true);
+        return group;
+    }
+
+    // the karussell's banked concrete, drawn over the asphalt
+    createConcreteMesh() {
+        const runs = this.getKerbRuns(this.frameConcrete);
+        if (!runs.length) return null;
+        const parts = runs.map((range) =>
+            this.createRibbonGeometry(
+                this.visualCurve,
+                Math.round(this.length * RIBBON_SAMPLES_PER_METER * 2),
+                (t) => [this.getRoadHalfWidth(t), -this.getRoadHalfWidth(t)],
+                0.01,
+                1 / 3,
+                range
+            )
+        );
+        const material = new THREE.MeshStandardMaterial({
+            map: createConcreteTexture(),
+            roughness: 0.85,
+            metalness: 0,
+            side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -4,
+        });
+        const mesh = new THREE.Mesh(this.mergeRibbons(parts), material);
+        mesh.name = 'nordschleife-concrete';
+        mesh.receiveShadow = true;
+        mesh.renderOrder = 1;
         return mesh;
-    }
-
-    getStartPadWidthScale(t: number) {
-        const wrappedDistance = Math.min(t, 1 - t);
-        const normalized = THREE.MathUtils.clamp(
-            1 - wrappedDistance / START_PAD_BLEND,
-            0,
-            1
-        );
-        return 1 + START_PAD_EXTRA_WIDTH_SCALE * normalized * normalized;
-    }
-
-    getBankStrengthAtDistance(t: number) {
-        const wrappedDistance = Math.min(t, 1 - t);
-        const normalized = THREE.MathUtils.clamp(
-            wrappedDistance / START_PAD_BANK_BLEND,
-            0,
-            1
-        );
-        return normalized * normalized * (3 - 2 * normalized);
     }
 
     getTextureAnisotropy() {
@@ -809,14 +925,6 @@ export default class NordschleifeTrack {
             return 1;
         }
         return Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    }
-
-    getOffset(offset?: number[]) {
-        return new THREE.Vector3(
-            offset?.[0] || 0,
-            offset?.[1] || 0,
-            offset?.[2] || 0
-        );
     }
 
     warnIfDuplicateTrackRoots() {
@@ -882,7 +990,7 @@ export default class NordschleifeTrack {
 
         const hits = this.colliderRaycaster.intersectObject(
             this.colliderMesh,
-            false
+            true
         );
         const end = hits[0]
             ? hits[0].point.clone()
@@ -910,13 +1018,13 @@ export default class NordschleifeTrack {
         );
         const hit = this.groundRaycaster.intersectObject(
             this.colliderMesh,
-            false
+            true
         )[0];
         if (!hit) return null;
         if (normal) {
             normal
                 .copy(hit.face?.normal || this.groundDown)
-                .transformDirection(this.colliderMesh.matrixWorld);
+                .transformDirection(hit.object.matrixWorld);
             if (normal.y < 0) normal.negate();
         }
         return hit.point.y;

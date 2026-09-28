@@ -3,10 +3,10 @@ import type NordschleifeTrack from '../Track/NordschleifeTrack';
 import TrackField, { fbm, type TrackNearest } from './TrackField';
 import { createGrassTexture } from './proceduralTextures';
 
-// ground around the track: rolling eifel hills that flatten out near the
-// road. the grid stays under the road and verges, and a skirt strip runs from
-// each barrier down onto the grid so there's never a gap or a cliff
-const MARGIN = 1700;
+// ground around the track: the real eifel from the dem, blended into the road
+// near it. the grid stays under the road and verges, and a skirt strip runs
+// from each barrier down onto the grid so there's never a gap or a cliff
+const MARGIN = 850;
 const SKIRT_COLUMNS = [0, 2.5, 7, 15, 27, 44];
 const SKIRT_TUCK = 0.3;
 const UNDER_ROAD = 1.4;
@@ -69,36 +69,28 @@ export default class RaceTerrain {
 
     // shared with the forest, so trees stand on the ground
     forestDensity(x: number, z: number) {
-        return smoothstep(
-            0.38,
-            0.6,
-            fbm(x * 0.0021 + 13.1, z * 0.0021 - 7.7, 3)
-        );
+        return this.field.woods(x, z);
     }
 
     heightAt(x: number, z: number) {
         const near = this.field.nearest(x, z, this.nearest, 2);
         const d = near.distance;
+        const ground = this.field.baseHeight(x, z);
+        // the road cuts and fills through the real ground, so it takes over
+        // close in and hands back to the dem over the next hundred meters
         const base =
             d === Infinity
-                ? this.field.baseHeight(x, z)
+                ? ground
                 : near.roadY +
-                  (this.field.baseHeight(x, z) - near.roadY) *
-                      smoothstep(70, 150, d);
-        const hills =
-            (fbm(x * 0.0014, z * 0.0014, 4) - 0.5) * 70 +
-            (fbm(x * 0.0065, z * 0.0065, 3) - 0.5) * 7;
-        const reach =
-            d === Infinity
-                ? 1
-                : smoothstep(this.barrier + 25, this.barrier + 280, d);
+                  (ground - near.roadY) *
+                      smoothstep(this.barrier + 8, this.barrier + 110, d);
         const banks =
             (fbm(x * 0.02, z * 0.02, 2) - 0.5) *
-            3 *
+            2.4 *
             (d === Infinity
                 ? 1
                 : smoothstep(this.barrier + 12, this.barrier + 60, d));
-        return base + hills * reach + banks;
+        return base + banks;
     }
 
     // the grid itself sits well under the road near it, the skirt covers that
@@ -239,7 +231,7 @@ export default class RaceTerrain {
     buildSkirt() {
         const track = this.track;
         const curve = track.visualCurve;
-        const samples = 1800;
+        const samples = Math.round(track.length / 5);
         const columns = SKIRT_COLUMNS.length;
         const positions: number[] = [];
         const colors: number[] = [];

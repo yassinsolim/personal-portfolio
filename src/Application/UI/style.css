@@ -906,3 +906,9 @@ body.race-mode-touch #ui-app {
     line-height: 1.5;
     opacity: 0.72;
 }
+
+.race-menu-credits {
+    margin: -6px 0 12px;
+    font-size: 10px;
+    opacity: 0.5;
+}

@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 
-const MIN_LAP_TIME_MS = 30_000;
+// the real ring: nothing laps it in under 5 minutes
+const MIN_LAP_TIME_MS = 180_000;
+// the start line only counts near the line itself, its plane cuts across the
+// lap elsewhere too
+const START_GATE_RADIUS = 40;
 const START_TRIGGER_COOLDOWN_MS = 1_500;
 const PROGRESS_VALID_THRESHOLD = 0.92;
 
@@ -127,7 +131,8 @@ export default class LapTimer {
             this.previousDistance < 0 &&
             signedDistance >= 0 &&
             speedMps > 5 &&
-            forward.dot(this.startNormal) > 0.25;
+            forward.dot(this.startNormal) > 0.25 &&
+            position.distanceTo(this.startPoint) < START_GATE_RADIUS;
 
         this.previousDistance = signedDistance;
 
