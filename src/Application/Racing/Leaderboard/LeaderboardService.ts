@@ -232,7 +232,7 @@ export default class LeaderboardService {
                 tune: safeTune,
             };
             if (safeReplay) {
-                await this.submitGhostReplay(entry.id, safeReplay);
+                await this.submitGhostReplay(entry.id, safeReplay, tag);
             }
             return entry;
         } catch (error) {
@@ -442,7 +442,9 @@ export default class LeaderboardService {
         } as GhostLapReplay;
     }
 
-    async submitGhostReplay(lapId: string, replay: GhostLapReplay) {
+    // the ghost's car_id has to match its lap row exactly (the insert policy
+    // checks it), tune code included
+    async submitGhostReplay(lapId: string, replay: GhostLapReplay, tag = SEASON_TAG) {
         const safeLapId = String(lapId || '').trim();
         if (!safeLapId) return;
 
@@ -465,7 +467,7 @@ export default class LeaderboardService {
                     {
                         lap_id: safeLapId,
                         lap_time_ms: safeReplay.lapTimeMs,
-                        car_id: `${safeReplay.carId}${SEASON_TAG}`,
+                        car_id: `${safeReplay.carId}${tag}`,
                         samples: safeReplay.samples,
                     },
                     { onConflict: 'lap_id' }
