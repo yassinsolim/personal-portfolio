@@ -79,6 +79,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   handbrake flick used to slide cars sideways at ~50 m/s and spin them at ~480 deg/s.
 - Measure changes with `scripts/race-physics-check.js` (paste into the console on
   `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.
+- `node scripts/race-harness-run.mjs --url http://<lan-ip>:<port>/` runs that harness plus
+  `scripts/race-drive-metrics.js` (0-100, braking, skidpad, step steer, drift on a flat pad) in
+  Chromium and writes JSON. `node scripts/race-playtest.mjs --url ...` plays the game headed with
+  real key presses and reports load time, fps and screenshots. Headless Chromium on macOS can't
+  load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
+- `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
