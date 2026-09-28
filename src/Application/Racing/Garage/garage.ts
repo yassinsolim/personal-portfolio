@@ -36,6 +36,8 @@ export type CarTune = {
     gearing: number;
     // share of brake force on the front axle
     brakeBias: number;
+    // false takes the electronic top speed limiter out
+    speedLimiter: boolean;
 };
 
 export const STOCK_LOOK: CarLook = {
@@ -59,6 +61,7 @@ export const STOCK_TUNE: CarTune = {
     diff: 0,
     gearing: 0,
     brakeBias: STOCK_BRAKE_BIAS,
+    speedLimiter: true,
 };
 
 export const LIMITS = {
@@ -153,6 +156,7 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         diff: num(source.diff, 0, LIMITS.diff),
         gearing: num(source.gearing, 0, LIMITS.gearing),
         brakeBias: num(source.brakeBias, STOCK_BRAKE_BIAS, LIMITS.brakeBias),
+        speedLimiter: source.speedLimiter !== false,
     };
 };
 
@@ -171,10 +175,12 @@ export const applyTune = (
     const power = tune.power;
     return {
         ...spec,
+        // the map scales the whole curve. the top speed follows from the
+        // physics: the limiter holds it, or drag, or the revs in top gear
         powerW: spec.powerW * power,
         torqueNm: spec.torqueNm * power,
-        // more power pushes the top speed up by about its cube root
-        vmax: spec.vmax * Math.cbrt(power),
+        torqueTable: spec.torqueTable.map((torque) => torque * power),
+        speedLimit: tune.speedLimiter ? spec.speedLimit : Infinity,
         tireGrip: spec.tireGrip * tires.grip,
         slipAnglePeak: spec.slipAnglePeak + tires.peak,
         tireShape: spec.tireShape + tires.shape,
@@ -210,14 +216,16 @@ export const isStockTune = (tune: CarTune) =>
     tune.damping === 0 &&
     tune.diff === 0 &&
     tune.gearing === 0 &&
-    Math.abs(tune.brakeBias - STOCK_BRAKE_BIAS) < 1e-6;
+    Math.abs(tune.brakeBias - STOCK_BRAKE_BIAS) < 1e-6 &&
+    tune.speedLimiter;
 
 // what changes the physics: the tune, aero and ride height. paint and wheels
 // are only looks
 export const isStockSetup = (tune: CarTune, look: CarLook) =>
     isStockTune(tune) && look.spoiler === 'none' && look.ride === 0;
 
-// a short code for the tuned board, one base 36 digit per setting
+// a short code for the tuned board, one base 36 digit per setting. a removed
+// speed limiter adds a digit at the end, so older codes keep their meaning
 export const tuneCode = (tune: CarTune, look: CarLook) => {
     const q = (value: number, min: number, max: number) =>
         Math.round(
@@ -234,6 +242,7 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         q(tune.brakeBias, ...LIMITS.brakeBias),
         q(look.ride, ...LIMITS.ride),
         ['none', 'ducktail', 'wing'].indexOf(look.spoiler).toString(36),
+        tune.speedLimiter ? '' : '1',
     ].join('');
 };
 

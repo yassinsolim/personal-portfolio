@@ -5,7 +5,7 @@
         "node": ">=20.10.0"
     },
     "scripts": {
-        "prebuild": "node scripts/write-racing-config.js",
+        "prebuild": "node scripts/write-racing-config.js && node scripts/build-ktx2-worker.mjs",
         "build": "webpack --config ./bundler/webpack.prod.js",
         "dev": "webpack serve --config ./bundler/webpack.dev.js",
         "export:glb": "EXPORT_SCENE=1 npm run dev",
@@ -13,7 +13,9 @@
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",
-        "validate:race": "node scripts/run-regression-validation.js"
+        "validate:race": "node scripts/run-regression-validation.js",
+        "check:drivetrain": "node scripts/race-drivetrain-check.mjs",
+        "test:drivetrain": "node --test scripts/race-drivetrain.test.mjs"
     },
     "dependencies": {
         "@babel/core": "^7.16.12",

@@ -8,6 +8,7 @@ import { applyCarFinish } from '../../Utils/CarFinish';
 import { addContactShadow } from '../../World/CarContactShadow';
 import { getCheapSkyCube, toCheapCarMaterial } from '../Visuals/cheapMaterials';
 import { applyCarLook, isGarageMaterial } from '../Garage/carLook';
+import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {
     applyTune,
     loadLook,
@@ -639,25 +640,18 @@ export default class RaceVehicle {
                 .catch(() => null);
         }
 
-        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite)
         const cheap = this.cheapMaterials;
-        const path = cheap
-            ? option.modelPath.replace(/\.glb$/, '.lite.glb')
-            : option.modelPath;
+        // weak gpus race the low detail car (scripts/optimize-models.mjs --lite),
+        // others the full one, as ktx2 when the decoder works
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
-            this.resources.loaders.gltfLoader.load(
-                path,
-                (gltf) => {
-                    if (!cheap)
-                        this.resources.items.gltfModel[option.resourceName] =
-                            gltf;
-                    const loadedModel = this.prepareModel(gltf.scene.clone(true), carId);
-                    resolve(loadedModel);
-                },
-                undefined,
-                (error) => {
-                    reject(error);
-                }
+            const loaded = (gltf: GLTF) => {
+                if (!cheap) this.resources.items.gltfModel[option.resourceName] = gltf;
+                resolve(this.prepareModel(gltf.scene.clone(true), carId));
+            };
+            this.resources.loadModel(
+                cheap ? option.modelPath.replace(/\.glb$/, '.lite.glb') : option.modelPath,
+                loaded,
+                reject
             );
         });
 
@@ -5249,11 +5243,15 @@ export default class RaceVehicle {
     }
 
     // wheels turn at the tire model's own speeds, so wheelspin and lockups
-    // show. steer follows the road wheel angle
+    // show. the model's wheels aren't quite the real tyre's size, so the spin
+    // is scaled to roll them at the same road speed. steer follows the road
+    // wheel angle
     advanceWheelSpin(deltaSeconds: number) {
         const omega = this.physics.wheelOmega;
-        const front = (omega[0] + omega[1]) * 0.5;
-        const rear = (omega[2] + omega[3]) * 0.5;
+        const scale =
+            this.physics.spec.wheelRadius / Math.max(0.1, this.wheelRadius);
+        const front = (omega[0] + omega[1]) * 0.5 * scale;
+        const rear = (omega[2] + omega[3]) * 0.5 * scale;
         this.frontSpinAngle += front * deltaSeconds;
         this.rearSpinAngle += rear * deltaSeconds;
         this.wheelSpinAngle = (this.frontSpinAngle + this.rearSpinAngle) * 0.5;

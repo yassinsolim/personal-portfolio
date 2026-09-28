@@ -3,6 +3,7 @@ import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
+import { peakOutput, predictTopSpeed, rpmAtSpeed } from './Vehicle/VehiclePhysics';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
@@ -609,24 +610,31 @@ export default class RaceManager {
         this.multiplayer.setLocalLook(look, !isStockSetup(tune, look));
     }
 
-    // what the garage screen shows: the current setup and the car's numbers
+    // what the garage screen shows: the current setup and the car's numbers,
+    // worked out from the physics the car drives with
     dispatchGarage() {
         const { look, tune } = this.vehicle;
         const spec = this.vehicle.physics.spec;
+        const peak = peakOutput(spec);
+        const top = predictTopSpeed(spec);
         UIEventBus.dispatch('race:garageState', {
             carId: this.vehicle.currentCarId,
             look,
             tune,
             calipers: carHasCalipers(this.vehicle.currentCarId),
+            speedLimiter: this.vehicle.currentTuning.speedLimitKph,
             tuned: !isStockSetup(tune, look),
             stats: {
-                powerKw: Math.round(spec.powerW / 1000),
-                torqueNm: Math.round(spec.torqueNm),
+                powerKw: Math.round(peak.powerW / 1000),
+                torqueNm: Math.round(peak.torqueNm),
                 grip: Math.round(spec.tireGrip * 100) / 100,
-                topKph: Math.round(spec.vmax * 3.6),
+                topKph: Math.round(top.speed * 3.6),
+                topLimitedBy: top.limitedBy,
                 downforce: Math.round(spec.clA * 100) / 100,
                 brakeFront: Math.round(spec.brakeBias * 100),
-                finalDrive: Math.round(spec.finalDrive * 100) / 100,
+                rpmAt100: Math.round(
+                    rpmAtSpeed(spec, 100 / 3.6, spec.gearRatios.length)
+                ),
             },
         });
     }
@@ -702,6 +710,7 @@ export default class RaceManager {
         });
         UIEventBus.dispatch('race:hudUpdate', {
             redlineRpm: this.vehicle.currentTuning.redlineRpm,
+            tachMaxRpm: this.vehicle.currentTuning.tachMaxRpm,
             sectors: this.sectors.getState(),
             lastLapMs: this.lastLapTimeMs,
             map: {

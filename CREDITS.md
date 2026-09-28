@@ -47,8 +47,10 @@
 
 ## Vehicle Performance Reference Sources (Tuning Inputs, Not Imported Assets)
 
-The race physics (`race.physics` in `carOptions.ts`) uses each car's published power and torque
-from these sources, plus tuning values chosen to land near the listed 0-100 and top speeds.
+The race physics (`race` in `carOptions.ts`) uses each car's published gearing, tyres, redline,
+speed limiter, power and torque. The full list of sources per figure (maker press kits and
+technical data, Car and Driver and Auto Bild tests, factory build records, tyre maker revs per mile
+from tiresize.com), and which figures are estimated, is in `docs/cars-drivetrain.md`. The main ones:
 
 - Mercedes-AMG ONE technical data
   - URL: https://www.mercedes-amg.com/en/home/vehicles/amg-one/hypercar.html
@@ -79,6 +81,10 @@ from these sources, plus tuning values chosen to land near the listed 0-100 and 
 - Supabase JavaScript client (`@supabase/supabase-js`)
   - Repo: https://github.com/supabase/supabase-js
   - License: MIT
+
+- Supabase (hosted Postgres and Realtime, Free Plan) for the lap leaderboard, ghost replays and lobbies
+  - Project: Nordschleife (`qdepbyxxzbdknkfgpwyl`, AWS us-west-2)
+  - URL: https://supabase.com
 
 - Three.js (already used across project; racing features also depend on it)
   - Repo: https://github.com/mrdoob/three.js

@@ -6,14 +6,16 @@ const configPath = path.resolve(__dirname, '../static/config/racing.config.json'
 const first = (...values) =>
     values.find((value) => typeof value === 'string' && value.trim());
 
+// NORDSCHLEIFE_SUPABASE_* point at the racing game's own free project (its own
+// realtime quota, separate from webstrafe)
 const config = {
     supabaseUrl: first(
-        process.env.RACING_SUPABASE_URL,
+        process.env.NORDSCHLEIFE_SUPABASE_URL,
         process.env.SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_URL
     ),
     supabaseAnonKey: first(
-        process.env.RACING_SUPABASE_ANON_KEY,
+        process.env.NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY,
         process.env.SUPABASE_ANON_KEY,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     ),

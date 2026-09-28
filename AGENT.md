@@ -64,6 +64,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   - `$env:PATH = "$(Resolve-Path .\\.tools\\<node-folder>);$env:PATH"`
 - Supabase runtime config (optional):
   - `static/config/racing.config.json` (template: `static/config/racing.config.example.json`)
+  - The racing game has its own free project (Nordschleife, `qdepbyxxzbdknkfgpwyl`, us-west-2) so its
+    Realtime traffic has its own quota. Schema and RLS: `supabase/racing.sql`, tested by
+    `scripts/test-racing-sql.sh`. Don't run multi-client Realtime tests against it; use the netsim hook.
 - Render Mode defaults to Auto: `Utils/AdaptiveResolution.ts` retunes the pixel ratio every second
   to hold 60 fps (0.5x up to the screen's native ratio, capped at 2x). Below 1x it also turns off
   the film grain overlay and heavy drift smoke. Anything that swaps the scene should call
@@ -90,10 +93,10 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   it. `RaceVehicle` keeps grounding, orientation and wheel visuals, and syncs `speedMps`,
   `lateralSpeed`, `yaw`, `gear` and `rpm` from it so audio, HUD, ghosts and multiplayer read the
   same fields as before.
-- Per-car numbers live in `carOptions.ts` under `race.physics` (published power and torque, the
-  rest tuning) and are turned into a spec by `Vehicle/carPhysics.ts`, using the model's real
-  wheelbase and track from the wheel rig. Tune against `scripts/race-drive-metrics.js`: each car
-  should stay near its `zeroToHundredSec` and `topSpeedKph`.
+- Per-car numbers live in `carOptions.ts` under `race` (real gearing, tyres, transmission,
+  limiters, torque curve, see Drivetrain Notes) and are turned into a spec by
+  `Vehicle/carPhysics.ts`, using the model's real wheelbase and track from the wheel rig. Check
+  drivetrain changes with `npm run check:drivetrain`, handling with `scripts/race-drive-metrics.js`.
 - Full keyboard steer is the angle for the tightest turn the tires can hold at the current
   speed (geometric angle plus a small margin), not that plus a slip angle: both axles slip at the
   limit, and the extra angle made half a press already saturate the fronts. Countersteering can
@@ -104,8 +107,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The road is 16 m with 3.5 m grass verges to the barriers (`NordschleifeTrack.ts`); the barrier
   collision is in `RaceVehicle.applyBarriers` using `track.queryFrame`, which also gives each
   wheel's surface (asphalt, kerb, grass). Test benches set `vehicle.trackBound = false`.
-- New laps carry an `@v3` tag on `car_id` (v2 was the tire model on the old track, v3 is the real
-  ring) and the leaderboard only reads tagged rows, because older laps aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
+- New laps carry an `@v4` tag on `car_id` (v2 was the tire model on the old track, v3 the real
+  ring, v4 the real drivetrains) and the leaderboard only reads tagged rows, because older laps aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
   `MultiplayerService.ts`, and the local storage keys) whenever lap times stop being comparable.
 - Measure changes with `scripts/race-physics-check.js` (paste into the console on
   `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.
@@ -605,8 +608,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   for testing. `.tmp-validation/mp4.mjs <url> <netsim>` runs four clients through the real flow.
 
 ## Realtime Traffic (2026-09-28)
-- The Supabase org shares a 2M/month Realtime message quota with WebStrafe. Never run
-  multiplayer tests against the live project (axrljzcrlmliscstmctb) or a preview. Use
+- Realtime messages are billed against a free 2M/month quota. Never run multiplayer tests
+  against a live project (the racing project `qdepbyxxzbdknkfgpwyl`, or the old shared
+  `axrljzcrlmliscstmctb` that WebStrafe uses) or a preview. Use
   `?raceDebug=1&mpmock=1` (in browser mock, windows of one browser share lobbies, laps stay local)
   or a local `supabase start`. `scripts/race-mp-traffic.mjs` uses the mock and also aborts any
   request or websocket to supabase.co.
@@ -631,5 +635,41 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   body kit and the ride height's effect on cg height. Mass never changes, so collisions don't
   depend on the tune. A stock tune returns the spec unchanged (harness identical).
 - Leaderboard: any tune, body kit or ride height change makes the car tuned. Tuned laps are
-  tagged `<car>@v3~t<code>` and live on the tuned board; the stock board still reads `%@v3`.
+  tagged `<car>@v4~t<code>` and live on the tuned board; the stock board still reads `%@v4`.
 - Multiplayer: the look rides on telemetry as a short code (`encodeLook`), no extra messages.
+
+## Drivetrain Notes (2026-09-28)
+- Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling
+  radius (`Vehicle/tyres.ts`: measured revs per mile, or 0.970 of the nominal circumference), the
+  rev limiter at the published redline (hard cut), the electronic speed limiter where the car has
+  one (`speedLimitKph`), and a full load `torqueCurve` per car. Figures, sources and what's
+  estimated are in `docs/cars-drivetrain.md`; `scripts/race-drivetrain-reference.mjs` holds the
+  published numbers apart from `carOptions.ts` on purpose.
+- `npm run check:drivetrain` (or `test:drivetrain`) drives the real physics in node (via
+  `scripts/lib/ts-hooks.mjs`, which lets node import the plain `.ts` modules) and fails when a car
+  is off its published gearing, limiter or times, or a tune moves them the wrong way. Wheelbase and
+  track come from `scripts/race-car-geometry.json` (measured from the models' wheel rigs); the
+  browser harness gives the same numbers to the hundredth.
+- Revs follow the wheels. The clutch slips to the launch revs only in first, reverse and mid drift
+  (a clutch kick after the drift assist shifts). Gear changes keep `shiftTorque` of the drive
+  (dual clutch 0.7, MCT and automatics 0.3 to 0.4, manual 0), the BMW converter multiplies torque
+  while it slips. The drift assist picks its gear at 64% of the redline by road speed and only
+  shifts back down under 54%; that pair is what kept the drift numbers where they were.
+- The garage's top speed is `predictTopSpeed` (limiter, drag or top gear redline), the stats come
+  from the physics spec, and the speed limiter is a tune flag (`speedLimiter`), which adds a digit
+  to the tune code. The HUD tach range is per car (`tachMaxRpm`).
+- The model's wheels are only for looks now. When a car is added, give it `tyres`,
+  `transmission`, `torqueCurve`, `speedLimitKph` and `tachMaxRpm`, add it to the reference file and
+  the geometry json, and run the check.
+
+## KTX2 Notes (2026-09-28)
+- Cars (full and lite) have `<model>.ktx2.glb` twins from `node scripts/build-ktx2-cars.mjs`
+  (gltfpack 0.18+ with BasisU, default `~/Assets/webstrafe/tools/bin/gltfpack` or `GLTFPACK=`).
+  Rebuild them whenever a car glb changes; the webp glb stays as the fallback.
+- The decoder is a real same origin worker, `basis/ktx2-worker.js`, generated in prebuild by
+  `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `vercel.json` allows
+  `'unsafe-eval'` for the emscripten transcoder; the page policy is unchanged and no blob
+  worker is used for it (`Utils/ktx2.ts`).
+- Never hangs: a 451 byte probe must decode within 5 s before any car picks ktx2, a worker error
+  flips everything to webp, and a downloaded ktx2 car gets 15 s to parse before the webp one is
+  loaded. `?ktx2=0` forces webp; `?raceDebug=1&ktx2fail=worker|hang|probe` forces each failure.

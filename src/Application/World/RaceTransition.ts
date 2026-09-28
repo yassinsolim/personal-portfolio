@@ -143,10 +143,12 @@ export default class RaceTransition {
         this.busy = true;
         this.skipped = false;
         document.body.style.cursor = '';
+        // the monitor's iframe stops taking clicks until the race is up, so a
+        // click to skip reaches us instead of focusing yassinOS
+        UIEventBus.dispatch('race:transitionLock', { locked: true });
         // the click's default was stopped, so focus can still be inside the
         // monitor's iframe, where a key to skip would never reach us
-        (document.activeElement as HTMLElement | null)?.blur?.();
-        window.focus();
+        this.returnFocus();
         // capture, the page's own key handlers stop some keys from bubbling
         window.addEventListener('keydown', this.skipHandler, true);
         window.addEventListener('pointerdown', this.skipHandler, true);
@@ -331,6 +333,7 @@ export default class RaceTransition {
     skip() {
         if (!this.busy || this.skipped) return;
         this.skipped = true;
+        this.returnFocus();
         // the camera jump and the race start still happen, just at once
         TWEEN.removeAll();
         UIEventBus.dispatch('race:transitionSkip', {});
@@ -350,5 +353,14 @@ export default class RaceTransition {
         this.busy = false;
         window.removeEventListener('keydown', this.skipHandler, true);
         window.removeEventListener('pointerdown', this.skipHandler, true);
+        this.returnFocus();
+        UIEventBus.dispatch('race:transitionLock', { locked: false });
+    }
+
+    // keys go to the page, never to the iframe or a button left focused
+    returnFocus() {
+        const active = document.activeElement as HTMLElement | null;
+        if (active && active !== document.body) active.blur?.();
+        window.focus();
     }
 }

@@ -46,6 +46,8 @@ export default class MonitorScreen extends EventEmitter {
     monitorSceneObjects: THREE.Object3D[];
     monitorOcclusionPlane: THREE.Mesh | null;
     raceModeActive: boolean;
+    // the race transition is running: the iframe mustn't take clicks or focus
+    inputLocked: boolean;
     leaveMonitorTimeoutId: number | null;
     messageHandler: ((event: MessageEvent) => void) | null;
 
@@ -71,6 +73,7 @@ export default class MonitorScreen extends EventEmitter {
         this.monitorSceneObjects = [];
         this.monitorOcclusionPlane = null;
         this.raceModeActive = false;
+        this.inputLocked = false;
         this.leaveMonitorTimeoutId = null;
         this.messageHandler = null;
 
@@ -90,6 +93,7 @@ export default class MonitorScreen extends EventEmitter {
                 this.raceModeActive = active;
                 this.setMonitorVisualVisibility(!active);
                 if (active) {
+                    this.releaseFocus();
                     this.clearPendingMonitorLeave();
                     this.inComputer = false;
                     this.prevInComputer = false;
@@ -99,6 +103,29 @@ export default class MonitorScreen extends EventEmitter {
                 }
             }
         );
+        // while the room opens onto the ring, a click (to skip) over the
+        // monitor would land in the iframe and keep the keys from the game
+        UIEventBus.on(
+            'race:transitionLock',
+            (state: { locked?: boolean } | undefined) => {
+                this.inputLocked = Boolean(state?.locked);
+                if (this.inputLocked) this.releaseFocus();
+                this.setMonitorVisualVisibility(!this.raceModeActive);
+            }
+        );
+    }
+
+    // hand keyboard focus back to the page if the iframe has it
+    releaseFocus() {
+        const iframe = this.monitorIframe;
+        if (iframe && document.activeElement === iframe) {
+            iframe.blur();
+            window.focus();
+        }
+    }
+
+    iframeTakesPointer(visible: boolean) {
+        return visible && !this.inputLocked ? 'auto' : 'none';
     }
 
     setMonitorVisualVisibility(visible: boolean) {
@@ -111,11 +138,11 @@ export default class MonitorScreen extends EventEmitter {
 
         if (this.monitorContainer) {
             this.monitorContainer.style.visibility = visible ? 'visible' : 'hidden';
-            this.monitorContainer.style.pointerEvents = visible ? 'auto' : 'none';
+            this.monitorContainer.style.pointerEvents = this.iframeTakesPointer(visible);
         }
 
         if (this.monitorIframe) {
-            this.monitorIframe.style.pointerEvents = visible ? 'auto' : 'none';
+            this.monitorIframe.style.pointerEvents = this.iframeTakesPointer(visible);
         }
     }
 
@@ -585,10 +612,9 @@ export default class MonitorScreen extends EventEmitter {
         this.monitorContainer.style.clipPath = 'none';
         this.monitorContainer.style.visibility = 'visible';
         this.monitorContainer.style.opacity = '1';
-        this.monitorContainer.style.pointerEvents =
-            this.monitorCssObject?.visible ? 'auto' : 'none';
-        this.monitorIframe.style.pointerEvents =
-            this.monitorCssObject?.visible ? 'auto' : 'none';
+        const pointer = this.iframeTakesPointer(Boolean(this.monitorCssObject?.visible));
+        this.monitorContainer.style.pointerEvents = pointer;
+        this.monitorIframe.style.pointerEvents = pointer;
         if (this.monitorOcclusionPlane) {
             this.monitorOcclusionPlane.visible = true;
         }
