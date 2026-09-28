@@ -67,10 +67,13 @@ const blur = (
     renderer.render(quad, blurCamera);
 };
 
+// lift is in the car's world units: the room is in centimeters, race mode in
+// meters
 export const addContactShadow = (
     renderer: THREE.WebGLRenderer,
     car: THREE.Object3D,
-    groundY: number
+    groundY: number,
+    lift = LIFT
 ) => {
     car.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(car);
@@ -150,7 +153,7 @@ export const addContactShadow = (
 
     const world = new THREE.Matrix4().makeTranslation(
         center.x,
-        groundY + LIFT,
+        groundY + lift,
         center.z
     );
     car.matrixWorld

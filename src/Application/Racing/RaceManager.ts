@@ -13,7 +13,7 @@ import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
     type MultiplayerPlayerState,
 } from './Multiplayer/MultiplayerService';
-import { legacyColor } from '../Utils/LegacyColor';
+import RaceVisuals from './Visuals/RaceVisuals';
 
 type RaceModeState = {
     active: boolean;
@@ -64,6 +64,7 @@ export default class RaceManager {
     application: Application;
     scene: THREE.Scene;
     raceRoot: THREE.Group;
+    visuals: RaceVisuals;
     active: boolean;
     initialized: boolean;
     track: NordschleifeTrack;
@@ -131,6 +132,7 @@ export default class RaceManager {
         this.track = new NordschleifeTrack(this.raceRoot);
         this.vehicle = new RaceVehicle(this.raceRoot, this.track);
         this.chaseCamera = new RaceChaseCamera(this.vehicle);
+        this.visuals = new RaceVisuals(this.raceRoot, this.track, this.vehicle);
         this.lapTimer = new LapTimer(this.track.getCurve());
         this.localLeaderboard = new LocalLeaderboard();
         this.leaderboardService = new LeaderboardService(this.localLeaderboard);
@@ -356,9 +358,8 @@ export default class RaceManager {
         this.active = true;
         this.paused = false;
         this.setLobbyObjectsVisible(false);
-        this.scene.background = new THREE.Color(0x0b0f14);
-        this.scene.fog = new THREE.Fog(legacyColor(0x0b0f14), 380, 8800);
         this.raceRoot.visible = true;
+        this.visuals.enter();
         this.vehicle.resetToStart();
         this.physicsAccumulator = 0;
         this.lastPhysicsStepTimeMs = 0;
@@ -406,6 +407,7 @@ export default class RaceManager {
         this.active = false;
         this.paused = false;
         this.raceRoot.visible = false;
+        this.visuals.exit();
         this.setLobbyObjectsVisible(true);
         this.scene.background = this.defaultSceneBackground;
         this.scene.fog = this.defaultSceneFog;
@@ -444,8 +446,8 @@ export default class RaceManager {
         if (!visible) {
             this.hiddenLobbyObjects = [];
             this.scene.children.forEach((child) => {
+                // the room lights go too, race mode has its own sun and sky
                 if (child === this.raceRoot) return;
-                if (child instanceof THREE.Light) return;
                 if (!child.visible) return;
                 child.visible = false;
                 this.hiddenLobbyObjects.push(child);
@@ -1081,6 +1083,7 @@ export default class RaceManager {
         this.track.update();
         this.ghostReplay.update(delta);
         this.chaseCamera.update(delta);
+        this.visuals.update(delta);
 
         if (nowMs - this.lastHudDispatchMs > 75) {
             this.lastHudDispatchMs = nowMs;

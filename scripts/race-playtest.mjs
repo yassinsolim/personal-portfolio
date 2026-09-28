@@ -41,6 +41,11 @@ const drift = opt('drift', 'yes') !== 'no';
 const throttleMbps = Number(opt('mbps', 0));
 const kp = Number(opt('kp', 2.5));
 const kd = Number(opt('kd', 0.9));
+// worst case proxy for weak machines: software gl and/or a throttled cpu
+//   --swgl            swiftshader instead of the gpu
+//   --cpu-throttle 4  devtools cpu slowdown factor
+const swgl = Boolean(opt('swgl', false));
+const cpuThrottle = Number(opt('cpu-throttle', 1));
 
 fs.mkdirSync(outDir, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -82,7 +87,8 @@ const browser = await chromium.launch({
     headless,
     executablePath: findChromium(),
     args: [
-        '--use-angle=metal',
+        swgl ? '--use-angle=swiftshader' : '--use-angle=metal',
+        ...(swgl ? ['--enable-unsafe-swiftshader'] : []),
         '--ignore-gpu-blocklist',
         '--enable-gpu-rasterization',
         '--autoplay-policy=no-user-gesture-required',
@@ -102,6 +108,10 @@ const context = await browser.newContext({
         : undefined,
 });
 page = await context.newPage();
+if (cpuThrottle > 1) {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
+}
 
 const consoleMessages = [];
 page.on('console', (msg) => {
@@ -217,6 +227,18 @@ if (!mobile) {
 await sleep(1200);
 await shot('01-start.png');
 
+if (opt('profile', false))
+    await page.evaluate(() => (window.__profileFns = true));
+// --eval 'js': run in the page once race mode is up (a, rm in scope), for a/b tests
+const evalCode = opt('eval', '');
+if (evalCode) {
+    await page.evaluate((code) => {
+        const a = window.Application;
+        const rm = a.world.raceManager;
+        new Function('a', 'rm', code)(a, rm);
+    }, evalCode);
+}
+
 // autopilot state from the page: heading error to a lookahead point and a
 // target speed from the curvature ahead
 await page.evaluate(() => {
@@ -232,13 +254,79 @@ await page.evaluate(() => {
     window.__samples = samples;
     window.__sampling = false;
     let last = performance.now();
+    // context for slow frames: new shader programs, resolution, js time
+    window.__hitches = [];
+    let programs = 0;
     const loop = (now) => {
-        if (window.__sampling) frames.push(now - last);
+        const ms = now - last;
+        if (window.__sampling) {
+            frames.push(ms);
+            const r = window.Application.renderer;
+            const count = r.instance.info.programs?.length || 0;
+            if (ms > 33.4 && window.__hitches.length < 40) {
+                window.__hitches.push({
+                    at: Math.round(now),
+                    ms: Math.round(ms),
+                    newPrograms: count - programs,
+                    ratio: r.instance.getPixelRatio(),
+                    jsMs: +(
+                        window.__jsMs[window.__jsMs.length - 1] || 0
+                    ).toFixed(1),
+                    kph: Math.round(
+                        window.Application.world.raceManager.vehicle.getTelemetry()
+                            .speedKph
+                    ),
+                });
+            }
+            programs = count;
+        }
         last = now;
         requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
     const app = window.Application;
+    // --profile: time the main per frame calls
+    window.__fnTimes = {};
+    if (window.__profileFns) {
+        const targets = {
+            vehicle: rm.vehicle,
+            camera: rm.chaseCamera,
+            visuals: rm.visuals,
+            forest: rm.visuals?.forest,
+            renderer: app.renderer,
+            track: rm.track,
+            smoke: rm.vehicle.smoke,
+        };
+        const wrap = (label, obj, fn) => {
+            if (!obj || typeof obj[fn] !== 'function') return;
+            const orig = obj[fn].bind(obj);
+            const stats = (window.__fnTimes[`${label}.${fn}`] = {
+                n: 0,
+                total: 0,
+                max: 0,
+            });
+            obj[fn] = (...args) => {
+                const s = performance.now();
+                const out = orig(...args);
+                const d = performance.now() - s;
+                if (window.__sampling) {
+                    stats.n++;
+                    stats.total += d;
+                    stats.max = Math.max(stats.max, d);
+                }
+                return out;
+            };
+        };
+        wrap('vehicle', targets.vehicle, 'update');
+        wrap('camera', targets.camera, 'update');
+        wrap('visuals', targets.visuals, 'update');
+        wrap('forest', targets.forest, 'update');
+        wrap('renderer', targets.renderer, 'update');
+        wrap('track', targets.track, 'update');
+        wrap('smoke', targets.smoke, 'update');
+        wrap('rm', rm, 'dispatchHud');
+        wrap('rm', rm, 'updateRemoteVehicles');
+    }
     const origUpdate = app.update.bind(app);
     window.__jsMs = [];
     app.update = () => {
@@ -441,6 +529,17 @@ const perf = await page.evaluate(() => {
         frameMsP99: +pct(0.99).toFixed(2),
         frameMsMax: +sorted[sorted.length - 1].toFixed(1),
         hitches33: f.filter((x) => x > 33.4).length,
+        preset: window.Application.world.raceManager.visuals?.preset ?? null,
+        hitchLog: window.__hitches,
+        fnTimes: Object.fromEntries(
+            Object.entries(window.__fnTimes).map(([k, v]) => [
+                k,
+                {
+                    meanMs: +(v.total / Math.max(1, v.n)).toFixed(2),
+                    maxMs: +v.max.toFixed(1),
+                },
+            ])
+        ),
         jsMsP50: +jpct(0.5).toFixed(2),
         jsMsP95: +jpct(0.95).toFixed(2),
         pixelRatioMin: Math.min(...s.map((x) => x.ratio)),

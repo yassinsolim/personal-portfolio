@@ -42,6 +42,10 @@ export default class Renderer {
     contextLost: boolean;
     contextLostOverlay: HTMLDivElement | null;
     debugEnabled: boolean;
+    sceneRender: ((deltaSeconds: number) => void) | null;
+    sceneResize: (() => void) | null;
+    // the race preset caps auto resolution, quality mode ignores it
+    sceneMaxPixelRatio: number;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -67,6 +71,9 @@ export default class Renderer {
         this.raceActive = false;
         this.contextLost = false;
         this.contextLostOverlay = null;
+        this.sceneRender = null;
+        this.sceneResize = null;
+        this.sceneMaxPixelRatio = Infinity;
         this.debugEnabled = new URLSearchParams(window.location.search).has(
             'debugGame'
         );
@@ -86,6 +93,10 @@ export default class Renderer {
         this.instance.setSize(this.sizes.width, this.sizes.height);
         this.instance.setPixelRatio(this.getPixelRatio());
         this.instance.setClearColor(0x000000, 0.0);
+        // only race mode has shadow casting lights. on from the start so
+        // entering a race doesn't flip it and recompile every material
+        this.instance.shadowMap.enabled = true;
+        this.instance.shadowMap.type = THREE.PCFShadowMap;
 
         // Style
         this.instance.domElement.style.position = 'absolute';
@@ -190,6 +201,7 @@ export default class Renderer {
         const ratio = this.getPixelRatio();
         this.instance.setPixelRatio(ratio);
         this.overlayInstance.setPixelRatio(ratio);
+        this.sceneResize?.();
         this.applyEffects();
         UIEventBus.dispatch('render:resolution', {
             mode: this.renderMode,
@@ -202,10 +214,35 @@ export default class Renderer {
             this.renderMode === 'performance' ||
             (this.renderMode === 'auto' &&
                 this.adaptive.ratio < EFFECTS_MIN_PIXEL_RATIO - 1e-6);
-        this.overlayInstance.domElement.style.display = low ? 'none' : '';
+        // race mode grades its own image, the room grain would double up
+        this.overlayInstance.domElement.style.display =
+            low || this.sceneRender ? 'none' : '';
         if (low === this.effectsLow) return;
         this.effectsLow = low;
         UIEventBus.dispatch('render:effects', { low });
+    }
+
+    // race mode draws the scene through its own post chain
+    setSceneRenderer(
+        render: ((deltaSeconds: number) => void) | null,
+        resize: (() => void) | null,
+        maxPixelRatio = Infinity
+    ) {
+        this.sceneRender = render;
+        this.sceneResize = resize;
+        this.sceneMaxPixelRatio = maxPixelRatio;
+        this.adaptive.setBounds(MIN_PIXEL_RATIO, this.getMaxPixelRatio());
+        // back in the room, start from full resolution again like on load
+        if (!render) this.adaptive.ratio = this.adaptive.max;
+        this.adaptive.reset();
+        this.applyPixelRatio();
+    }
+
+    setSceneMaxPixelRatio(maxPixelRatio: number) {
+        if (maxPixelRatio === this.sceneMaxPixelRatio) return;
+        this.sceneMaxPixelRatio = maxPixelRatio;
+        this.adaptive.setBounds(MIN_PIXEL_RATIO, this.getMaxPixelRatio());
+        this.applyPixelRatio();
     }
 
     setupContextLossHandlers(canvas: HTMLCanvasElement) {
@@ -256,8 +293,14 @@ export default class Renderer {
         }
     }
 
+    getMaxPixelRatio() {
+        return this.sceneRender
+            ? Math.min(this.sizes.pixelRatio, this.sceneMaxPixelRatio)
+            : this.sizes.pixelRatio;
+    }
+
     resize() {
-        this.adaptive.setBounds(MIN_PIXEL_RATIO, this.sizes.pixelRatio);
+        this.adaptive.setBounds(MIN_PIXEL_RATIO, this.getMaxPixelRatio());
         this.adaptive.reset();
         this.instance.setSize(this.sizes.width, this.sizes.height);
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
@@ -273,9 +316,16 @@ export default class Renderer {
             this.uniforms.u_time.value = Math.sin(this.time.current * 0.01);
         }
 
-        this.instance.render(this.scene, this.camera.instance);
-        this.cssInstance.render(this.cssScene, this.camera.instance);
-        if (!this.effectsLow) {
+        if (this.sceneRender) {
+            this.sceneRender(this.time.delta / 1000);
+        } else {
+            this.instance.render(this.scene, this.camera.instance);
+        }
+        // the monitor's css layer is fully covered while racing
+        if (!this.sceneRender) {
+            this.cssInstance.render(this.cssScene, this.camera.instance);
+        }
+        if (!this.effectsLow && !this.sceneRender) {
             this.overlayInstance.render(
                 this.overlayScene,
                 this.camera.instance

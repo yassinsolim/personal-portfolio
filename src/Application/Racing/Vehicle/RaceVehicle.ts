@@ -4,6 +4,7 @@ import Resources from '../../Utils/Resources';
 import UIEventBus from '../../UI/EventBus';
 import { applyBmwM5GlassTint } from '../../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../../Utils/CarFinish';
+import { addContactShadow } from '../../World/CarContactShadow';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -55,6 +56,9 @@ const SURFACE_DRAG: Record<TrackSurface, number> = {
 };
 const BARRIER_RESTITUTION = 0.22;
 const BARRIER_FRICTION = 0.35;
+// cars reflect the sky a bit under full strength, the probe has no occluders
+// so at 1 the lower body glows
+const RACE_ENV_INTENSITY = 0.7;
 const WHEEL_VISUAL_STEER_LIMIT = THREE.MathUtils.degToRad(38);
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
@@ -299,6 +303,7 @@ export default class RaceVehicle {
     startResets: number;
     // test benches drive on a flat pad away from the track and turn this off
     trackBound: boolean;
+    wheelContactPoints: THREE.Vector3[];
     bodyRadius: number;
     bodySize: THREE.Vector3;
     position: THREE.Vector3;
@@ -412,6 +417,7 @@ export default class RaceVehicle {
         this.barrierPoint = new THREE.Vector3();
         this.startResets = 0;
         this.trackBound = true;
+        this.wheelContactPoints = [0, 1, 2, 3].map(() => new THREE.Vector3());
         this.physics = new VehiclePhysics(
             buildPhysicsSpec(
                 carOptionsById[this.currentCarId] ||
@@ -721,6 +727,15 @@ export default class RaceVehicle {
             Math.sqrt(
                 shiftedSize.x * shiftedSize.x + shiftedSize.z * shiftedSize.z
             ) * 0.42
+        );
+
+        // soft darkening right under the car, the sun shadow alone reads as
+        // floating at the contact patches
+        addContactShadow(
+            this.application.renderer.instance,
+            model,
+            -rideHeight + (option?.race.groundOffsetMeters || 0),
+            0.025
         );
 
         model.userData.raceWheelRig = wheelRig;
@@ -3035,26 +3050,38 @@ export default class RaceVehicle {
     }
 
     applyMaterialTweaks(model: THREE.Object3D, carId: string) {
-        const envMap =
-            this.resources.items.cubeTexture.environmentMapTexture || undefined;
         model.traverse((child) => {
             if (!(child instanceof THREE.Mesh)) return;
-            child.castShadow = false;
+            // the sun is low, so the car throws a long shadow down the road
+            child.castShadow = true;
             child.receiveShadow = true;
 
             if (!child.material || Array.isArray(child.material)) return;
             const material = child.material as THREE.MeshStandardMaterial;
             this.applyTextureQuality(material);
-            if (envMap) {
-                material.envMap = envMap;
-                material.envMapIntensity = 0.9;
-            }
+            // no own env map: race mode lights and reflects the cars with the
+            // sky (scene.environment) instead of the room
+            material.envMap = null;
+            material.envMapIntensity = 1;
             material.needsUpdate = true;
         });
         if (carId !== MERCEDES_GT63S_EDITION_ONE_ID) {
             this.applyRaceMaterialStyling(model, carId);
         }
         applyCarFinish(model, carOptionsById[carId]);
+        // a mirror sharp clearcoat turns the sun into a white blowout across
+        // the roof. a slightly softer coat still reads as fresh paint
+        model.traverse((child) => {
+            if (!(child instanceof THREE.Mesh) || Array.isArray(child.material)) return;
+            const material = child.material;
+            if (material instanceof THREE.MeshPhysicalMaterial && material.clearcoat > 0) {
+                material.clearcoatRoughness = Math.max(material.clearcoatRoughness, 0.14);
+                material.roughness = Math.max(material.roughness, 0.2);
+            }
+            if (material instanceof THREE.MeshStandardMaterial) {
+                material.envMapIntensity = RACE_ENV_INTENSITY;
+            }
+        });
     }
 
     applyTextureQuality(material: THREE.MeshStandardMaterial) {
@@ -4865,6 +4892,19 @@ export default class RaceVehicle {
                     this.smoke.emit(position, front * 0.7, speed);
                 });
             }
+            // dust off the grass
+            if (speed > 6 && this.wheelSurfaces.some((kind) => kind === 'grass')) {
+                const points = this.getWheelContactPoints();
+                this.wheelSurfaces.forEach((kind, index) => {
+                    if (kind !== 'grass') return;
+                    this.smoke.emit(
+                        points[index],
+                        Math.min(1, 0.3 + speed / 40),
+                        speed,
+                        'dust'
+                    );
+                });
+            }
             this.smokeSpawnCooldown = SMOKE_SPAWN_INTERVAL;
         }
 
@@ -4921,6 +4961,29 @@ export default class RaceVehicle {
                 .addScaledVector(side, -1)
                 .addScaledVector(up, 0.08),
         ];
+    }
+
+    // tire contact points on the road, fl fr rl rr, from the physics geometry
+    getWheelContactPoints() {
+        const spec = this.physics.spec;
+        const a = spec.wheelbase * (1 - spec.weightFront);
+        const b = spec.wheelbase * spec.weightFront;
+        const q = this.carPivot.quaternion;
+        const forward = this.tmpVectorE.set(0, 0, 1).applyQuaternion(q);
+        const left = this.tmpVectorF.set(1, 0, 0).applyQuaternion(q);
+        const up = this.tmpVectorG.set(0, 1, 0).applyQuaternion(q);
+        const points = this.wheelContactPoints;
+        for (let i = 0; i < 4; i++) {
+            const x = i < 2 ? a : -b;
+            const track = i < 2 ? spec.trackFront : spec.trackRear;
+            const y = (i % 2 === 0 ? 0.5 : -0.5) * track;
+            points[i]
+                .copy(this.position)
+                .addScaledVector(forward, x)
+                .addScaledVector(left, y)
+                .addScaledVector(up, -this.rideHeight);
+        }
+        return points;
     }
 
     getDriftIntensity() {

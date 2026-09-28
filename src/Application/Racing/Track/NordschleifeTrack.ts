@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
-import { randomRange } from '../../Utils/Random';
-import { legacyColor } from '../../Utils/LegacyColor';
+import {
+    createAsphaltTextures,
+    createGrassTexture,
+} from '../Visuals/proceduralTextures';
 
 const COLLIDER_LAYER = 1;
 const DEFAULT_UV_SCALE = 0.0015;
@@ -38,6 +40,7 @@ const FRAME_SEARCH_SPAN = 48;
 const MARKING_LIFT = 0.02;
 const KERB_LIFT = 0.025;
 const VERGE_DROP = 0.012;
+const ASPHALT_REPEAT_METERS = 32;
 
 export type TrackSurface = 'asphalt' | 'kerb' | 'grass' | 'off';
 
@@ -78,7 +81,6 @@ export default class NordschleifeTrack {
     vergeMesh: THREE.Mesh;
     edgeMarkings: THREE.Mesh;
     kerbMesh: THREE.Mesh | null;
-    barrierMesh: THREE.Mesh;
     colliderMesh: THREE.Mesh;
     visualCurve: THREE.CatmullRomCurve3;
     colliderCurve: THREE.CatmullRomCurve3;
@@ -149,20 +151,16 @@ export default class NordschleifeTrack {
             64,
             colliderData.samples ?? DEFAULT_SAMPLES
         );
-        const uvScale = visualData.uvScale ?? DEFAULT_UV_SCALE;
-
-        this.visualMesh = this.createRoadMesh(visualSamples, uvScale);
+        this.visualMesh = this.createRoadMesh(visualSamples);
         this.vergeMesh = this.createVergeMesh(visualSamples);
         this.edgeMarkings = this.createEdgeLineMesh(visualSamples);
         this.kerbMesh = this.createKerbMesh();
-        this.barrierMesh = this.createBarrierMesh(visualSamples);
         this.colliderMesh = this.createColliderMesh(colliderSamples);
 
         this.root.add(this.visualMesh);
         this.root.add(this.vergeMesh);
         this.root.add(this.edgeMarkings);
         if (this.kerbMesh) this.root.add(this.kerbMesh);
-        this.root.add(this.barrierMesh);
         this.root.add(this.colliderMesh);
         parent.add(this.root);
 
@@ -543,19 +541,23 @@ export default class NordschleifeTrack {
         return geometry;
     }
 
-    createRoadMesh(samples: number, uvScale: number) {
+    // the asphalt texture covers the road's width and 32 m of its length
+    createRoadMesh(samples: number) {
         const geometry = this.createRibbonGeometry(
             this.visualCurve,
             samples,
             (t) => [this.getRoadHalfWidth(t), -this.getRoadHalfWidth(t)],
             0,
-            uvScale
+            1 / ASPHALT_REPEAT_METERS
         );
+        const { map, roughnessMap } = createAsphaltTextures();
+        map.anisotropy = this.getTextureAnisotropy();
+        roughnessMap.anisotropy = this.getTextureAnisotropy();
         const material = new THREE.MeshStandardMaterial({
-            color: legacyColor(0x303338),
-            roughness: 0.94,
-            metalness: 0.03,
-            map: this.createAsphaltTexture(),
+            map,
+            roughnessMap,
+            roughness: 1,
+            metalness: 0,
             side: THREE.DoubleSide,
             polygonOffset: true,
             polygonOffsetFactor: 1,
@@ -575,18 +577,22 @@ export default class NordschleifeTrack {
             samples,
             (t) => [this.getVergeHalfWidth(t), this.getRoadHalfWidth(t)],
             -VERGE_DROP,
-            0.05
+            1 / 7
         );
         const right = this.createRibbonGeometry(
             this.visualCurve,
             samples,
             (t) => [-this.getRoadHalfWidth(t), -this.getVergeHalfWidth(t)],
             -VERGE_DROP,
-            0.05
+            1 / 7
         );
         const geometry = this.mergeRibbons([left, right]);
+        const grass = createGrassTexture();
+        // the verge strip is 3.5 m wide, keep the grass detail about 7 m
+        grass.repeat.set(VERGE_WIDTH / 7, 1);
         const material = new THREE.MeshStandardMaterial({
-            color: 0x4f6b35,
+            color: 0x86a45a,
+            map: grass,
             roughness: 1,
             metalness: 0,
             side: THREE.DoubleSide,
@@ -712,61 +718,6 @@ export default class NordschleifeTrack {
         return texture;
     }
 
-    // a plain metal band where the barrier stands. the collision is in the
-    // vehicle code, this is what you see
-    createBarrierMesh(samples: number) {
-        const parts: THREE.BufferGeometry[] = [];
-        [1, -1].forEach((sign) => {
-            const point = new THREE.Vector3();
-            const tangent = new THREE.Vector3();
-            const normal = new THREE.Vector3();
-            const side = new THREE.Vector3(1, 0, 0);
-            const previousSide = new THREE.Vector3(1, 0, 0);
-            const vertices: number[] = [];
-            const indices: number[] = [];
-            for (let i = 0; i <= samples; i++) {
-                const t = i / samples;
-                this.getRibbonFrame(
-                    this.visualCurve,
-                    t,
-                    point,
-                    tangent,
-                    normal,
-                    side,
-                    previousSide
-                );
-                const offset =
-                    sign * (this.getVergeHalfWidth(t) - BARRIER_INSET);
-                const base = point.clone().addScaledVector(side, offset);
-                const low = base.clone().addScaledVector(normal, 0.42);
-                const high = base.clone().addScaledVector(normal, 0.78);
-                vertices.push(low.x, low.y, low.z, high.x, high.y, high.z);
-            }
-            for (let i = 0; i < samples; i++) {
-                const i0 = i * 2;
-                indices.push(i0, i0 + 2, i0 + 1, i0 + 1, i0 + 2, i0 + 3);
-            }
-            const geometry = new THREE.BufferGeometry();
-            geometry.setIndex(indices);
-            geometry.setAttribute(
-                'position',
-                new THREE.Float32BufferAttribute(vertices, 3)
-            );
-            geometry.computeVertexNormals();
-            parts.push(geometry);
-        });
-        const material = new THREE.MeshStandardMaterial({
-            color: 0x9aa0a6,
-            roughness: 0.45,
-            metalness: 0.7,
-            side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(this.mergeRibbons(parts), material);
-        mesh.name = 'nordschleife-barriers';
-        mesh.frustumCulled = false;
-        return mesh;
-    }
-
     mergeRibbons(parts: THREE.BufferGeometry[]) {
         const positions: number[] = [];
         const normals: number[] = [];
@@ -808,53 +759,6 @@ export default class NordschleifeTrack {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         return geometry;
-    }
-
-    createAsphaltTexture() {
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const context = canvas.getContext('2d');
-        if (!context) {
-            return new THREE.Texture();
-        }
-
-        context.fillStyle = '#2b2f34';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-
-        for (let i = 0; i < 5400; i++) {
-            const x = randomRange(0, canvas.width);
-            const y = randomRange(0, canvas.height);
-            const intensity = randomRange(28, 72);
-            context.fillStyle = `rgb(${intensity},${intensity},${intensity})`;
-            context.fillRect(x, y, 1, 1);
-        }
-
-        context.globalAlpha = 0.14;
-        context.strokeStyle = '#17191d';
-        context.lineWidth = 1;
-        for (let i = 0; i < 18; i++) {
-            context.beginPath();
-            context.moveTo(
-                randomRange(0, canvas.width),
-                randomRange(0, canvas.height)
-            );
-            context.lineTo(
-                randomRange(0, canvas.width),
-                randomRange(0, canvas.height)
-            );
-            context.stroke();
-        }
-        context.globalAlpha = 1;
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.wrapS = THREE.RepeatWrapping;
-        texture.wrapT = THREE.RepeatWrapping;
-        // the old 36 m road had this repeat, keep the grain the same size
-        texture.repeat.set(95 * (ROAD_WIDTH / 36), 95);
-        texture.anisotropy = this.getTextureAnisotropy();
-        texture.needsUpdate = true;
-        return texture;
     }
 
     createColliderMesh(samples: number) {
