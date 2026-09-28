@@ -562,6 +562,40 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The original site's SwiftShader numbers are misleading: in most runs the car never appeared
   (5 to 30 draws, 18k to 40k triangles), so its fps is for a nearly empty road.
 
+## Terrain vs Road Notes (2026-09-28)
+- The road always wins. `Visuals/RoadClearance.ts` samples the banked asphalt and verges at every
+  ribbon station and halfway between (0.75 m across, out to 5 cm inside the verge edge) and
+  lowers terrain vertices until every sample is 1.4 m (`CARVE_DEPTH`) over the surface under it.
+  Heights only go down, so one pass settles all samples. Each grid vertex has a mobility (free
+  under the road and skirt, 5% where it's in view), so the drop lands on hidden vertices, and
+  normals are taken before the carve, so it never changes shading.
+- What it fixed: the grid was pinned 1.4 m under the nearest centerline sample, which ignores the
+  Karussell's 14 degree bank (0.46 m through the inside verge), and a 56 m weak gpu cell reaches
+  past the 24 m push under the road (up to 2.65 m over the verge at Kesselchen, Senkenlinks,
+  Brunnchen). The skirt from the Karussell's way in reached over its way out (they're 28 m apart),
+  1.4 m over the verge. The skirt's inner edge was on 5 m rings against the verge's 2 m, so on
+  tight corners it slid inside the barrier line at the verge's height.
+- The skirt's inner edge now uses every ribbon station (it is the verge's outer edge exactly), its
+  outer columns every third station, stitched. Its far end tucks under the grid as drawn, so it
+  never ends in a ledge (18% of ring ends did on high, 49% on low). Where another stretch of the lap
+  is within 70 m (`TrackField.distanceToOther`), the skirt is carved under that road too.
+- Trees stand on `RaceTerrain.groundAt` (the top of the drawn grid or skirt), not `heightAt`.
+- The asphalt and verges pull toward the camera by 2 depth units, no slope factor. The old
+  `polygonOffset(1, 2)` pushed the road back by a pixel's depth, so past about 1 km (closer at low
+  resolution) the ground 1.4 m under it won and the far road broke up. Kerbs, lines and decals
+  are pulled further, so they still draw on top.
+- `npm test` builds the real track and every `TERRAIN_QUALITIES` terrain in node
+  (`scripts/test/`, a loader runs the TypeScript with a stand-in `Application`) and fails if any
+  mesh under `terrain.root` comes within 1 m of the road at any meter of the lap (0.5 m across,
+  out to the barrier line), or if a tree floats over the drawn ground. Each direct child of the
+  root is one level in the report, hidden ones too, so new lod levels go there, through
+  `clearance.carveGrid` or `carveTriangles` before their normals and bounds.
+  `node scripts/test/terrain-road-report.mjs` prints the worst spots per level.
+- `node scripts/race-terrain-shots.mjs --url ... --spots spots.json` teleports along the lap
+  (`window.__raceTeleport(distance, x, z, back)`) and takes chase cam shots, `--tier low` for the
+  weak path, `--magenta` paints the terrain flat magenta, `--transition` captures the car click
+  reveal. The reveal cuts every material by the same distance, so it can't put ground over road.
+
 ## Race Audio (2026-09-27)
 - Runtime lives in `src/Application/Racing/Audio/`. `CarAudio.ts` is the entry point with a small
   surface: `setCar`, `update({ rpm, throttle, speedKph, gear, slip, boost })`, `impact`,
