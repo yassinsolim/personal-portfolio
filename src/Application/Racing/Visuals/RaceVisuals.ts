@@ -16,6 +16,7 @@ import {
 import RaceTerrain from './RaceTerrain';
 import RaceForest from './RaceForest';
 import RaceTrackside from './RaceTrackside';
+import RaceTracksideExtras from './RaceTracksideExtras';
 import Sparks from '../Effects/Sparks';
 import SkidMarks from '../Effects/SkidMarks';
 import { useCheapMaterials } from './cheapMaterials';
@@ -47,6 +48,7 @@ export default class RaceVisuals {
     terrain: RaceTerrain;
     forest: RaceForest;
     trackside: RaceTrackside;
+    extras: RaceTracksideExtras;
     sparks: Sparks;
     skids: SkidMarks;
     post: RacePostProcessing | null;
@@ -99,6 +101,7 @@ export default class RaceVisuals {
             lite ? 'low' : 'high'
         );
         this.trackside = new RaceTrackside(this.root, track, lite);
+        this.extras = new RaceTracksideExtras(this.root, track, this.terrain, lite);
         this.sparks = new Sparks(this.root);
         this.skids = new SkidMarks(this.root);
         this.post = null;
@@ -120,12 +123,14 @@ export default class RaceVisuals {
             vehicle.useCheapMaterials();
             useCheapMaterials(track.root);
             useCheapMaterials(this.trackside.root);
+            useCheapMaterials(this.extras.root);
         }
         applyRevealTo(track.root, this.reveal);
         applyRevealTo(this.terrain.root, this.reveal);
         applyReveal(this.forest.nearMaterial, this.reveal, 'instanced');
         applyReveal(this.forest.impostorMaterial, this.reveal, 'billboard');
         applyRevealTo(this.trackside.root, this.reveal);
+        applyRevealTo(this.extras.root, this.reveal);
         UIEventBus.on('race:transitionReveal', () => {
             this.revealPending = true;
         });
@@ -298,6 +303,7 @@ export default class RaceVisuals {
         const vehicle = this.vehicle;
         this.updateReveal(deltaSeconds);
         this.atmosphere.follow(vehicle.position);
+        this.extras.update(this.application.camera.instance.position);
         this.forest.update(
             this.application.camera.instance,
             vehicle.position,

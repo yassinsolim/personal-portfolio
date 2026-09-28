@@ -391,6 +391,68 @@ def report_profile(y, y_cop, roll, names, dist, spacing):
             print('  %-22s %+.2f m at %.0f m   (copernicus %+.2f m)' % (name, rise[i], dist[i], rise_cop[j]))
 
 
+# catch fences near the lap (spectator areas at brünnchen, pflanzgarten and
+# the like) and the landmarks on the skyline, from osm
+FENCE_REACH = 18.0
+LANDMARKS = {
+    'Nürburg (Ruine)': 'castle',
+    'Kaiser-Wilhelm-Turm': 'tower',
+}
+
+
+def trackside_osm(cache, X, Z, project, bbox):
+    s, w, n, e = bbox
+    barriers = overpass(cache, 'ts-barriers.json', f'[out:json][timeout:120];way["barrier"~"guard_rail|fence|wall|retaining_wall|jersey_barrier"]({s},{w},{n},{e});out body;>;out skel qt;')
+    marks = overpass(cache, 'ts-landmarks.json', f'[out:json][timeout:60];(node["man_made"="tower"]({s},{w},{n},{e});way["man_made"="tower"]({s},{w},{n},{e});way["historic"="castle"]({s},{w},{n},{e});node["historic"="castle"]({s},{w},{n},{e});node["natural"="peak"]({s},{w},{n},{e});way["leisure"="grandstand"]({s},{w},{n},{e}););out body;>;out skel qt;')
+    lap = np.stack([X, Z], 1)
+    fences = []
+    for data in (barriers,):
+        nodes = {el['id']: project((el['lat'], el['lon'])) for el in data['elements'] if el['type'] == 'node'}
+        for el in data['elements']:
+            tags = el.get('tags', {})
+            if el['type'] != 'way' or tags.get('barrier') != 'fence':
+                continue
+            pts = np.array([nodes[nid] for nid in el['nodes'] if nid in nodes])
+            if len(pts) < 2:
+                continue
+            # keep the runs within reach of the lap, resampled every 6 m
+            seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+            cum = np.concatenate([[0], np.cumsum(seg)])
+            d = np.arange(0, cum[-1] + 0.01, 6.0)
+            px = np.interp(d, cum, pts[:, 0])
+            pz = np.interp(d, cum, pts[:, 1])
+            near = np.array([np.min((lap[:, 0] - x) ** 2 + (lap[:, 1] - z) ** 2) for x, z in zip(px, pz)]) < FENCE_REACH ** 2
+            run = []
+            for keep, x, z in zip(near, px, pz):
+                if keep:
+                    run.append([round(float(x), 2), round(float(z), 2)])
+                elif len(run) >= 3:
+                    fences.append(run)
+                    run = []
+                else:
+                    run = []
+            if len(run) >= 3:
+                fences.append(run)
+    landmarks = []
+    nodes = {el['id']: project((el['lat'], el['lon'])) for el in marks['elements'] if el['type'] == 'node'}
+    for el in marks['elements']:
+        tags = el.get('tags', {})
+        kind = LANDMARKS.get(tags.get('name'))
+        if not kind or el['type'] != 'way':
+            continue
+        pts = np.array([nodes[nid] for nid in el['nodes'] if nid in nodes])
+        cx, cz = pts.mean(axis=0)
+        landmarks.append({
+            'name': tags['name'],
+            'kind': kind,
+            'x': round(float(cx), 1),
+            'z': round(float(cz), 1),
+            'height': float(tags.get('height', 0) or 0),
+            'outline': [[round(float(x - cx), 1), round(float(z - cz), 1)] for x, z in pts],
+        })
+    return fences, landmarks
+
+
 def lap_spans(bridges, X, Z, dist, length, project):
     # where the lap itself is a bridge: raceway ways tagged bridge that lie on
     # the centerline (not the pit lane beside it)
@@ -576,6 +638,7 @@ def main():
         **({} if roll is None else {'rollDeg': [round(float(r), 1) for r in roll]}),
         'concrete': concrete,
         'bridges': merged,
+        **dict(zip(('fences', 'landmarks'), trackside_osm(args.cache, X, Z, project, BBOX))),
         'terrain': {
             'x': round(float(x_min), 2), 'z': round(float(z_min), 2), 'cell': TERRAIN_CELL,
             'cols': cols, 'rows': rows,
