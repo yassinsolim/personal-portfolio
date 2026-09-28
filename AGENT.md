@@ -116,6 +116,19 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   load 127.0.0.1, so serve on the LAN IP, and only trust fps from headed runs on the real GPU.
 - `docs/racing-audit.md` has the September 2026 audit, the reference site notes and the redo plan.
 
+## Multiplayer Notes (2026-09-28)
+- Telemetry now carries ground velocity, yaw rate and a ghost flag. Remote cars are predicted
+  along their velocity (not the nose) and are boxes for contact (`Multiplayer/CarCollisions.ts`).
+- Contact: both clients push their own car out by its mass share of the overlap. Only the lower
+  session id of the pair applies the impulse; it sends the equal and opposite half as a `bump`
+  broadcast, which the other client applies to its car. There's a 180 ms cooldown per pair
+  because the other car's velocity is stale until its next telemetry. Freshly reset cars are
+  ghosts for 3 s, and until they're clear of everyone.
+- Lobby players get grid slots at the start (two abreast, 9 m rows). `?lobby=CODE` invite links
+  join that lobby from Play or the car click, and the lobby banner copies the link.
+- `.tmp-validation/mptest.mjs`-style testing: two browsers in one lobby, one parked on Döttinger
+  Höhe, the other rolled into it. Expect shared momentum, not one car stopping dead.
+
 ## Transition Notes (2026-09-28)
 - `World/RaceTransition.ts` (main bundle): click the room car (hover shows a pointer and starts
   building the race world, which blocks the main thread for most of a second). The car rocks,

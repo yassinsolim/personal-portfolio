@@ -25,7 +25,22 @@ export type MultiplayerPlayerState = {
     driftIntensity: number;
     position: MultiplayerPosition | null;
     quaternion: MultiplayerQuaternion | null;
+    // ground plane velocity (x, z) m/s and yaw rate rad/s, for prediction and
+    // car to car contact
+    velocity: [number, number] | null;
+    yawRate: number;
+    // can't be hit right now (just reset or spawned)
+    ghost: boolean;
     lastSeenAt: string;
+};
+
+export type MultiplayerBump = {
+    target: string;
+    from?: string;
+    ix: number;
+    iz: number;
+    px: number;
+    pz: number;
 };
 
 export type MultiplayerLapState = {
@@ -69,6 +84,9 @@ type MultiplayerTelemetryPayload = {
     quaternion: MultiplayerQuaternion;
     gear: number;
     drift_intensity: number;
+    velocity?: [number, number];
+    yaw_rate?: number;
+    ghost?: boolean;
     sent_at: string;
 };
 
@@ -129,6 +147,7 @@ export default class MultiplayerService {
     players: Map<string, MultiplayerPlayerState>;
     laps: MultiplayerLapState[];
     listeners: Set<(state: MultiplayerState) => void>;
+    bumpListeners: Set<(bump: MultiplayerBump) => void>;
     lastTelemetrySentAt: number;
     lastTelemetryStateEmitAt: number;
     lastTelemetrySignature: string;
@@ -156,6 +175,7 @@ export default class MultiplayerService {
         this.players = new Map();
         this.laps = [];
         this.listeners = new Set();
+        this.bumpListeners = new Set();
         this.lastTelemetrySentAt = -Infinity;
         this.lastTelemetryStateEmitAt = -Infinity;
         this.lastTelemetrySignature = '';
@@ -387,6 +407,9 @@ export default class MultiplayerService {
         quaternion: { x: number; y: number; z: number; w: number };
         gear: number;
         driftIntensity: number;
+        velocity?: { x: number; z: number };
+        yawRate?: number;
+        ghost?: boolean;
     }) {
         if (!this.connected || !this.channel) return;
 
@@ -442,6 +465,12 @@ export default class MultiplayerService {
                 this.clampNumber(payload.driftIntensity, 0, 1),
                 3
             ),
+            velocity: [
+                this.roundTo(this.clampNumber(payload.velocity?.x ?? 0, -150, 150), 2),
+                this.roundTo(this.clampNumber(payload.velocity?.z ?? 0, -150, 150), 2),
+            ],
+            yaw_rate: this.roundTo(this.clampNumber(payload.yawRate ?? 0, -12, 12), 3),
+            ghost: Boolean(payload.ghost),
             sent_at: new Date(now).toISOString(),
         };
         const signature = JSON.stringify({
@@ -452,6 +481,8 @@ export default class MultiplayerService {
             quaternion: safePayload.quaternion,
             gear: safePayload.gear,
             drift_intensity: safePayload.drift_intensity,
+            velocity: safePayload.velocity,
+            ghost: safePayload.ghost,
         });
         const heartbeatDue =
             now - this.lastTelemetryHeartbeatAt >= TELEMETRY_HEARTBEAT_INTERVAL_MS;
@@ -555,6 +586,44 @@ export default class MultiplayerService {
         channel.on('broadcast', { event: 'lap_submitted' }, ({ payload }) => {
             this.handleRemoteLap(payload);
         });
+
+        channel.on('broadcast', { event: 'bump' }, ({ payload }) => {
+            this.handleRemoteBump(payload);
+        });
+    }
+
+    // car to car contact: the client that resolved it sends the other car its
+    // half of the impulse (world x/z, N s) and where it landed
+    onBump(listener: (bump: MultiplayerBump) => void) {
+        this.bumpListeners.add(listener);
+        return () => this.bumpListeners.delete(listener);
+    }
+
+    sendBump(bump: MultiplayerBump) {
+        if (!this.connected || !this.channel) return;
+        this.channel.send({
+            type: 'broadcast',
+            event: 'bump',
+            payload: {
+                ...bump,
+                from: this.localSessionId,
+            },
+        });
+    }
+
+    handleRemoteBump(payload: unknown) {
+        if (!payload || typeof payload !== 'object') return;
+        const parsed = payload as Partial<MultiplayerBump> & { from?: string };
+        if (this.sanitizeSessionId(parsed.target || '') !== this.localSessionId) return;
+        const bump: MultiplayerBump = {
+            target: this.localSessionId,
+            from: this.sanitizeSessionId(parsed.from || ''),
+            ix: this.clampNumber(parsed.ix, -60000, 60000),
+            iz: this.clampNumber(parsed.iz, -60000, 60000),
+            px: this.clampNumber(parsed.px, -500000, 500000),
+            pz: this.clampNumber(parsed.pz, -500000, 500000),
+        };
+        this.bumpListeners.forEach((listener) => listener(bump));
     }
 
     subscribeChannel(channel: RealtimeChannel, timeoutMs: number) {
@@ -822,6 +891,9 @@ export default class MultiplayerService {
                     driftIntensity: 0,
                     position: null,
                     quaternion: null,
+                    velocity: null,
+                    yawRate: 0,
+                    ghost: false,
                     lastSeenAt: nowIso,
                 });
             });
@@ -869,6 +941,9 @@ export default class MultiplayerService {
                 driftIntensity: 0,
                 position: null,
                 quaternion: null,
+                velocity: null,
+                yawRate: 0,
+                ghost: false,
                 lastSeenAt: nowIso,
             });
         }
@@ -895,6 +970,9 @@ export default class MultiplayerService {
             driftIntensity: 0,
             position: null,
             quaternion: null,
+            velocity: null,
+            yawRate: 0,
+            ghost: false,
             lastSeenAt: nowIso,
         };
 
@@ -909,6 +987,14 @@ export default class MultiplayerService {
             parsed.quaternion,
             player.quaternion
         );
+        player.velocity = Array.isArray(parsed.velocity)
+            ? [
+                  this.clampNumber(parsed.velocity[0], -150, 150),
+                  this.clampNumber(parsed.velocity[1], -150, 150),
+              ]
+            : null;
+        player.yawRate = this.clampNumber(parsed.yaw_rate ?? 0, -12, 12);
+        player.ghost = Boolean(parsed.ghost);
         player.lastSeenAt = nowIso;
 
         this.players.set(sessionId, player);
@@ -988,6 +1074,9 @@ export default class MultiplayerService {
             driftIntensity: 0,
             position: null,
             quaternion: null,
+            velocity: null,
+            yawRate: 0,
+            ghost: false,
             lastSeenAt: nowIso,
         });
     }

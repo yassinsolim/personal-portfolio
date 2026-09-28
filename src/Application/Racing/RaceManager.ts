@@ -14,6 +14,8 @@ import MultiplayerService, {
     type MultiplayerPlayerState,
 } from './Multiplayer/MultiplayerService';
 import RaceVisuals from './Visuals/RaceVisuals';
+import CarCollisions, { type RemoteCar } from './Multiplayer/CarCollisions';
+import { carOptionsById } from '../carOptions';
 
 type RaceModeState = {
     active: boolean;
@@ -65,6 +67,8 @@ export default class RaceManager {
     scene: THREE.Scene;
     raceRoot: THREE.Group;
     visuals: RaceVisuals;
+    collisions: CarCollisions;
+    remoteCars: RemoteCar[];
     active: boolean;
     initialized: boolean;
     track: NordschleifeTrack;
@@ -133,6 +137,9 @@ export default class RaceManager {
         this.vehicle = new RaceVehicle(this.raceRoot, this.track);
         this.chaseCamera = new RaceChaseCamera(this.vehicle);
         this.visuals = new RaceVisuals(this.raceRoot, this.track, this.vehicle);
+        this.collisions = new CarCollisions(this.vehicle);
+        this.remoteCars = [];
+
         this.lapTimer = new LapTimer(this.track.getCurve());
         this.localLeaderboard = new LocalLeaderboard();
         this.leaderboardService = new LeaderboardService(this.localLeaderboard);
@@ -153,6 +160,10 @@ export default class RaceManager {
         this.remoteSmoke.root.name = 'race-remote-drift-smoke-root';
         this.remoteSmoke.setActive(false);
         this.multiplayer = new MultiplayerService();
+        this.collisions.sendBump = (bump) => this.multiplayer.sendBump(bump);
+        this.multiplayer.onBump((bump) => {
+            if (this.active) this.collisions.applyBump(bump);
+        });
         this.remoteVehicles = new Map();
         this.remoteSmokeCooldownBySession = new Map();
         this.pendingRemoteCarLoads = new Set();
@@ -360,6 +371,7 @@ export default class RaceManager {
         this.setLobbyObjectsVisible(false);
         this.raceRoot.visible = true;
         this.visuals.enter();
+        this.vehicle.spawnSlot = this.getSpawnSlot();
         this.vehicle.resetToStart();
         this.physicsAccumulator = 0;
         this.lastPhysicsStepTimeMs = 0;
@@ -384,8 +396,23 @@ export default class RaceManager {
 
     // back to the start line with a fresh lap, keeping race mode running
     restartLap() {
+        this.vehicle.spawnSlot = this.getSpawnSlot();
         this.vehicle.resetToStart();
         this.startLapTimer();
+    }
+
+    // lobby players line up by when they joined
+    getSpawnSlot() {
+        const state = this.multiplayer.getState();
+        if (state.mode !== 'lobby') return 0;
+        const order = [...state.players]
+            .sort(
+                (a, b) =>
+                    a.connectedAt.localeCompare(b.connectedAt) ||
+                    a.sessionId.localeCompare(b.sessionId)
+            )
+            .map((player) => player.sessionId);
+        return Math.max(0, order.indexOf(state.localSessionId));
     }
 
     startLapTimer() {
@@ -869,6 +896,30 @@ export default class RaceManager {
         this.remoteSmokeCooldownBySession.set(visual.sessionId, Math.max(0, cooldown));
     }
 
+    // the other player's car as a box for contact, from its smoothed pose
+    remoteCarFrom(visual: RemoteVehicleVisual, player: MultiplayerPlayerState): RemoteCar {
+        const forward = this.tmpRemoteVectorF
+            .set(0, 0, 1)
+            .applyQuaternion(visual.root.quaternion);
+        const model = this.vehicle.getPreparedModel(visual.carId);
+        const size = model?.userData.raceBodySize as number[] | undefined;
+        return {
+            sessionId: player.sessionId,
+            x: visual.root.position.x,
+            y: visual.root.position.y,
+            z: visual.root.position.z,
+            yaw: Math.atan2(forward.x, forward.z),
+            vx: player.velocity ? player.velocity[0] : 0,
+            vz: player.velocity ? player.velocity[1] : 0,
+            yawRate: player.yawRate || 0,
+            halfLength: (size ? size[2] : 4.7) * 0.48,
+            halfWidth: (size ? size[0] : 1.95) * 0.46,
+            massKg: carOptionsById[player.carId]?.race.massKg ?? 1700,
+            ghost: player.ghost,
+            ageMs: Math.max(0, Date.now() - Date.parse(player.lastSeenAt || '')),
+        };
+    }
+
     updateRemoteVehicleVisual(
         visual: RemoteVehicleVisual,
         player: MultiplayerPlayerState,
@@ -901,7 +952,12 @@ export default class RaceManager {
             0,
             0.28
         );
-        if (extrapolationSeconds > 0 && player.speedKph > 1) {
+        if (extrapolationSeconds > 0 && player.velocity) {
+            // predicted along the real velocity, which in a slide isn't
+            // where the nose points
+            visual.targetPosition.x += player.velocity[0] * extrapolationSeconds;
+            visual.targetPosition.z += player.velocity[1] * extrapolationSeconds;
+        } else if (extrapolationSeconds > 0 && player.speedKph > 1) {
             this.tmpRemoteForward
                 .set(0, 0, 1)
                 .applyQuaternion(visual.targetQuaternion)
@@ -945,6 +1001,7 @@ export default class RaceManager {
         }
 
         this.remoteSessionScratch.clear();
+        this.remoteCars.length = 0;
         multiplayerState.players.forEach((player) => {
             if (player.sessionId === multiplayerState.localSessionId) return;
             if (!player.position || !player.quaternion) return;
@@ -953,6 +1010,7 @@ export default class RaceManager {
             const visual = this.ensureRemoteVehicle(player);
             if (!visual) return;
             this.updateRemoteVehicleVisual(visual, player, deltaSeconds);
+            this.remoteCars.push(this.remoteCarFrom(visual, player));
         });
 
         Array.from(this.remoteVehicles.keys()).forEach((sessionId) => {
@@ -993,6 +1051,12 @@ export default class RaceManager {
                 typeof performance !== 'undefined' ? performance.now() : Date.now();
             for (let i = 0; i < physicsSteps; i++) {
                 this.vehicle.update(Math.min(MAX_VEHICLE_SUBSTEP_SECONDS, step));
+                // contact with the other players, every step like the barriers
+                if (this.remoteCars.length) {
+                    this.collisions.localSessionId =
+                        this.multiplayer.getState().localSessionId;
+                    this.collisions.resolve(this.remoteCars);
+                }
             }
             const physicsEnd =
                 typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -1034,6 +1098,9 @@ export default class RaceManager {
                 quaternion: telemetry.quaternion,
                 gear: telemetry.gear,
                 driftIntensity: telemetry.driftIntensity,
+                velocity: { x: this.vehicle.velocity.x, z: this.vehicle.velocity.z },
+                yawRate: this.vehicle.physics.yawRate,
+                ghost: this.collisions.ghost,
             });
 
             if (!lapWasRunning && lapUpdate.lapRunning) {
