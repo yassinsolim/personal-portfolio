@@ -304,6 +304,7 @@ export default class RaceVisuals {
         this.updateReveal(deltaSeconds);
         this.atmosphere.follow(vehicle.position);
         this.extras.update(this.application.camera.instance.position);
+        this.terrain.update(this.application.camera.instance);
         this.forest.update(
             this.application.camera.instance,
             vehicle.position,
