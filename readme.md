@@ -25,7 +25,7 @@ This project is built as a Three.js experience with a scene authored in Blender,
 
 - **Frontend:** Three.js / WebGL experience (React-based stack depending on your setup)
 - **Scene authoring:** Blender → exported to GLB/GLTF
-- **Deployment:** Docker + reverse proxy (Caddy) + CI/CD (GitHub Actions)
+- **Deployment:** Vercel
 
 ## Local Development
 

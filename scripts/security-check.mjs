@@ -1,4 +1,11 @@
-const target = process.argv[2] || 'https://yassin.app';
+// only audit origins we own, and fetch from the constant list so the url never comes straight from argv
+const allowedTargets = ['https://yassin.app', 'http://localhost:8080', 'http://127.0.0.1:8080'];
+const requestedOrigin = new URL(process.argv[2] || allowedTargets[0]).origin;
+const target = allowedTargets.find((origin) => origin === requestedOrigin);
+if (!target) {
+    console.error(`FAIL ${requestedOrigin} is not an allowed target (${allowedTargets.join(', ')})`);
+    process.exit(1);
+}
 const baseUrl = new URL(target);
 
 const requiredHeaders = [
@@ -209,6 +216,5 @@ if (mainScript) {
 }
 
 console.log(`\nSecurity check complete: ${failures} failure(s), ${warnings} warning(s).`);
-if (failures > 0) {
-    process.exit(1);
-}
+// exit explicitly so an idle keep-alive fetch socket can't hold the process open
+process.exit(failures > 0 ? 1 : 0);
