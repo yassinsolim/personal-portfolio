@@ -605,8 +605,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   for testing. `.tmp-validation/mp4.mjs <url> <netsim>` runs four clients through the real flow.
 
 ## Realtime Traffic (2026-09-28)
-- The Supabase org shares a 2M/month Realtime message quota with WebStrafe. Never run
-  multiplayer tests against the live project (axrljzcrlmliscstmctb) or a preview. Use
+- Realtime messages are billed against a free 2M/month quota. Never run multiplayer tests
+  against a live project (the racing project `qdepbyxxzbdknkfgpwyl`, or the old shared
+  `axrljzcrlmliscstmctb` that WebStrafe uses) or a preview. Use
   `?raceDebug=1&mpmock=1` (in browser mock, windows of one browser share lobbies, laps stay local)
   or a local `supabase start`. `scripts/race-mp-traffic.mjs` uses the mock and also aborts any
   request or websocket to supabase.co.

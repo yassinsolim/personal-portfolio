@@ -44,23 +44,31 @@ Set these in Vercel (Production and Preview) and redeploy:
 - `RACING_GHOST_REPLAY_TABLE` (optional, defaults to `nordschleife_ghost_replays`)
 - `RACING_LOBBY_CHANNEL_PREFIX` (optional, defaults to `nordschleife_lobby_v2`)
 
-`RACING_SUPABASE_URL` / `RACING_SUPABASE_ANON_KEY` still work as a fallback, but they point
-at the old shared project; remove them once this project is live.
+The old `RACING_SUPABASE_URL` / `RACING_SUPABASE_ANON_KEY` pointed at the shared project. They
+were removed from Vercel and the build no longer reads them.
 
 `npm run build` runs `scripts/write-racing-config.js` first. If the Supabase URL/key are set, it writes `static/config/racing.config.json`, then Webpack copies that file into `build/config/racing.config.json`.
 
-The CSP `connect-src` in `vercel.json` and `bundler/webpack.dev.js` lists the https and wss
-origins of both projects; drop the old pair together with the old env vars.
+The CSP `connect-src` in `vercel.json` and `bundler/webpack.dev.js` lists this project's https
+and wss origins, and only those.
 
 ## 2) Tables, RLS and grants
 
 Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, and sets up:
 
-- `nordschleife_leaderboard`: public read, public insert through RLS checks (name 1 to 16
-  chars, lap 1 s to 2 h, car id 1 to 64 chars). New laps carry the season tag on `car_id`.
-  A trigger caps inserts at 30 laps per 10 minutes per client ip (a real lap is 7 to 10 minutes).
+- `nordschleife_leaderboard`: public read, public insert through RLS checks: name 1 to 16
+  chars with no control characters, lap 3 minutes to 2 hours (the client's own floor), and a
+  `car_id` that is one of the game's cars plus the season tag and an optional garage tune code
+  (`nordschleife_valid_car_id`; add a car there when `carOptions.ts` gets one).
+- A trigger caps inserts at 30 laps per 10 minutes per client, and 300 per 10 minutes overall
+  as a backstop. The client is the address Supabase's edge sets in `sb-forwarded-for`, else
+  `cf-connecting-ip`, with IPv6 grouped by /64. Not `x-forwarded-for`: Supabase keeps whatever
+  the client sent as its first entry. `sb-forwarded-for` is overwritten with the real address,
+  and Cloudflare refuses a request that sets `cf-connecting-ip` itself (checked on the live
+  project in September 2026).
 - `nordschleife_ghost_replays`: public read, insert and update (the client upserts), but only
-  for a real lap with the same car and lap time, 8 to 5001 samples.
+  for a real lap with the same car and lap time, 8 to 5001 samples, every sample an object and
+  at most 1.5 MB. A ghost can only be replaced in the 15 minutes after it's written.
 - `nordschleife_rate_events`: private, no access for the browser roles.
 - Grants: anon/authenticated get select + insert on laps and select + insert + update on
   ghosts, nothing else (no delete, truncate or update on laps).

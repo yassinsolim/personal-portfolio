@@ -7,18 +7,15 @@ const first = (...values) =>
     values.find((value) => typeof value === 'string' && value.trim());
 
 // NORDSCHLEIFE_SUPABASE_* point at the racing game's own free project (its own
-// realtime quota, separate from webstrafe). RACING_SUPABASE_* are the old shared
-// project and only stay as a fallback until those env vars are removed
+// realtime quota, separate from webstrafe)
 const config = {
     supabaseUrl: first(
         process.env.NORDSCHLEIFE_SUPABASE_URL,
-        process.env.RACING_SUPABASE_URL,
         process.env.SUPABASE_URL,
         process.env.NEXT_PUBLIC_SUPABASE_URL
     ),
     supabaseAnonKey: first(
         process.env.NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY,
-        process.env.RACING_SUPABASE_ANON_KEY,
         process.env.SUPABASE_ANON_KEY,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
     ),
