@@ -958,21 +958,21 @@ export default class RaceManager {
         );
         this.updateRemoteVehicles(delta);
         if (!this.paused) {
-            let physicsSteps = 0;
-            let remainingVehicleDelta = delta;
+            // equal steps. a leftover sliver (a frame just over 1/60 s) used
+            // to run as a microsecond step, and the grounding divides height
+            // changes by the step, which could launch the car into the sky
+            const physicsSteps =
+                delta > 0
+                    ? Math.min(
+                          MAX_PHYSICS_STEPS_PER_FRAME,
+                          Math.ceil(delta / MAX_VEHICLE_SUBSTEP_SECONDS - 1e-6)
+                      )
+                    : 0;
+            const step = physicsSteps ? delta / physicsSteps : 0;
             const physicsStart =
                 typeof performance !== 'undefined' ? performance.now() : Date.now();
-            while (
-                remainingVehicleDelta > 0 &&
-                physicsSteps < MAX_PHYSICS_STEPS_PER_FRAME
-            ) {
-                const step = Math.min(
-                    MAX_VEHICLE_SUBSTEP_SECONDS,
-                    remainingVehicleDelta
-                );
-                this.vehicle.update(step);
-                remainingVehicleDelta -= step;
-                physicsSteps += 1;
+            for (let i = 0; i < physicsSteps; i++) {
+                this.vehicle.update(Math.min(MAX_VEHICLE_SUBSTEP_SECONDS, step));
             }
             const physicsEnd =
                 typeof performance !== 'undefined' ? performance.now() : Date.now();

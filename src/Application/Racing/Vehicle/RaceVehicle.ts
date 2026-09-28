@@ -48,6 +48,7 @@ const MAX_SINGLE_WHEEL_RADIUS = 0.6;
 const CREST_LAUNCH_TOLERANCE = 0.06;
 const MAX_GROUND_FOLLOW_GRADE = 1.2;
 const GROUND_FOLLOW_STEP_ALLOWANCE = 0.25;
+const MAX_GROUND_VERTICAL_SPEED = 25;
 const WHEEL_PROBE_CLEARANCE_BIAS = 0;
 const MAX_WHEEL_ANTI_SINK_LIFT = 0.018;
 const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MIN = 0.7;
@@ -4278,8 +4279,13 @@ export default class RaceVehicle {
             Math.abs(this.speedMps) * deltaSeconds * MAX_GROUND_FOLLOW_GRADE +
             GROUND_FOLLOW_STEP_ALLOWANCE;
         const nextY = Math.min(targetY, startY + maxRise);
+        // the road can't throw the car faster than this, whatever the step
         this.verticalVelocity = wasGrounded
-            ? (nextY - startY) / deltaSeconds
+            ? THREE.MathUtils.clamp(
+                  (nextY - startY) / deltaSeconds,
+                  -MAX_GROUND_VERTICAL_SPEED,
+                  MAX_GROUND_VERTICAL_SPEED
+              )
             : 0;
         this.position.y = nextY;
         this.grounded = true;
