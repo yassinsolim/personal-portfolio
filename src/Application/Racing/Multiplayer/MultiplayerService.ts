@@ -31,7 +31,11 @@ export type MultiplayerPlayerState = {
     yawRate: number;
     // can't be hit right now (just reset or spawned)
     ghost: boolean;
+    // when the last packet arrived, for liveness
     lastSeenAt: string;
+    // local clock time the last pose was taken on the sender, arrival minus
+    // the transit time. prediction runs from here, not from arrival
+    sampleAtMs?: number;
 };
 
 export type MultiplayerBump = {
@@ -123,6 +127,47 @@ const MAX_NAME_LENGTH = 16;
 const MAX_LAPS = 32;
 const LOBBY_CODE_LENGTH = 6;
 const LOBBY_CODE_REGEX = /^[A-Z0-9]{4,8}$/;
+// testing only, with ?raceDebug=1: ?netsim=loss,lag,jitter drops that share
+// of outgoing broadcasts and delays the rest by lag plus up to jitter ms,
+// e.g. netsim=0.2,120,80. presence isn't touched
+const readNetsim = () => {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('raceDebug') !== '1') return null;
+        const raw = params.get('netsim');
+        if (!raw) return null;
+        const [loss, lag, jitter] = raw.split(',').map(Number);
+        return {
+            loss: Math.min(0.95, Math.max(0, loss || 0)),
+            lag: Math.max(0, lag || 0),
+            jitter: Math.max(0, jitter || 0),
+        };
+    } catch {
+        return null;
+    }
+};
+
+const simulateNetwork = (channel: RealtimeChannel) => {
+    const sim = readNetsim();
+    if (!sim) return;
+    const send = channel.send.bind(channel);
+    channel.send = ((message: Parameters<RealtimeChannel['send']>[0], opts?: Parameters<RealtimeChannel['send']>[1]) => {
+        if (message.type === 'broadcast' && Math.random() < sim.loss) {
+            return Promise.resolve('ok');
+        }
+        const delay = sim.lag + Math.random() * sim.jitter;
+        if (delay <= 0) return send(message, opts);
+        return new Promise((resolve) => {
+            window.setTimeout(() => resolve(send(message, opts)), delay);
+        });
+    }) as RealtimeChannel['send'];
+};
+
+// quick join lobbies: RING1, RING2, ... each up to this many drivers
+const PUBLIC_LOBBY_PREFIX = 'RING';
+const PUBLIC_LOBBIES = 6;
+const PUBLIC_LOBBY_SIZE = 8;
+const PRESENCE_WAIT_MS = 1500;
 const MAX_POSITION_ABS = 1000000;
 const JOIN_SUBSCRIBE_TIMEOUT_MS = 12000;
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
@@ -145,6 +190,10 @@ export default class MultiplayerService {
     isHost: boolean;
     error: string | null;
     players: Map<string, MultiplayerPlayerState>;
+    // set by the first presence sync of the current lobby
+    presenceSynced = false;
+    // lowest delay seen per sender (ms, their clock to ours)
+    peerDelays = new Map<string, { floor: number; at: number }>();
     laps: MultiplayerLapState[];
     listeners: Set<(state: MultiplayerState) => void>;
     bumpListeners: Set<(bump: MultiplayerBump) => void>;
@@ -335,6 +384,43 @@ export default class MultiplayerService {
         return this.joinLobbyInternal(lobbyCode, playerName, carId, false);
     }
 
+    // no server to match players, so quick join walks a few well known public
+    // lobbies and takes the first with room. presence tells us who's in
+    async quickJoin(playerName: string, carId: string): Promise<LobbyJoinResult> {
+        await this.initialize();
+        if (!this.supabase || !this.supported) {
+            this.error = 'Multiplayer requires a valid Supabase runtime config.';
+            this.emitState();
+            return { ok: false, error: this.error };
+        }
+        for (let i = 1; i <= PUBLIC_LOBBIES; i++) {
+            const code = `${PUBLIC_LOBBY_PREFIX}${i}`;
+            const result = await this.joinLobbyInternal(code, playerName, carId, false);
+            if (!result.ok) return result;
+            await this.waitForPresence(PRESENCE_WAIT_MS);
+            if (this.players.size <= PUBLIC_LOBBY_SIZE || i === PUBLIC_LOBBIES) {
+                return result;
+            }
+            await this.leaveLobby(true);
+        }
+        return { ok: false, error: 'No public lobby found.' };
+    }
+
+    // resolves on the first presence sync after joining, or after the wait
+    waitForPresence(timeoutMs: number) {
+        return new Promise<void>((resolve) => {
+            const started = performance.now();
+            const check = () => {
+                if (this.presenceSynced || performance.now() - started > timeoutMs) {
+                    resolve();
+                    return;
+                }
+                window.setTimeout(check, 100);
+            };
+            check();
+        });
+    }
+
     async leaveLobby(internal = false) {
         if (!internal) {
             this.joinRequestCounter++;
@@ -344,6 +430,7 @@ export default class MultiplayerService {
         this.connecting = false;
         this.connected = false;
         this.mode = 'solo';
+        this.peerDelays.clear();
         this.lobbyCode = null;
         this.isHost = false;
         this.players.clear();
@@ -740,6 +827,7 @@ export default class MultiplayerService {
         this.mode = 'lobby';
         this.connecting = true;
         this.error = null;
+        this.presenceSynced = false;
         this.lobbyCode = lobbyCode;
         this.isHost = isHost;
         this.localInstanceId = this.createRandomToken(12);
@@ -768,6 +856,7 @@ export default class MultiplayerService {
                 },
             });
             this.wireChannelEvents(channel);
+            simulateNetwork(channel);
             this.channel = channel;
 
             const subscribed = await this.subscribeChannel(
@@ -845,6 +934,7 @@ export default class MultiplayerService {
 
     handlePresenceSync() {
         if (!this.channel) return;
+        this.presenceSynced = true;
 
         const state = this.channel.presenceState();
         const connectedSessionIds = new Set<string>();
@@ -996,9 +1086,29 @@ export default class MultiplayerService {
         player.yawRate = this.clampNumber(parsed.yaw_rate ?? 0, -12, 12);
         player.ghost = Boolean(parsed.ghost);
         player.lastSeenAt = nowIso;
+        player.sampleAtMs = this.estimateSampleTime(sessionId, parsed.sent_at);
 
         this.players.set(sessionId, player);
         this.emitTelemetryState();
+    }
+
+    // arrival minus transit. with synced clocks (ntp, most devices) transit is
+    // arrival minus the sender's stamp. a clock that's off shows up as a
+    // lowest delay that's negative or huge, then the lowest seen is taken as
+    // a ~60 ms trip and the rest as skew
+    estimateSampleTime(sessionId: string, sentAt: string | undefined) {
+        const now = Date.now();
+        const sent = Date.parse(sentAt || '');
+        if (!Number.isFinite(sent)) return now;
+        const delay = now - sent;
+        const seen = this.peerDelays.get(sessionId);
+        // the floor creeps up 1 ms a second so a clock step or route change
+        // is picked up again
+        const floor = seen ? Math.min(delay, seen.floor + (now - seen.at) / 1000) : delay;
+        this.peerDelays.set(sessionId, { floor, at: now });
+        const skew = floor < -20 || floor > 400 ? floor - 60 : 0;
+        const transit = this.clampNumber(delay - skew, 0, 500);
+        return now - transit;
     }
 
     handleRemoteLap(payload: unknown) {

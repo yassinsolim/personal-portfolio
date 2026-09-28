@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
 import InterfaceUI from './components/InterfaceUI';
+import LobbyChoice from './components/LobbyChoice';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -265,6 +266,8 @@ const App = () => {
     const [graphicsContextLost, setGraphicsContextLost] = useState(false);
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
+    const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
+    const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
 
     useEffect(() => {
         eventBus.on('loadingScreenDone', () => {
@@ -283,9 +286,12 @@ const App = () => {
                 }
                 if (!active) {
                     setPointerLocked(false);
+                    setLobbyChoiceOpen(false);
                 }
             }
         );
+
+        eventBus.on('race:lobbyChoice', () => setLobbyChoiceOpen(true));
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
             setRacePaused(Boolean(state?.paused));
@@ -972,6 +978,13 @@ const App = () => {
                             .join(' ')}
                     </div>
                 </div>
+            )}
+            {raceModeActive && lobbyChoiceOpen && !racePaused && (
+                <LobbyChoice
+                    multiplayer={multiplayer}
+                    playerName={playerName}
+                    onClose={closeLobbyChoice}
+                />
             )}
             {raceModeActive && racePaused && (
                 <div className="race-menu-overlay" data-prevent-click>
