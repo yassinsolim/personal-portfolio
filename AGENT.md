@@ -596,6 +596,13 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   past the carve: on this lap a 96 m step puts the ground up to 12 m over the road and a 224 m
   one up to 54 m, so a step needs its own carved heights, or the tiles the road runs through stay
   at full resolution.
+- Weak gpu terrain is Lambert, which doesn't read `scene.environment`. On the pbr path the rough
+  grass's grazing sky sheen is what keeps shaded slopes cool green, so the Lambert terrain has a
+  faint sky emissive (`WEAK_SKY_FILL`, free since the uniform is always in the shader), matched to
+  the pbr path's shaded slopes at Senkenlinks and Kesselchen.
+- The verges' inner edge has no lift, so its vertices are the asphalt's edge vertices exactly;
+  only the outer edge drops (`createRibbonGeometry` takes a lift per edge). Dropping both along a
+  banked normal slid the inner edge about 3 mm sideways. `npm test` checks the edges match.
 - `node scripts/race-terrain-shots.mjs --url ... --spots spots.json` teleports along the lap
   (`window.__raceTeleport(distance, x, z, back)`) and takes chase cam shots, `--tier low` for the
   weak path, `--magenta` paints the terrain flat magenta, `--transition` captures the car click

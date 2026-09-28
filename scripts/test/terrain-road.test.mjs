@@ -29,6 +29,29 @@ const track = await loadTrack();
 const road = roadSurface(track);
 const qualities = await terrainQualities();
 
+test('asphalt and verges share their edge vertices', () => {
+    const road = track.visualMesh.geometry.getAttribute('position').array;
+    const verge = track.vergeMesh.geometry.getAttribute('position').array;
+    // road: left edge, right edge per station. verges: the left strip
+    // (outer, inner) for every station, then the right one (inner, outer)
+    const stations = road.length / 6;
+    assert.equal(verge.length, road.length * 2, 'ribbon station counts');
+    const right = stations * 6;
+    let gaps = 0;
+    let worst = 0;
+    for (let i = 0; i < stations; i++) {
+        for (let k = 0; k < 3; k++) {
+            const left = Math.abs(road[i * 6 + k] - verge[i * 6 + 3 + k]);
+            const rightGap = Math.abs(
+                road[i * 6 + 3 + k] - verge[right + i * 6 + k]
+            );
+            if (left || rightGap) gaps++;
+            worst = Math.max(worst, left, rightGap);
+        }
+    }
+    assert.equal(gaps, 0, `edge coordinates apart, worst ${worst} m`);
+});
+
 for (const quality of qualities) {
     test(`terrain stays ${MARGIN} m under the road (${quality})`, async (t) => {
         const terrain = await buildTerrain(quality);
