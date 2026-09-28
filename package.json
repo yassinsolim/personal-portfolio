@@ -13,6 +13,7 @@
         "security:check": "node scripts/security-check.mjs https://yassin.app",
         "security:check:local": "node scripts/security-check.mjs http://localhost:8080",
         "game:audit": "node scripts/game-audit.mjs",
+        "test": "node --test \"scripts/test/*.test.mjs\"",
         "validate:race": "node scripts/run-regression-validation.js",
         "check:drivetrain": "node scripts/race-drivetrain-check.mjs",
         "test:drivetrain": "node --test scripts/race-drivetrain.test.mjs"

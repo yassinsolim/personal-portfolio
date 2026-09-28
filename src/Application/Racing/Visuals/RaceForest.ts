@@ -211,7 +211,7 @@ export default class RaceForest {
                     const [lo, hi] = MIX[kind].height;
                     chunks[Math.floor((i / samples) * CHUNKS) % CHUNKS].push({
                         x,
-                        y: terrain.heightAt(x, z) - 0.4,
+                        y: terrain.groundAt(x, z) - 0.4,
                         z,
                         s: lo + random() * (hi - lo),
                         r: random() * Math.PI * 2,

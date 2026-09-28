@@ -37,8 +37,12 @@ const COLLIDER_CHUNKS = 160;
 const RIBBON_SAMPLES_PER_METER = 0.5;
 const MARKING_LIFT = 0.02;
 const KERB_LIFT = 0.025;
-const VERGE_DROP = 0.012;
+// the verges sit this far under the road plane (the terrain skirt meets
+// their outer edge, so it reads this too)
+export const VERGE_DROP = 0.012;
 const ASPHALT_REPEAT_METERS = 32;
+// depth bias units for the asphalt and verges, see createRoadMesh
+const ROAD_DEPTH_PULL = -2;
 // map cell size the ribbons are cut into for culling, meters
 const RIBBON_CELL = 1200;
 
@@ -253,7 +257,7 @@ export default class NordschleifeTrack {
         this.buildProfiles(data);
         this.buildKerbZones();
 
-        const samples = Math.round(this.length * RIBBON_SAMPLES_PER_METER);
+        const samples = this.getRibbonSamples();
         this.visualMesh = this.createRoadMesh(samples);
         this.concreteMesh = this.createConcreteMesh();
         this.vergeMesh = this.createVergeMesh(samples);
@@ -585,6 +589,12 @@ export default class NordschleifeTrack {
         return FRAME_SAMPLES;
     }
 
+    // stations the road and verge ribbons are built on, 2 m apart. anything
+    // that has to meet a ribbon edge exactly (the terrain skirt) uses these
+    getRibbonSamples() {
+        return Math.round(this.length * RIBBON_SAMPLES_PER_METER);
+    }
+
     // banked frame of the curve at t, shared by every ribbon so they line up
     getRibbonFrame(
         curve: THREE.Curve<THREE.Vector3>,
@@ -703,6 +713,11 @@ export default class NordschleifeTrack {
         const { map, roughnessMap } = createAsphaltTextures();
         map.anisotropy = this.getTextureAnisotropy();
         roughnessMap.anisotropy = this.getTextureAnisotropy();
+        // the ground under the road is carved well below it, but far away the
+        // depth buffer can't tell them apart. a constant pull toward the
+        // camera (units only: a slope term grows huge at grazing angles) lets
+        // the road win those ties and is sub millimeter near the car. kerbs,
+        // lines and decals are pulled further, so they still draw on top
         const material = new THREE.MeshStandardMaterial({
             map,
             roughnessMap,
@@ -710,8 +725,8 @@ export default class NordschleifeTrack {
             metalness: 0,
             side: THREE.DoubleSide,
             polygonOffset: true,
-            polygonOffsetFactor: 1,
-            polygonOffsetUnits: 2,
+            polygonOffsetFactor: 0,
+            polygonOffsetUnits: ROAD_DEPTH_PULL,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = 'nordschleife-visual';
@@ -746,6 +761,9 @@ export default class NordschleifeTrack {
             roughness: 1,
             metalness: 0,
             side: THREE.DoubleSide,
+            polygonOffset: true,
+            polygonOffsetFactor: 0,
+            polygonOffsetUnits: ROAD_DEPTH_PULL,
         });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.name = 'nordschleife-verge';
