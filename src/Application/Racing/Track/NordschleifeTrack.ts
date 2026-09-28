@@ -44,7 +44,7 @@ const RIBBON_CELL = 1200;
 
 // one mesh per map cell, by triangle centroid. the pieces share the vertex
 // buffers and only differ in index, with their own bounds for culling
-const splitByCell = (mesh: THREE.Mesh, cell: number) => {
+export const splitByCell = (mesh: THREE.Mesh, cell: number) => {
     const geometry = mesh.geometry;
     const group = new THREE.Group();
     group.name = mesh.name;
@@ -115,6 +115,15 @@ export type TrackBridge = {
     kind: string | null;
     name: string | null;
 };
+// a landmark on the skyline from osm, its footprint around x, z
+export type TrackLandmark = {
+    name: string;
+    kind: 'castle' | 'tower';
+    x: number;
+    z: number;
+    height: number;
+    outline: [number, number][];
+};
 export type TrackTerrainData = {
     x: number;
     z: number;
@@ -140,6 +149,9 @@ type TrackAssetData = {
     spacing: number;
     concrete: [number, boolean][];
     bridges: TrackBridge[];
+    // catch fence runs near the lap (osm), x, z every 6 m
+    fences?: [number, number][][];
+    landmarks?: TrackLandmark[];
     terrain: {
         x: number;
         z: number;
@@ -192,6 +204,8 @@ export default class NordschleifeTrack {
     frameConcrete: Uint8Array;
     sections: TrackSection[];
     bridges: TrackBridge[];
+    fences: [number, number][][];
+    landmarks: TrackLandmark[];
     distanceScale: number;
     terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
@@ -231,6 +245,8 @@ export default class NordschleifeTrack {
         this.length = this.colliderCurve.getLength();
         this.sections = data.sections;
         this.bridges = data.bridges;
+        this.fences = data.fences || [];
+        this.landmarks = data.landmarks || [];
         this.terrain = {
             x: data.terrain.x,
             z: data.terrain.z,
