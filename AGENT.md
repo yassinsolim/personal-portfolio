@@ -586,11 +586,16 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   are pulled further, so they still draw on top.
 - `npm test` builds the real track and every `TERRAIN_QUALITIES` terrain in node
   (`scripts/test/`, a loader runs the TypeScript with a stand-in `Application`) and fails if any
-  mesh under `terrain.root` comes within 1 m of the road at any meter of the lap (0.5 m across,
-  out to the barrier line), or if a tree floats over the drawn ground. Each direct child of the
-  root is one level in the report, hidden ones too, so new lod levels go there, through
-  `clearance.carveGrid` or `carveTriangles` before their normals and bounds.
-  `node scripts/test/terrain-road-report.mjs` prints the worst spots per level.
+  level in `RaceTerrain.levels()` comes within 1 m of the road at any meter of the lap (0.5 m
+  across, out to the barrier line), if a mesh under `terrain.root` isn't in a level, or if a tree
+  floats over the drawn ground. `node scripts/test/terrain-road-report.mjs` prints the worst spots
+  per level.
+- Lod: every triangulation that can be on screen (each step, each stitched edge) has to be a
+  level, as meshes with that index, and has to be carved (`clearance.carveGrid` or
+  `carveTriangles`) before its normals and bounds. A coarser step over the same vertices spans
+  past the carve: on this lap a 96 m step puts the ground up to 12 m over the road and a 224 m
+  one up to 54 m, so a step needs its own carved heights, or the tiles the road runs through stay
+  at full resolution.
 - `node scripts/race-terrain-shots.mjs --url ... --spots spots.json` teleports along the lap
   (`window.__raceTeleport(distance, x, z, back)`) and takes chase cam shots, `--tier low` for the
   weak path, `--magenta` paints the terrain flat magenta, `--transition` captures the car click

@@ -145,13 +145,20 @@ export const roadSurface = (track) =>
         })
     );
 
-// every terrain level under the terrain root, one per direct child (ground
-// tiles, skirt, and any lod levels added later), hidden ones included
+// every level the terrain can draw (RaceTerrain.levels: ground tiles, skirt,
+// each lod step), or one per direct child of the root on older code
 export const terrainLevels = (terrain, prefix) =>
-    terrain.root.children
-        .map((child) => ({
-            name: `${prefix}/${child.name}`,
-            field: new SurfaceField(meshesUnder(child)),
+    (typeof terrain.levels === 'function'
+        ? terrain.levels()
+        : terrain.root.children.map((child) => ({
+              name: child.name,
+              meshes: meshesUnder(child),
+          }))
+    )
+        .map((level) => ({
+            name: `${prefix}/${level.name}`,
+            meshes: level.meshes,
+            field: new SurfaceField(level.meshes),
         }))
         .filter((level) => level.field.count > 0);
 

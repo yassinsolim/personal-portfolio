@@ -96,6 +96,17 @@ export default class RaceTerrain {
         this.root.add(this.skirt);
     }
 
+    // every surface the terrain can draw, one entry per level, for the
+    // terrain vs road test (scripts/test/terrain-road.test.mjs). an lod step
+    // or stitched edge that can be on screen goes in here too, as meshes
+    // with that level's index
+    levels(): { name: string; meshes: THREE.Mesh[] }[] {
+        return [
+            { name: 'ground', meshes: this.ground.children as THREE.Mesh[] },
+            { name: 'skirt', meshes: this.skirt.children as THREE.Mesh[] },
+        ];
+    }
+
     // shared with the forest, so trees stand on the ground
     forestDensity(x: number, z: number) {
         return this.field.woods(x, z);

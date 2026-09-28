@@ -1,9 +1,10 @@
 // the road always wins: builds the real track and the terrain at every
 // quality, walks the lap every meter across the asphalt and verges (0.5 m
-// apart, out to the barrier line) and fails if any drawn terrain surface
-// (every ground tile, the skirt, any lod level under the terrain root) comes
-// within MARGIN of the road there. also checks trees stand on the ground
-// that's drawn. prints the worst spots of each level
+// apart, out to the barrier line) and fails if any level the terrain can
+// draw (RaceTerrain.levels: ground tiles, skirt, each lod step) comes within
+// MARGIN of the road there, or if a mesh under the terrain root isn't in a
+// level. also checks trees stand on the ground that's drawn. prints the
+// worst spots of each level
 //
 //   npm test
 //   node scripts/test/terrain-road-report.mjs    for the full tables
@@ -36,6 +37,12 @@ for (const quality of qualities) {
             levels.length >= 2,
             'expected at least the ground and the skirt'
         );
+        // anything drawn under the terrain root has to be in a level
+        const listed = new Set(levels.flatMap((level) => level.meshes));
+        const unlisted = meshesUnder(terrain.root)
+            .filter((mesh) => !listed.has(mesh))
+            .map((mesh) => mesh.name);
+        assert.deepEqual(unlisted, [], 'terrain meshes missing from levels()');
         const report = checkClearance(track, road, levels, { margin: MARGIN });
         for (const level of report.levels) {
             t.diagnostic(
