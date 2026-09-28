@@ -453,6 +453,73 @@ def trackside_osm(cache, X, Z, project, bbox):
     return fences, landmarks
 
 
+# the roads that pass under the lap's own bridges (b257 at quiddelbacher hoehe
+# and breidscheid, l92, l93 and k73 around t13): the osm way crossing each span,
+# ±70 m of it every 4 m, on the lidar ground (which under a bridge is that road)
+UNDERPASS_REACH = 70.0
+UNDERPASS_WIDTH = {'primary': 7.0, 'secondary': 6.5, 'tertiary': 6.0}
+
+
+def underpass_roads(cache, spans, X, Z, dist, spacing, project, unproject, dgm):
+    if not spans:
+        return []
+    count = len(X)
+    boxes = []
+    for sp in spans:
+        i = int(round(((sp['start'] + sp['end']) / 2) / spacing)) % count
+        lat, lon = unproject(X[i], Z[i])
+        boxes.append((lat - 0.0012, lon - 0.0019, lat + 0.0012, lon + 0.0019))
+    query = '[out:json][timeout:90];(' + ''.join(
+        f'way["highway"]({s},{w},{n},{e});way["waterway"]({s},{w},{n},{e});' for s, w, n, e in boxes) + ');out body;>;out skel qt;'
+    data = overpass(cache, 'underpass.json', query)
+    nodes = {el['id']: project((el['lat'], el['lon'])) for el in data['elements'] if el['type'] == 'node'}
+    found = []
+    for si, sp in enumerate(spans):
+        best = None
+        for el in data['elements']:
+            tags = el.get('tags', {})
+            if el['type'] != 'way' or tags.get('highway') not in UNDERPASS_WIDTH:
+                continue
+            pts = np.array([nodes[n] for n in el['nodes'] if n in nodes])
+            for a in range(len(pts) - 1):
+                for i in range(int(sp['start'] / spacing) - 3, int(sp['end'] / spacing) + 4):
+                    i0, i1 = i % count, (i + 1) % count
+                    p, q = np.array([X[i0], Z[i0]]), np.array([X[i1], Z[i1]])
+                    r, s2 = pts[a + 1] - pts[a], q - p
+                    den = r[0] * s2[1] - r[1] * s2[0]
+                    if abs(den) < 1e-9:
+                        continue
+                    t = ((p - pts[a])[0] * s2[1] - (p - pts[a])[1] * s2[0]) / den
+                    u = ((p - pts[a])[0] * r[1] - (p - pts[a])[1] * r[0]) / den
+                    if 0 <= t <= 1 and 0 <= u <= 1:
+                        best = (el, pts, a, t)
+        if best is None:
+            continue
+        el, pts, a, t = best
+        # along the way, arc length from the crossing
+        seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        cum = np.concatenate([[0], np.cumsum(seg)])
+        at = cum[a] + t * seg[a]
+        s_pts = np.arange(max(0, at - UNDERPASS_REACH), min(cum[-1], at + UNDERPASS_REACH) + 0.01, 4.0)
+        ux = np.interp(s_pts, cum, pts[:, 0])
+        uz = np.interp(s_pts, cum, pts[:, 1])
+        lat, lon = np.vectorize(unproject)(ux, uz)
+        uy = dgm.at_many(lat, lon)
+        good = np.isfinite(uy)
+        uy = np.interp(np.arange(len(uy)), np.arange(len(uy))[good], uy[good])
+        uy = np.convolve(np.pad(uy, 2, mode='edge'), np.ones(5) / 5, mode='valid')
+        tags = el.get('tags', {})
+        found.append({
+            'span': si,
+            'ref': tags.get('ref'),
+            'name': tags.get('name'),
+            'highway': tags.get('highway'),
+            'width': UNDERPASS_WIDTH[tags.get('highway')],
+            'points': [[round(float(x), 2), round(float(y), 2), round(float(z), 2)] for x, y, z in zip(ux, uy, uz)],
+        })
+    return found
+
+
 def lap_spans(bridges, X, Z, dist, length, project):
     # where the lap itself is a bridge: raceway ways tagged bridge that lie on
     # the centerline (not the pit lane beside it)
@@ -640,6 +707,8 @@ def main():
         'bridges': merged,
         **dict(zip(('fences', 'landmarks'), trackside_osm(args.cache, X, Z, project, BBOX))),
         'spans': spans,
+        **({} if args.no_dgm1 else {'underpasses': underpass_roads(args.cache, spans, X, Z, dist, spacing, project, unproject, Dgm1(args.cache))}),
+        **({} if args.no_dgm1 else {'underpasses': underpass_roads(args.cache, spans, X, Z, dist, spacing, project, unproject, Dgm1(args.cache))}),
         'terrain': {
             'x': round(float(x_min), 2), 'z': round(float(z_min), 2), 'cell': TERRAIN_CELL,
             'cols': cols, 'rows': rows,
