@@ -15,6 +15,8 @@ const SKIRT_COLUMNS = [0, 2.5, 7, 15, 27, 44];
 const SKIRT_TUCK = 0.3;
 const UNDER_ROAD = CARVE_DEPTH;
 const DETAIL_METERS = 7;
+// matched to the pbr path's shaded slopes at senkenlinks and kesselchen
+const WEAK_SKY_FILL = 0x060a16;
 // the skirt's outer columns sit on every third ribbon station
 const SKIRT_STRIDE = 3;
 // another stretch of the lap closer than this (and at least CROWD_ALONG away
@@ -88,8 +90,15 @@ export default class RaceTerrain {
                       roughness: 0.96,
                       metalness: 0,
                   })
-                : // weak gpus: the vertex colors alone, no detail texture
-                  new THREE.MeshLambertMaterial({ vertexColors: true });
+                : // weak gpus: the vertex colors alone, no detail texture.
+                  // lambert skips the sky environment, whose grazing sheen
+                  // is what keeps shaded slopes cool green on the pbr path,
+                  // so a faint sky emissive stands in for it (free, the
+                  // uniform is always in the shader)
+                  new THREE.MeshLambertMaterial({
+                      vertexColors: true,
+                      emissive: WEAK_SKY_FILL,
+                  });
         this.ground = this.buildGround(GROUND_CELL[quality]);
         this.skirt = this.buildSkirt();
         this.root.add(this.ground);

@@ -661,7 +661,8 @@ export default class NordschleifeTrack {
         curve: THREE.Curve<THREE.Vector3>,
         samples: number,
         edges: RibbonEdges,
-        lift: number,
+        // one lift for both edges, or one per edge in the order edges gives
+        lift: number | [number, number],
         vScale: number,
         range: [number, number] = [0, 1]
     ) {
@@ -678,6 +679,7 @@ export default class NordschleifeTrack {
         const indices: number[] = [];
         let distance = 0;
         const [start, end] = range;
+        const [liftA, liftB] = typeof lift === 'number' ? [lift, lift] : lift;
         const steps = Math.max(1, Math.ceil(samples * (end - start)));
         for (let i = 0; i <= steps; i++) {
             const raw = start + ((end - start) * i) / steps;
@@ -694,10 +696,10 @@ export default class NordschleifeTrack {
             const [inner, outer] = edges(t);
             a.copy(point)
                 .addScaledVector(side, inner)
-                .addScaledVector(normal, lift);
+                .addScaledVector(normal, liftA);
             b.copy(point)
                 .addScaledVector(side, outer)
-                .addScaledVector(normal, lift);
+                .addScaledVector(normal, liftB);
             vertices.push(a.x, a.y, a.z, b.x, b.y, b.z);
             if (i > 0) distance += point.distanceTo(previousPoint);
             previousPoint.copy(point);
@@ -770,19 +772,22 @@ export default class NordschleifeTrack {
         return mesh;
     }
 
+    // the inner edge is the asphalt's own edge (no lift, so the vertices are
+    // the same numbers) and only the outer edge drops. dropping both along a
+    // banked normal slid the inner edge sideways and left a hairline gap
     createVergeMesh(samples: number) {
         const left = this.createRibbonGeometry(
             this.visualCurve,
             samples,
             (t) => [this.getVergeHalfWidth(t), this.getRoadHalfWidth(t)],
-            -VERGE_DROP,
+            [-VERGE_DROP, 0],
             1 / 7
         );
         const right = this.createRibbonGeometry(
             this.visualCurve,
             samples,
             (t) => [-this.getRoadHalfWidth(t), -this.getVergeHalfWidth(t)],
-            -VERGE_DROP,
+            [0, -VERGE_DROP],
             1 / 7
         );
         const geometry = this.mergeRibbons([left, right]);
