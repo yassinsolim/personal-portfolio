@@ -1,0 +1,550 @@
+/* m2 (widgets) and m3 (terminal), drawn at their fixed css size and scaled
+   by the css3d plane. every rule is under .room-display so nothing reaches
+   the rest of the site. the look is yassinOS's (styles/defaultTheme there):
+   the tokens come in as --rd-* on the root (displayKit applyTheme) */
+
+.room-display {
+    position: relative;
+    overflow: hidden;
+    contain: strict;
+    box-sizing: border-box;
+    background-color: var(--rd-bg, #000);
+    background-repeat: no-repeat;
+    color: var(--rd-text, rgba(255, 255, 255, 90%));
+    font-family: var(--rd-font-ui, system-ui, sans-serif);
+    font-size: 28px;
+    font-weight: 400;
+    line-height: 1.3;
+    font-variant-numeric: tabular-nums;
+    text-align: left;
+    text-rendering: optimizeLegibility;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* yassinOS's reset */
+.room-display *,
+.room-display *::before,
+.room-display *::after {
+    border: 0;
+    box-sizing: border-box;
+    margin: 0;
+    outline: 0;
+    padding: 0;
+}
+
+/* the site styles bare headings and paragraphs, these keep ours */
+.room-display h2,
+.room-display p {
+    color: inherit;
+    font: inherit;
+}
+
+.room-display ul,
+.room-display ol {
+    list-style: none;
+}
+
+.room-display .rd-btn {
+    background-color: hsla(0, 0%, 18%, 85%);
+    border: 1px solid var(--rd-outline);
+    border-radius: var(--rd-radius);
+    color: #fff;
+    cursor: default;
+    font-family: var(--rd-font-ui);
+    font-size: 26px;
+    line-height: 1.2;
+    padding: 14px 26px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.room-display .rd-btn-primary {
+    background-color: var(--rd-accent-strong);
+    border-color: transparent;
+}
+
+/* hover only once the camera is on the screen (it takes the pointer then) */
+.room-display.is-focused .rd-btn {
+    cursor: pointer;
+}
+
+.room-display.is-focused .rd-btn:hover {
+    box-shadow: inset 0 0 0 999px hsla(0, 0%, 100%, 12%);
+}
+
+.room-display.is-focused .rd-btn:active {
+    box-shadow: inset 0 0 0 999px hsla(0, 0%, 0%, 25%);
+}
+
+.room-display .rd-btn:focus-visible {
+    outline: 3px solid var(--rd-accent);
+    outline-offset: 3px;
+}
+
+/* m2, 1600 x 900 */
+
+.room-display.rd-widgets {
+    display: grid;
+    gap: 28px 36px;
+    grid-template-columns: minmax(0, 1fr) 680px;
+    grid-template-rows: minmax(0, 1fr) 292px;
+    padding: 56px;
+}
+
+.room-display .rd-clock {
+    align-self: center;
+    color: #fff;
+    padding-left: 6px;
+    text-shadow: 0 2px 14px rgba(0, 0, 0, 60%);
+}
+
+.room-display .rd-clock-time {
+    align-items: baseline;
+    display: flex;
+    font-size: 200px;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    line-height: 1;
+}
+
+.room-display .rd-clock-period {
+    font-size: 64px;
+    font-weight: 400;
+    letter-spacing: 0;
+    margin: 0 20px;
+}
+
+.room-display .rd-clock-period:empty {
+    display: none;
+}
+
+.room-display .rd-clock-date {
+    color: var(--rd-text);
+    font-size: 52px;
+    margin-top: 18px;
+}
+
+.room-display .rd-card {
+    background-color: hsla(0, 0%, 5%, 84%);
+    border-radius: var(--rd-radius);
+    box-shadow: 0 0 14px 0 rgba(0, 0, 0, 50%);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+    outline: 1px solid var(--rd-outline);
+    overflow: hidden;
+}
+
+/* yassinOS's window title bar, scaled up to read from the desk */
+.room-display .rd-card-bar {
+    align-items: center;
+    background-color: var(--rd-titlebar);
+    display: flex;
+    flex: none;
+    height: 46px;
+    padding: 0 18px;
+}
+
+.room-display .rd-card-title {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 400;
+}
+
+.room-display .rd-card-body {
+    flex: 1;
+    min-height: 0;
+    padding: 22px 32px;
+}
+
+.room-display .rd-label {
+    color: var(--rd-muted);
+    font-size: 22px;
+}
+
+.room-display .rd-now-role {
+    color: #fff;
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1.18;
+    text-wrap: balance;
+}
+
+.room-display .rd-now-since {
+    color: var(--rd-muted);
+    font-size: 22px;
+    margin-top: 8px;
+}
+
+.room-display .rd-now-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+.room-display .rd-now-list li {
+    font-size: 26px;
+    line-height: 1.28;
+    padding-left: 28px;
+    position: relative;
+    text-wrap: pretty;
+}
+
+.room-display .rd-now-list li::before {
+    background-color: var(--rd-accent);
+    border-radius: var(--rd-radius);
+    content: '';
+    height: 10px;
+    left: 2px;
+    position: absolute;
+    top: 0.52em;
+    width: 10px;
+}
+
+.room-display .rd-now-foot {
+    color: var(--rd-muted);
+    font-size: 21px;
+    margin-top: 18px;
+}
+
+.room-display .rd-race-body {
+    align-items: center;
+    display: flex;
+    gap: 30px;
+    padding-bottom: 14px;
+    padding-top: 12px;
+}
+
+.room-display .rd-track {
+    display: block;
+    flex: none;
+    height: 206px;
+    overflow: visible;
+    width: 280px;
+}
+
+.room-display .rd-track-glow,
+.room-display .rd-track-line {
+    fill: none;
+    stroke: var(--rd-accent);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.room-display .rd-track-glow {
+    stroke-opacity: 0.16;
+    stroke-width: 12;
+}
+
+.room-display .rd-track-line {
+    stroke-width: 4;
+}
+
+.room-display .rd-track-start {
+    fill: #fff;
+}
+
+.room-display .rd-race-info {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.room-display .rd-race-info .rd-label {
+    margin-top: 12px;
+}
+
+.room-display .rd-race-place {
+    color: var(--rd-muted);
+    font-size: 22px;
+}
+
+.room-display .rd-race-lap {
+    color: #fff;
+    font-size: 58px;
+    font-weight: 300;
+    line-height: 1.1;
+}
+
+.room-display .rd-race-lap.is-empty {
+    color: var(--rd-text);
+    font-size: 40px;
+    line-height: 1.45;
+}
+
+.room-display .rd-race-actions {
+    align-items: center;
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+}
+
+.room-display .rd-race-hint {
+    color: var(--rd-muted);
+    font-size: 22px;
+}
+
+.room-display .rd-os-app {
+    color: #fff;
+    font-size: 44px;
+    font-weight: 600;
+    line-height: 1.15;
+    margin-top: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.room-display .rd-os-detail {
+    color: var(--rd-muted);
+    font-size: 22px;
+    margin-top: 6px;
+    min-height: 1.3em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.room-display .rd-os-links {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: 18px;
+}
+
+.room-display .rd-os-links .rd-btn {
+    font-size: 24px;
+    padding: 16px 6px;
+}
+
+/* m3, 900 x 1600 */
+
+.room-display.rd-term {
+    color: var(--rd-term-text);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--rd-font-mono);
+}
+
+.room-display .rd-term-bar {
+    align-items: center;
+    background-color: var(--rd-titlebar);
+    color: #fff;
+    display: flex;
+    flex: none;
+    font-family: var(--rd-font-ui);
+    font-size: 20px;
+    gap: 14px;
+    height: 48px;
+    padding: 0 18px;
+}
+
+.room-display .rd-term-icon {
+    color: var(--rd-accent);
+    font-family: var(--rd-font-mono);
+    font-size: 19px;
+    font-weight: 700;
+}
+
+/* yassinOS's terminal is rgba(12, 12, 12, 50%) over a blur. no blur here
+   (it would redo every frame the camera moves), and pure black keeps the
+   wallpaper's black true black */
+.room-display .rd-term-body {
+    background-color: rgba(0, 0, 0, 55%);
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    font-size: 26px;
+    line-height: 1.4;
+    min-height: 0;
+    padding: 24px 32px 28px;
+}
+
+.room-display .rd-term-live {
+    border-bottom: 1px solid var(--rd-outline);
+    display: none;
+    flex: none;
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+}
+
+.room-display.is-shell .rd-term-live {
+    display: block;
+}
+
+.room-display .rd-term-head {
+    color: var(--rd-muted);
+}
+
+.room-display .rd-term-head + .rd-kv,
+.room-display .rd-term-head + .rd-events {
+    margin-top: 4px;
+}
+
+.room-display .rd-kv + .rd-term-head {
+    margin-top: 20px;
+}
+
+.room-display .rd-kv {
+    column-gap: 1ch;
+    display: grid;
+    grid-template-columns: 7ch minmax(0, 1fr);
+}
+
+.room-display .rd-kv-key,
+.room-display .rd-grid-key {
+    color: var(--rd-accent);
+}
+
+.room-display .rd-kv-value {
+    color: #e8e8e8;
+    overflow-wrap: anywhere;
+}
+
+.room-display .rd-event {
+    column-gap: 1ch;
+    display: grid;
+    grid-template-columns: 8ch minmax(0, 1fr);
+}
+
+.room-display .rd-event-time {
+    color: var(--rd-muted);
+}
+
+.room-display .rd-term-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-color: hsla(0, 0%, 50%, 50%) transparent;
+    scrollbar-width: thin;
+}
+
+.room-display .rd-term-out {
+    overflow-wrap: anywhere;
+    user-select: text;
+    white-space: pre-wrap;
+}
+
+.room-display .is-ok {
+    color: hsla(113, 78%, 56%, 90%);
+}
+
+.room-display .is-warn {
+    color: hsl(40, 95%, 62%);
+}
+
+.room-display .is-dim {
+    color: rgb(128, 128, 128);
+}
+
+.room-display .rd-ps1 {
+    color: var(--rd-accent);
+    white-space: nowrap;
+}
+
+.room-display .rd-ps1-path {
+    color: var(--rd-term-text);
+}
+
+.room-display .rd-block {
+    margin-bottom: 14px;
+}
+
+.room-display .rd-grid {
+    column-gap: 2ch;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+}
+
+/* ls: one line per project */
+.room-display .rd-grid.is-list {
+    grid-template-columns: 12ch minmax(0, 1fr);
+}
+
+/* neofetch: the visitor's column takes what yassin's leaves */
+.room-display .rd-grid.is-wide {
+    grid-template-columns: 8ch minmax(0, 1fr) max-content;
+}
+
+.room-display .rd-motd {
+    margin-top: 16px;
+}
+
+.room-display .rd-grid-head {
+    color: #fff;
+}
+
+.room-display .rd-grid-value {
+    min-width: 0;
+}
+
+.room-display.rd-term .rd-btn {
+    font-size: 22px;
+    margin-top: 12px;
+    padding: 8px 22px;
+}
+
+.room-display .rd-term-prompt {
+    align-items: baseline;
+    display: none;
+    white-space: pre-wrap;
+}
+
+.room-display.is-shell .rd-term-prompt {
+    display: flex;
+}
+
+.room-display .rd-term-input {
+    background: transparent;
+    caret-color: var(--rd-accent);
+    color: #fff;
+    display: none;
+    flex: 1;
+    font: inherit;
+    margin-left: 1ch;
+    min-width: 0;
+}
+
+.room-display .rd-term-typed {
+    color: #fff;
+    margin-left: 1ch;
+    overflow-wrap: anywhere;
+}
+
+.room-display .rd-term-typed:empty {
+    display: none;
+}
+
+/* a still block cursor while the input isn't taking keys */
+.room-display .rd-term-cursor {
+    align-self: center;
+    background-color: var(--rd-term-text);
+    flex: none;
+    height: 1.05em;
+    margin-left: 1ch;
+    width: 0.6em;
+}
+
+.room-display .rd-term-typed:not(:empty) + .rd-term-cursor {
+    margin-left: 0;
+}
+
+.room-display .rd-term-hint {
+    color: var(--rd-muted);
+    margin-left: 2ch;
+}
+
+.room-display.is-focused .rd-term-input {
+    display: block;
+}
+
+.room-display.is-focused .rd-term-typed,
+.room-display.is-focused .rd-term-cursor,
+.room-display.is-focused .rd-term-hint {
+    display: none;
+}
