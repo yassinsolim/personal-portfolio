@@ -167,10 +167,24 @@ def mug(b, s, desk_y):
 
 
 def card(b, s, desk_y):
+    """a standing tent card: the printed front leans back by tilt, a plain leg holds it up behind"""
     c = s['card']
+    w, h, t = c['w'], c['h'], c['t']
     place = T(c['x'], desk_y, c['z']) @ rot3(yaw=c.get('yaw', 0.0))
-    g = box(c['w'], c['t'], c['d'], skip=('-y',))
-    return Mesh().add(g, place @ T(0, c['t'] / 2, 0), 'card')
+    mesh = Mesh()
+    front = place @ rot3(tilt=c['tilt'])
+    mesh.add(box(w, h, t, skip=('+z', '-y')), front @ T(0, h / 2, -t / 2), 'card_back')
+    face = Geo()
+    for x, y in ((-w / 2, 0.0), (w / 2, 0.0), (w / 2, h), (-w / 2, h)):
+        face.v((x, y, 0.0))
+    face.f((0, 1, 2, 3))
+    mesh.add(face, front, 'card')
+    # the leg hinges at the front panel's top edge and reaches back down to the desk
+    top = rot3(tilt=c['tilt']) @ Vector((0, h, -t))
+    leg_h = top.y / math.cos(math.radians(c['leg']))
+    leg = place @ T(tuple(top)) @ rot3(tilt=180.0 + c['leg'])
+    mesh.add(box(w * 0.96, leg_h, t, skip=('-y',)), leg @ T(0, leg_h / 2, -t / 2), 'card_back')
+    return mesh
 
 
 def build(b):

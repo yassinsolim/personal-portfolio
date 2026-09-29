@@ -88,13 +88,13 @@
   },
   "pad": {"x": 0.35, "z": 0.19, "yaw": 0.0, "w": 0.42, "d": 0.33, "t": 0.004, "r": 0.008, "uv_weight": 0.8},
   "headphones": {
-    "x": -0.53, "z": -0.10, "yaw": 8.0,
+    "x": -0.47, "z": -0.10, "yaw": 8.0,
     "cup": [0.110, 0.088], "cup_d": 0.030, "pad_t": 0.024, "span": 0.176,
     "band_depth": 0.12, "band_w": 0.030, "band_t": 0.012,
     "uv_weight": 2.0
   },
   "mug": {"x": 0.70, "z": 0.08, "r": 0.0425, "h": 0.095, "wall": 0.004, "coffee_gap": 0.014, "handle_yaw": -40.0, "uv_weight": 1.6},
-  "card": {"x": -0.52, "z": 0.10, "yaw": 12.0, "w": 0.105, "d": 0.148, "t": 0.0004, "uv_weight": 14.0},
+  "card": {"x": -0.62, "z": 0.14, "yaw": 23.0, "tilt": -15.0, "leg": 25.0, "w": 0.12, "h": 0.17, "t": 0.0006, "uv_weight": 14.0},
   "flipper_spot": {"x": -0.36, "z": 0.21, "yaw": 20.0, "device": [0.100, 0.040, 0.025], "clear": [0.14, 0.08]},
 
   "chair": {
@@ -156,6 +156,7 @@
     "mug": {"color": "#d8d2c8"},
     "coffee": {"color": "#3b2414"},
     "card": {"color": "#f2f0ea", "kind": "card"},
+    "card_back": {"color": "#e4e1d9"},
     "chair_fabric": {"color": "#34343a"},
     "chair_plastic": {"color": "#232326"},
     "chair_metal": {"color": "#56575c"},
