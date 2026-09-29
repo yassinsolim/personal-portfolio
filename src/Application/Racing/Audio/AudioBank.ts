@@ -1,6 +1,7 @@
 // loads one car's audio sprite (loops + one-shots in a single file) and its
 // manifest. only the car that is being driven gets fetched. opus/webm is
 // tried first, aac/m4a covers browsers that can't decode it.
+import { assetUrl } from '../../Utils/assetUrl';
 
 export type LoopKind = 'idle' | 'on' | 'off' | 'squeal';
 
@@ -105,14 +106,14 @@ export default class AudioBank {
     }
 
     async fetchBank(context: BaseAudioContext, id: string): Promise<AudioBankData | null> {
-        const response = await fetch(`${this.base}${id}.json`);
+        const response = await fetch(assetUrl(`${this.base}${id}.json`));
         if (!response.ok) return null;
         const manifest = (await response.json()) as BankManifest;
         let lastError: unknown = null;
         for (const format of getFormatOrder()) {
             try {
                 const file = manifest.files[format];
-                const audio = await fetch(`${this.base}${file}`);
+                const audio = await fetch(assetUrl(`${this.base}${file}`));
                 if (!audio.ok) throw new Error(`${file}: ${audio.status}`);
                 const data = await audio.arrayBuffer();
                 // decodeAudioData detaches the array buffer, so count first

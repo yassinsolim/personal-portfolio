@@ -1605,3 +1605,48 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     opacity: 0 !important;
     pointer-events: none !important;
 }
+
+/* graphics info: renderer, tier, scale and frame times, with a copy button */
+.graphics-info {
+    margin: 6px 0 10px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.55);
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    max-width: 520px;
+    pointer-events: auto;
+    user-select: text;
+}
+
+.graphics-info-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+}
+
+.graphics-info ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-wrap: anywhere;
+}
+
+.graphics-info p {
+    margin: 0;
+}
+
+.graphics-info.floating {
+    position: fixed;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 30;
+    max-width: min(460px, calc(100vw - 28px));
+    font-size: 10px;
+}

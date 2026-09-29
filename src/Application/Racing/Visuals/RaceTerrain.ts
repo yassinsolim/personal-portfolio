@@ -44,12 +44,30 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
     return t * t * (3 - 2 * t);
 };
 
-// quads per side of a culling tile
-const TILE_QUADS = 40;
+// quads per side of a culling tile, per quality. every size divides by all
+// of LOD_STEPS
+export const TILE_QUADS: Record<TerrainQuality, number> = {
+    high: 40,
+    // 672 m: small enough that most tiles away from the road can go coarse
+    low: 12,
+};
+// the light path draws the visible tiles as one mesh, so smaller tiles
+// don't cost draw calls
+const BATCH_GROUND: Record<TerrainQuality, boolean> = {
+    high: false,
+    low: true,
+};
 // level of detail: grid step per tile by distance from the camera (meters to
-// the tile's box). 40 quads divide by all of these
+// the tile's box)
 const LOD_STEPS = [1, 2, 4];
-const LOD_RANGES = [700, 1600];
+const LOD_RANGES: Record<TerrainQuality, number[]> = {
+    high: [700, 1600],
+    // the light path only draws 1 km
+    low: [400, 700],
+};
+// frustum test slack for the batched ground, so a turning camera never
+// catches a tile the batch left out
+const BATCH_SLACK = 1.15;
 const LOD_CHECK_MS = 250;
 
 type TileRange = { r0: number; c0: number; r1: number; c1: number };
@@ -87,6 +105,19 @@ export default class RaceTerrain {
     root: THREE.Group;
     ground: THREE.Group;
     tiles: Tile[] = [];
+    tileQuads = 40;
+    batched = false;
+    lodRanges = LOD_RANGES.high;
+    // one mesh over the visible tiles, on the light path
+    batch: {
+        mesh: THREE.Mesh;
+        index: THREE.BufferAttribute;
+        visible: Uint8Array;
+        dirty: boolean;
+    } | null = null;
+    frustum = new THREE.Frustum();
+    viewProjection = new THREE.Matrix4();
+    sphere = new THREE.Sphere();
     gridCols = 0;
     tileCols = 0;
     tileRows = 0;
@@ -156,6 +187,9 @@ export default class RaceTerrain {
                       vertexColors: true,
                       emissive: WEAK_SKY_FILL,
                   });
+        this.tileQuads = TILE_QUADS[quality];
+        this.lodRanges = LOD_RANGES[quality];
+        this.batched = BATCH_GROUND[quality];
         yield 'terrain:texture';
         this.ground = yield* this.buildGround(GROUND_CELL[quality]);
         this.skirt = yield* this.buildSkirt();
@@ -311,14 +345,57 @@ export default class RaceTerrain {
     // meets a coarser one its edge vertices snap to the coarser spacing, so
     // both edges run along the same line and nothing cracks open between them
     update(camera: THREE.Camera) {
+        if (!this.tiles.length) return;
         const now = performance.now();
-        if (now - this.lodCheckedAt < LOD_CHECK_MS || !this.tiles.length)
-            return;
-        this.lodCheckedAt = now;
+        if (now - this.lodCheckedAt >= LOD_CHECK_MS) {
+            this.lodCheckedAt = now;
+            this.updateLod(camera);
+        }
+        if (this.batch) this.updateBatch(camera);
+    }
+
+    // the visible tiles' current indices, back to back in the batch. only
+    // uploaded when the set or a tile's level changes
+    updateBatch(camera: THREE.Camera) {
+        const batch = this.batch!;
+        camera.updateMatrixWorld();
+        this.viewProjection.multiplyMatrices(
+            camera.projectionMatrix,
+            camera.matrixWorldInverse
+        );
+        this.frustum.setFromProjectionMatrix(this.viewProjection);
+        let changed = batch.dirty;
+        this.tiles.forEach((tile, i) => {
+            const bounds = tile.mesh.geometry.boundingSphere!;
+            this.sphere.center.copy(bounds.center);
+            this.sphere.radius = bounds.radius * BATCH_SLACK;
+            const seen = this.frustum.intersectsSphere(this.sphere) ? 1 : 0;
+            if (seen !== batch.visible[i]) {
+                batch.visible[i] = seen;
+                changed = true;
+            }
+        });
+        if (!changed) return;
+        batch.dirty = false;
+        const target = batch.index.array as Uint32Array;
+        let n = 0;
+        this.tiles.forEach((tile, i) => {
+            if (!batch.visible[i]) return;
+            const index = tile.mesh.geometry.getIndex()!.array as Uint32Array;
+            target.set(index, n);
+            n += index.length;
+        });
+        batch.mesh.geometry.setDrawRange(0, n);
+        batch.index.clearUpdateRanges();
+        batch.index.addUpdateRange(0, n);
+        batch.index.needsUpdate = true;
+    }
+
+    updateLod(camera: THREE.Camera) {
         const eye = camera.position;
         this.tiles.forEach((tile) => {
             const distance = tile.box.distanceToPoint(eye);
-            let level = LOD_RANGES.findIndex((range) => distance < range);
+            let level = this.lodRanges.findIndex((range) => distance < range);
             if (level < 0) level = LOD_STEPS.length - 1;
             const step = Math.min(tile.cap, fitStep(tile, LOD_STEPS[level]));
             tile.step = step;
@@ -342,6 +419,7 @@ export default class RaceTerrain {
             tile.mesh.geometry.setIndex(
                 this.tileIndex(tile, tile.step, top, bottom, left, right)
             );
+            if (this.batch) this.batch.dirty = true;
         });
     }
 
@@ -575,8 +653,9 @@ export default class RaceTerrain {
         // be frustum culled on its own
         const group = new THREE.Group();
         group.name = 'race-terrain-ground';
-        const tileCols = Math.ceil((cols - 1) / TILE_QUADS);
-        const tileRows = Math.ceil((rows - 1) / TILE_QUADS);
+        const quads = this.tileQuads;
+        const tileCols = Math.ceil((cols - 1) / quads);
+        const tileRows = Math.ceil((rows - 1) / quads);
         this.gridCols = cols;
         this.tileCols = tileCols;
         this.tileRows = tileRows;
@@ -585,10 +664,10 @@ export default class RaceTerrain {
         const point = new THREE.Vector3();
         for (let tr = 0; tr < tileRows; tr++) {
             for (let tc = 0; tc < tileCols; tc++) {
-                const r0 = tr * TILE_QUADS;
-                const c0 = tc * TILE_QUADS;
-                const r1 = Math.min(rows - 1, r0 + TILE_QUADS);
-                const c1 = Math.min(cols - 1, c0 + TILE_QUADS);
+                const r0 = tr * quads;
+                const c0 = tc * quads;
+                const r1 = Math.min(rows - 1, r0 + quads);
+                const c1 = Math.min(cols - 1, c0 + quads);
                 const index = new Uint32Array((r1 - r0) * (c1 - c0) * 6);
                 box.makeEmpty();
                 let n = 0;
@@ -612,7 +691,7 @@ export default class RaceTerrain {
                 const mesh = new THREE.Mesh(tile, this.material);
                 mesh.name = `race-terrain-tile-${tr}-${tc}`;
                 mesh.receiveShadow = true;
-                group.add(mesh);
+                if (!this.batched) group.add(mesh);
                 this.tiles.push({
                     mesh,
                     lodIndex: {},
@@ -633,6 +712,29 @@ export default class RaceTerrain {
         }
         this.capRoadTiles(cell);
         yield 'ground:cap';
+        if (this.batched) {
+            // starts as the whole grid, the first update trims it to the view
+            const index = new THREE.BufferAttribute(all.slice(), 1);
+            index.setUsage(THREE.DynamicDrawUsage);
+            const batch = new THREE.BufferGeometry();
+            batch.setIndex(index);
+            ['position', 'normal', 'color', 'uv'].forEach((name) =>
+                batch.setAttribute(name, geometry.getAttribute(name))
+            );
+            batch.computeBoundingSphere();
+            const mesh = new THREE.Mesh(batch, this.material);
+            mesh.name = 'race-terrain-ground-batch';
+            mesh.receiveShadow = true;
+            // the batch culls its own tiles
+            mesh.frustumCulled = false;
+            group.add(mesh);
+            this.batch = {
+                mesh,
+                index,
+                visible: new Uint8Array(this.tiles.length).fill(1),
+                dirty: true,
+            };
+        }
         return group;
     }
 
@@ -644,7 +746,7 @@ export default class RaceTerrain {
     capRoadTiles(cell: number) {
         const reach = LOD_STEPS[LOD_STEPS.length - 1];
         const field = this.field;
-        const quads = TILE_QUADS;
+        const quads = this.tileQuads;
         this.clearance.forEachSample((x, z) => {
             const col = (x - field.minX) / cell;
             const row = (z - field.minZ) / cell;

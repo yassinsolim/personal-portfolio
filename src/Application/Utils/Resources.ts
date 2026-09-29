@@ -2,15 +2,15 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SameOriginKTX2Loader } from './ktx2';
-import {
-    DRACO_GLTF_CONFIG,
-    DRACOLoader,
-} from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { SameOriginDRACOLoader } from './draco';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import EventEmitter from './EventEmitter';
 import Loading from './Loading';
 import { disableTransmission } from './Transmission';
+import { assetSize, versionLoaderUrls } from './assetUrl';
+import { reportStage } from './loadStages';
+import { afterFrame } from '../Racing/slicing';
 
 // browsers without 'wasm-unsafe-eval' support in CSP block wasm entirely,
 // so draco has to fall back to its asm.js decoder there
@@ -43,13 +43,17 @@ const ktx2Enabled = () => {
 
 // cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs)
 const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.ktx2)\.glb$/.test(path);
-// once a ktx2 car has downloaded, its parse (draco and texture transcode)
-// gets this long before the webp one is loaded instead
+// once a ktx2 car has downloaded and the decoder is known to work, its parse
+// (draco and texture transcode) gets this long before the webp one is
+// loaded instead
 const KTX2_PARSE_TIMEOUT_MS = 15000;
-// and in case the size is unknown and the download never reports done
+// a download (the car, or the transcoder the probe waits for) that never
+// finishes, and a renderer that never arrives
 const KTX2_TOTAL_TIMEOUT_MS = 90000;
-// the probe answers within 5 s, this covers a renderer that never arrives
-const KTX2_READY_TIMEOUT_MS = 8000;
+
+// the frame with the loading screen is presented a frame after it's painted,
+// and the downloads start after that, so nothing they do sits in front of it
+const afterPaint = () => afterFrame().then(afterFrame);
 
 export default class Resources extends EventEmitter {
     sources: Resource[];
@@ -85,61 +89,76 @@ export default class Resources extends EventEmitter {
     // checks the decoder with a tiny texture
     setRenderer(renderer: THREE.WebGLRenderer) {
         if (!this.ktx2Loader || !this.resolveKtx2) return;
-        this.ktx2Loader.detectSupport(renderer);
-        this.ktx2Loader.probe().then(this.resolveKtx2);
+        const ktx2Loader = this.ktx2Loader;
+        const resolve = this.resolveKtx2;
         this.resolveKtx2 = null;
+        ktx2Loader.detectSupport(renderer);
+        // with the downloads, once the loading screen is up
+        void afterPaint().then(() => ktx2Loader.probe().then(resolve));
     }
 
-    // a gltf model, a car as ktx2 when the decoder works. a failed, blocked
-    // or stuck ktx2 load (probe, worker error, parse timeout) falls back to
-    // the webp file, so a decoder problem never holds the page
-    loadModel(path: string, onLoad: (gltf: GLTF) => void, onError: (error: unknown) => void) {
+    // a gltf model, a car as ktx2 when the decoder works. the ktx2 file
+    // downloads while the probe checks the decoder (on a slow connection the
+    // transcoder alone takes seconds), and is parsed once both are in. a
+    // failed, blocked or stuck ktx2 load (probe, worker error, parse timeout)
+    // falls back to the webp file, so a decoder problem never holds the page
+    loadModel(
+        path: string,
+        onLoad: (gltf: GLTF) => void,
+        onError: (error: unknown) => void,
+        onBytes?: (loaded: number) => void
+    ) {
         const loader = this.loaders.gltfLoader;
-        const webp = () => loader.load(path, onLoad, undefined, onError);
+        const progress = onBytes && ((event: ProgressEvent) => onBytes(event.loaded));
+        const webp = () => loader.load(path, onLoad, progress, onError);
         const ktx2Loader = this.ktx2Loader;
-        if (!ktx2Loader || !hasKtx2Twin(path)) {
+        if (!ktx2Loader || ktx2Loader.failed || !hasKtx2Twin(path)) {
             webp();
             return;
         }
-        const ready = Promise.race([
-            this.ktx2Ready,
-            new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), KTX2_READY_TIMEOUT_MS)),
-        ]);
-        void ready.then((ok) => {
-            if (!ok || ktx2Loader.failed) {
-                webp();
-                return;
-            }
-            let done = false;
-            let parseTimer = 0;
-            const fallback = () => {
+        let done = false;
+        let parseTimer = 0;
+        const bytesLoader = new THREE.FileLoader();
+        bytesLoader.setResponseType('arraybuffer');
+        const fallback = () => {
+            if (done) return;
+            done = true;
+            window.clearTimeout(parseTimer);
+            window.clearTimeout(totalTimer);
+            stop();
+            bytesLoader.abort();
+            webp();
+        };
+        const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
+        const stop = ktx2Loader.onFailure(fallback);
+        const url = path.replace(/\.glb$/, '.ktx2.glb');
+        const bytes = new Promise<ArrayBuffer>((resolve, reject) =>
+            bytesLoader.load(url, (data) => resolve(data as ArrayBuffer), progress, reject)
+        );
+        void Promise.all([this.ktx2Ready, bytes]).then(
+            ([ok, data]) => {
                 if (done) return;
-                done = true;
-                window.clearTimeout(parseTimer);
-                window.clearTimeout(totalTimer);
-                stop();
-                webp();
-            };
-            const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
-            const stop = ktx2Loader.onFailure(fallback);
-            loader.load(
-                path.replace(/\.glb$/, '.ktx2.glb'),
-                (gltf) => {
-                    if (done) return;
-                    done = true;
-                    window.clearTimeout(parseTimer);
-                    window.clearTimeout(totalTimer);
-                    stop();
-                    onLoad(gltf);
-                },
-                (event) => {
-                    if (!parseTimer && event.lengthComputable && event.loaded >= event.total) {
-                        parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
-                    }
-                },
-                fallback
-            );
-        });
+                if (!ok || ktx2Loader.failed) {
+                    fallback();
+                    return;
+                }
+                parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
+                loader.parse(
+                    data,
+                    THREE.LoaderUtils.extractUrlBase(url),
+                    (gltf) => {
+                        if (done) return;
+                        done = true;
+                        window.clearTimeout(parseTimer);
+                        window.clearTimeout(totalTimer);
+                        stop();
+                        onLoad(gltf);
+                    },
+                    fallback
+                );
+            },
+            fallback
+        );
     }
 
     constructor(sources: Resource[]) {
@@ -161,20 +180,18 @@ export default class Resources extends EventEmitter {
         this.application = new Application();
         this.loading = this.application.loading;
 
+        versionLoaderUrls();
         this.setLoaders();
-        this.startLoading();
+        // the loading screen is on screen first (two frames, or right away in
+        // a hidden tab), then everything downloads
+        void afterPaint().then(() => this.startLoading());
     }
 
     setLoaders() {
-        // webpack emits the decoders that ship with three, so they can't drift
-        // out of sync with the loader again. the glTF build is the smaller
-        // wasm, but only the default paths include the asm.js fallback
-        const dracoLoader = new DRACOLoader();
-        if (canCompileWasm()) {
-            dracoLoader.setDecoderPath(DRACO_GLTF_CONFIG);
-        } else {
-            dracoLoader.setDecoderConfig({ type: 'js' });
-        }
+        // the build makes the decoder workers from the files that ship with
+        // three, so they can't drift out of sync with the loader. the glTF
+        // wasm build, or asm.js where the policy support blocks wasm
+        const dracoLoader = new SameOriginDRACOLoader(canCompileWasm());
 
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);
@@ -206,27 +223,80 @@ export default class Resources extends EventEmitter {
 
     startLoading() {
         for (const source of this.sources) {
+            this.expectedBytes.set(source.name, this.sizeOf(source));
+        }
+        this.reportDownload();
+        for (const source of this.sources) {
             this.loadSource(
                 source,
                 (file) => this.sourceLoaded(source, file),
-                (error) => this.sourceFailed(source, error)
+                (error) => this.sourceFailed(source, error),
+                (loaded) => {
+                    this.receivedBytes.set(source.name, loaded);
+                    this.reportDownloadSoon();
+                }
             );
         }
+    }
+
+    // loading progress by bytes: what each source should weigh (the build
+    // knows the sizes; cars count as their ktx2 twin when that is tried
+    // first) and what has arrived. models and json report as they stream,
+    // images when they're done. without sizes (dev) it counts sources
+    private expectedBytes = new Map<string, number>();
+    private receivedBytes = new Map<string, number>();
+    private downloadFrame = 0;
+
+    sizeOf(source: Resource) {
+        if (source.type === 'cubeTexture') {
+            return source.path.reduce((sum, face) => sum + assetSize(face), 0);
+        }
+        if (source.type === 'gltfModel' && this.ktx2Loader && hasKtx2Twin(source.path)) {
+            return assetSize(source.path.replace(/\.glb$/, '.ktx2.glb')) || assetSize(source.path);
+        }
+        return assetSize(source.path);
+    }
+
+    reportDownloadSoon() {
+        if (this.downloadFrame) return;
+        this.downloadFrame = window.requestAnimationFrame(() => {
+            this.downloadFrame = 0;
+            this.reportDownload();
+        });
+    }
+
+    reportDownload() {
+        let total = 0;
+        let received = 0;
+        this.expectedBytes.forEach((expected, name) => {
+            total += expected;
+            received += Math.min(expected, this.receivedBytes.get(name) || 0);
+        });
+        const progress = total > 0 ? received / total : this.loaded / Math.max(1, this.toLoad);
+        reportStage('homepage', 'download', this.loaded === this.toLoad ? 1 : Math.min(progress, 0.999), {
+            loaded: this.loaded,
+            total: this.toLoad,
+            bytesLoaded: received,
+            bytesTotal: total,
+        });
     }
 
     // fetches one source with the loader for its type
     loadSource(
         source: Resource,
         onLoad: (file: LoadedResource) => void,
-        onError: (error: unknown) => void
+        onError: (error: unknown) => void,
+        onBytes?: (loaded: number) => void
     ) {
+        const progress = onBytes && ((event: ProgressEvent) => onBytes(event.loaded));
         if (source.type === 'gltfModel') {
-            this.loadModel(source.path, onLoad, onError);
+            this.loadModel(source.path, onLoad, onError, onBytes);
         } else if (source.type === 'texture') {
             this.loaders.textureLoader.load(
                 source.path,
                 (file) => {
                     file.colorSpace = THREE.SRGBColorSpace;
+                    if (source.flipY !== undefined) file.flipY = source.flipY;
                     onLoad(file);
                 },
                 undefined,
@@ -246,7 +316,7 @@ export default class Resources extends EventEmitter {
                         onError(error);
                     }
                 },
-                undefined,
+                progress,
                 onError
             );
         }
@@ -301,6 +371,8 @@ export default class Resources extends EventEmitter {
 
         this.items[source.type][source.name] = file;
         this.loaded++;
+        this.receivedBytes.set(source.name, this.expectedBytes.get(source.name) || 0);
+        this.reportDownload();
 
         this.loading.trigger('loadedSource', [
             source.name,
@@ -324,6 +396,8 @@ export default class Resources extends EventEmitter {
 
         this.failed++;
         this.loaded++;
+        this.receivedBytes.set(source.name, this.expectedBytes.get(source.name) || 0);
+        this.reportDownload();
         this.loading.trigger('failedSource', [
             source.name,
             this.loaded,
