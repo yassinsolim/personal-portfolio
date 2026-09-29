@@ -81,7 +81,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   viewport, faces away, the tab is hidden or the race runs; the displays stop updating the same
   way. Messages from yassinOS (the embed bridge): `yassinos:ready` (fade in over the poster),
   `yassinos:escape`, `yassinos:input` (key and click sounds, `room:osInput`), `yassinos:state`
-  (`room:osState`). `?os=<url>` points m1 at another yassinOS on localhost.
+  (`room:osState`). `?os=<url>` points m1 at another yassinOS (localhost or a lan ip only).
 - The loader docks on m3: `world.screens.get('m3')` (or `'side'`, `'terminal'`) gives the CSS3D
   container, the pose and `focusPose()`; `await world.screens.claimTerminal()` gives the terminal (unclaimed, it switches to the shell when loading ends)
   (`appendLog`, `setMode('boot' | 'shell')`). `world.room.meshes()` lists the room's meshes for

@@ -54,7 +54,11 @@ const DISPLAY_MIN_AREA = 0.02;
 const VISIBILITY_MS = 200;
 const HOVER_MS = 60;
 // yassinOS without the bridge never says ready: fade in this long after load
-const READY_FALLBACK_MS = 1200;
+const READY_FALLBACK_MS = 4000;
+const HELLO_MS = 400;
+// the desktop starts empty in the embed (it matches the poster); m1 opens
+// the portfolio app once it's up, like the site always has
+const START_APP = 'Portfolio';
 const HIGH_TIER_IFRAME_DELAY_MS = 1500;
 const LEAVE_EASE_MS = 900;
 
@@ -275,7 +279,10 @@ export default class Screens {
 
     osSrc() {
         const params = new URLSearchParams(window.location.search);
-        const local = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+        // a dev or lan test server, never the live site
+        const host = window.location.hostname;
+        const local =
+            ['localhost', '127.0.0.1', '[::1]'].includes(host) || /^(192\.168|10)\.\d+\.\d+$/.test(host);
         const query = `embed=1&display=main&protocol=1&wallpaper=span&quality=${this.tier}`;
         const override = local ? params.get('os') : null;
         if (override) return `${override.replace(/\/?$/, '/')}?${query}`;
@@ -325,14 +332,19 @@ export default class Screens {
             pointerEvents: 'none',
         });
         iframe.addEventListener('load', () => {
-            this.postOs({
-                type: 'yassinos:hello',
-                protocol: 1,
-                display: 'main',
-                size: [SCREEN_CSS_SIZE.m1.w, SCREEN_CSS_SIZE.m1.h],
-                tier: this.tier,
-            });
-            this.postOs({ type: this.osVisible ? 'yassinos:resume' : 'yassinos:pause' });
+            // hello until yassinOS answers ready (its listener can start after load)
+            const hello = () => {
+                if (this.iframeReady || this.iframe !== iframe) return;
+                this.postOs({
+                    type: 'yassinos:hello',
+                    protocol: 1,
+                    display: 'main',
+                    size: [SCREEN_CSS_SIZE.m1.w, SCREEN_CSS_SIZE.m1.h],
+                    tier: this.tier,
+                });
+                window.setTimeout(hello, HELLO_MS);
+            };
+            hello();
             window.setTimeout(() => this.markReady(), READY_FALLBACK_MS);
         });
         this.iframe = iframe;
@@ -346,6 +358,12 @@ export default class Screens {
         this.iframe.style.opacity = '1';
         const queued = this.pendingOs;
         this.pendingOs = [];
+        // pausing before ready would hold back what ready waits for (its
+        // clock), so the visibility only goes over from here
+        this.postOs({ type: this.osVisible ? 'yassinos:resume' : 'yassinos:pause' });
+        if (!queued.some((message) => message.type === 'yassinos:open')) {
+            queued.unshift({ type: 'yassinos:open', app: START_APP });
+        }
         queued.forEach((message) => this.postOs(message));
     }
 
@@ -662,7 +680,7 @@ export default class Screens {
                 const visible = !hidden && (focused || area > M1_MIN_AREA);
                 if (visible !== this.osVisible) {
                     this.osVisible = visible;
-                    this.postOs({ type: visible ? 'yassinos:resume' : 'yassinos:pause' });
+                    if (this.iframeReady) this.postOs({ type: visible ? 'yassinos:resume' : 'yassinos:pause' });
                 }
                 return;
             }
