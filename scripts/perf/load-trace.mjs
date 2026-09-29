@@ -91,6 +91,10 @@ const initScript = (events) => {
         perf.iframeCreated = performance.now();
         frame.addEventListener('load', () => (perf.iframeLoaded = performance.now()), { once: true });
     }).observe(document, { childList: true, subtree: true });
+    perf.csp = [];
+    document.addEventListener('securitypolicyviolation', (e) =>
+        perf.csp.push({ directive: e.effectiveDirective, blocked: String(e.blockedURI).slice(0, 80) })
+    );
     const observe = (type, callback, extra = {}) => {
         try {
             new PerformanceObserver((list) => list.getEntries().forEach(callback)).observe({ type, buffered: true, ...extra });
@@ -358,6 +362,7 @@ const loadPage = async (context, url, kind) => {
         network: summarizeNetwork(list),
         requests: list,
         loafs: perf.loafs.filter((l) => l.duration >= 100).slice(0, 40),
+        csp: perf.csp,
         errors,
     };
     return { page, net, result };
@@ -445,6 +450,7 @@ const measureRace = async (page, net) => {
         requests: list,
         loafs: perf.loafs.filter((l) => l.start >= clickSince && l.duration >= 100).slice(0, 40),
         interactions: perf.interactions.filter((i) => i.t >= clickSince - 10),
+        csp: perf.csp,
     };
 };
 

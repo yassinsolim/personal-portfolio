@@ -2,10 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { SameOriginKTX2Loader } from './ktx2';
-import {
-    DRACO_GLTF_CONFIG,
-    DRACOLoader,
-} from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { SameOriginDRACOLoader } from './draco';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import EventEmitter from './EventEmitter';
@@ -44,13 +41,13 @@ const ktx2Enabled = () => {
 
 // cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs)
 const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.ktx2)\.glb$/.test(path);
-// once a ktx2 car has downloaded, its parse (draco and texture transcode)
-// gets this long before the webp one is loaded instead
+// once a ktx2 car has downloaded and the decoder is known to work, its parse
+// (draco and texture transcode) gets this long before the webp one is
+// loaded instead
 const KTX2_PARSE_TIMEOUT_MS = 15000;
-// and in case the size is unknown and the download never reports done
+// a download (the car, or the transcoder the probe waits for) that never
+// finishes, and a renderer that never arrives
 const KTX2_TOTAL_TIMEOUT_MS = 90000;
-// the probe answers within 5 s, this covers a renderer that never arrives
-const KTX2_READY_TIMEOUT_MS = 8000;
 
 export default class Resources extends EventEmitter {
     sources: Resource[];
@@ -91,56 +88,62 @@ export default class Resources extends EventEmitter {
         this.resolveKtx2 = null;
     }
 
-    // a gltf model, a car as ktx2 when the decoder works. a failed, blocked
-    // or stuck ktx2 load (probe, worker error, parse timeout) falls back to
-    // the webp file, so a decoder problem never holds the page
+    // a gltf model, a car as ktx2 when the decoder works. the ktx2 file
+    // downloads while the probe checks the decoder (on a slow connection the
+    // transcoder alone takes seconds), and is parsed once both are in. a
+    // failed, blocked or stuck ktx2 load (probe, worker error, parse timeout)
+    // falls back to the webp file, so a decoder problem never holds the page
     loadModel(path: string, onLoad: (gltf: GLTF) => void, onError: (error: unknown) => void) {
         const loader = this.loaders.gltfLoader;
         const webp = () => loader.load(path, onLoad, undefined, onError);
         const ktx2Loader = this.ktx2Loader;
-        if (!ktx2Loader || !hasKtx2Twin(path)) {
+        if (!ktx2Loader || ktx2Loader.failed || !hasKtx2Twin(path)) {
             webp();
             return;
         }
-        const ready = Promise.race([
-            this.ktx2Ready,
-            new Promise<boolean>((resolve) => window.setTimeout(() => resolve(false), KTX2_READY_TIMEOUT_MS)),
-        ]);
-        void ready.then((ok) => {
-            if (!ok || ktx2Loader.failed) {
-                webp();
-                return;
-            }
-            let done = false;
-            let parseTimer = 0;
-            const fallback = () => {
+        let done = false;
+        let parseTimer = 0;
+        const bytesLoader = new THREE.FileLoader();
+        bytesLoader.setResponseType('arraybuffer');
+        const fallback = () => {
+            if (done) return;
+            done = true;
+            window.clearTimeout(parseTimer);
+            window.clearTimeout(totalTimer);
+            stop();
+            bytesLoader.abort();
+            webp();
+        };
+        const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
+        const stop = ktx2Loader.onFailure(fallback);
+        const url = path.replace(/\.glb$/, '.ktx2.glb');
+        const bytes = new Promise<ArrayBuffer>((resolve, reject) =>
+            bytesLoader.load(url, (data) => resolve(data as ArrayBuffer), undefined, reject)
+        );
+        void Promise.all([this.ktx2Ready, bytes]).then(
+            ([ok, data]) => {
                 if (done) return;
-                done = true;
-                window.clearTimeout(parseTimer);
-                window.clearTimeout(totalTimer);
-                stop();
-                webp();
-            };
-            const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
-            const stop = ktx2Loader.onFailure(fallback);
-            loader.load(
-                path.replace(/\.glb$/, '.ktx2.glb'),
-                (gltf) => {
-                    if (done) return;
-                    done = true;
-                    window.clearTimeout(parseTimer);
-                    window.clearTimeout(totalTimer);
-                    stop();
-                    onLoad(gltf);
-                },
-                (event) => {
-                    if (!parseTimer && event.lengthComputable && event.loaded >= event.total) {
-                        parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
-                    }
-                },
-                fallback
-            );
-        });
+                if (!ok || ktx2Loader.failed) {
+                    fallback();
+                    return;
+                }
+                parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
+                loader.parse(
+                    data,
+                    THREE.LoaderUtils.extractUrlBase(url),
+                    (gltf) => {
+                        if (done) return;
+                        done = true;
+                        window.clearTimeout(parseTimer);
+                        window.clearTimeout(totalTimer);
+                        stop();
+                        onLoad(gltf);
+                    },
+                    fallback
+                );
+            },
+            fallback
+        );
     }
 
     constructor(sources: Resource[]) {
@@ -168,15 +171,10 @@ export default class Resources extends EventEmitter {
     }
 
     setLoaders() {
-        // webpack emits the decoders that ship with three, so they can't drift
-        // out of sync with the loader again. the glTF build is the smaller
-        // wasm, but only the default paths include the asm.js fallback
-        const dracoLoader = new DRACOLoader();
-        if (canCompileWasm()) {
-            dracoLoader.setDecoderPath(DRACO_GLTF_CONFIG);
-        } else {
-            dracoLoader.setDecoderConfig({ type: 'js' });
-        }
+        // the build makes the decoder workers from the files that ship with
+        // three, so they can't drift out of sync with the loader. the glTF
+        // wasm build, or asm.js where the policy support blocks wasm
+        const dracoLoader = new SameOriginDRACOLoader(canCompileWasm());
 
         const gltfLoader = new GLTFLoader();
         gltfLoader.setDRACOLoader(dracoLoader);

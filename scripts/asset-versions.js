@@ -22,8 +22,12 @@ const walk = (dir) =>
           })
         : [];
 
-module.exports = (staticDir) => {
+// extra: files the build emits itself ({ 'draco/x.js': Buffer })
+module.exports = (staticDir, extra = {}) => {
     const versions = {};
+    for (const [key, content] of Object.entries(extra)) {
+        versions[key] = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+    }
     for (const dir of DIRS) {
         for (const file of walk(path.join(staticDir, dir))) {
             if (!EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
