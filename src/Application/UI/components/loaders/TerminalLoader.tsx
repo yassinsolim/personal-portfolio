@@ -28,7 +28,9 @@ import '../../loaders/loaders.css';
 type Tone = 'dim' | 'ok' | 'file' | 'num' | 'warn' | 'err' | 'cmd' | '';
 type Part = [string, Tone?];
 
-const MAX_LINES = 200;
+// more than a tall screen shows; every line kept is laid out again as the
+// log moves up
+const MAX_LINES = 90;
 const COMMAND = './yassin --start';
 
 const stamp = (ms: number) => `[${(ms / 1000).toFixed(3).padStart(7, ' ')}]`;
@@ -36,7 +38,10 @@ const msText = (ms: number) => `${Math.max(0, Math.round(ms))} ms`;
 
 const TerminalLoader: React.FC = () => {
     const logRef = useRef<HTMLDivElement>(null);
-    const [command, setCommand] = useState<string | null>(null);
+    // the prompt line is in the dom from the start; typing writes to it
+    // directly, not through a render per keystroke
+    const promptRef = useRef<HTMLDivElement>(null);
+    const commandRef = useRef<HTMLSpanElement>(null);
     const [phase, setPhase] = useState<'log' | 'wipe' | 'gone'>('log');
 
     useEffect(() => {
@@ -54,6 +59,25 @@ const TerminalLoader: React.FC = () => {
         let finishing = false;
         const timers: number[] = [];
 
+        // lines go into the dom once a frame, so a burst of events costs one
+        // layout, not one each (it adds up on a slow cpu)
+        const queued: HTMLDivElement[] = [];
+        let flushId = 0;
+        const flush = () => {
+            flushId = 0;
+            queued.splice(0).forEach((line) => {
+                // keep the log in time order: events can be reported a little
+                // after they happened (resource timing is queued)
+                const t = Number(line.dataset.t);
+                let before: Element | null = null;
+                for (let node = log.lastElementChild; node; node = node.previousElementSibling) {
+                    if (Number((node as HTMLElement).dataset.t) <= t) break;
+                    before = node;
+                }
+                log.insertBefore(line, before);
+            });
+            while (log.childElementCount > MAX_LINES) log.firstElementChild?.remove();
+        };
         const print = (t: number, parts: Part[]) => {
             const line = document.createElement('div');
             line.className = 'term-line';
@@ -68,15 +92,8 @@ const TerminalLoader: React.FC = () => {
                 span.textContent = text;
                 line.appendChild(span);
             });
-            // keep the log in time order: events can be reported a little
-            // after they happened (resource timing is queued)
-            let before: Element | null = null;
-            for (let node = log.lastElementChild; node; node = node.previousElementSibling) {
-                if (Number((node as HTMLElement).dataset.t) <= t) break;
-                before = node;
-            }
-            log.insertBefore(line, before);
-            while (log.childElementCount > MAX_LINES) log.firstElementChild?.remove();
+            queued.push(line);
+            if (!flushId) flushId = requestAnimationFrame(flush);
         };
 
         const once = (key: string, fn: () => void) => {
@@ -236,6 +253,10 @@ const TerminalLoader: React.FC = () => {
             markIntroSeen();
             timers.push(window.setTimeout(() => setPhase('gone'), reduced ? 220 : 420));
         };
+        const setCommand = (text: string) => {
+            if (promptRef.current) promptRef.current.style.visibility = 'visible';
+            if (commandRef.current) commandRef.current.textContent = text;
+        };
         const startTyping = () => {
             if (typing) return;
             typing = true;
@@ -351,6 +372,7 @@ const TerminalLoader: React.FC = () => {
             eventBus.remove('loading:item', onItem);
             eventBus.remove('loading:stage', onStage);
             timers.forEach((id) => window.clearTimeout(id));
+            if (flushId) cancelAnimationFrame(flushId);
         };
     }, []);
 
@@ -363,13 +385,11 @@ const TerminalLoader: React.FC = () => {
         >
             <div className="term-screen">
                 <div className="term-log" ref={logRef} />
-                {command !== null && (
-                    <div className="term-line term-prompt">
-                        <span className="term-cmd">$ </span>
-                        <span>{command}</span>
-                        <span className="term-caret" />
-                    </div>
-                )}
+                <div className="term-line term-prompt" ref={promptRef} style={{ visibility: 'hidden' }}>
+                    <span className="term-cmd">$ </span>
+                    <span ref={commandRef} />
+                    <span className="term-caret" />
+                </div>
             </div>
         </div>
     );
