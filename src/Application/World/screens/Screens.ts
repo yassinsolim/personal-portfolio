@@ -554,6 +554,7 @@ export default class Screens {
         if (this.raceActive || this.locked || camera.freeCam || this.overlay) return false;
         if (this.application.world.raceTransition?.busy) return false;
         const key = camera.currentKeyframe ?? camera.targetKeyframe;
+        // the flipper's zoom handles its own clicks
         return key === CameraKey.IDLE || key === CameraKey.DESK || key === CameraKey.FOCUS;
     }
 
@@ -708,7 +709,11 @@ export default class Screens {
             ['Widgets, the top screen', () => this.focus('m2')],
             ['Terminal, the side screen', () => this.focus('m3')],
             ['The PC', () => this.focus('pc')],
-            ['Flipper Zero', () => this.focus('flipper')],
+            // the flipper runs its own focus (World/Flipper.ts, the FLIPPER keyframe)
+            ['Flipper Zero', () => {
+                this.backOut(true);
+                this.application.world.flipper?.focus();
+            }],
             ['Race the car on the Nordschleife', () => {
                 this.backOut(true);
                 void this.application.world.raceTransition?.start();

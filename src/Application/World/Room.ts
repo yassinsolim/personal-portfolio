@@ -120,13 +120,4 @@ export default class Room {
             focal: center.clone().add(new THREE.Vector3(0, 0.02 * U, 0)),
         };
     }
-
-    // reserved for the clickable flipper zero: above and in front of it
-    flipperPose() {
-        const spot = this.anchor('flipper_spot');
-        return {
-            position: spot.clone().add(new THREE.Vector3(0.02 * U, 0.3 * U, 0.26 * U)),
-            focal: spot.clone().add(new THREE.Vector3(0, 0.01 * U, 0)),
-        };
-    }
 }

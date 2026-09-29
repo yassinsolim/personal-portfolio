@@ -65,6 +65,11 @@ const keys: { [key in CameraKey]: CameraKeyframe } = {
         ),
         focalPoint: ORBIT_FOCAL.clone(),
     },
+    // placeholder, World/Flipper.ts frames the device from its real size every frame
+    flipper: {
+        position: new THREE.Vector3(-1500, 300, 2000),
+        focalPoint: new THREE.Vector3(-1500, -400, 1300),
+    },
 };
 
 export class FocusKeyframe extends CameraKeyframeInstance {
@@ -155,5 +160,16 @@ export class IdleKeyframe extends CameraKeyframeInstance {
 export class OrbitControlsStart extends CameraKeyframeInstance {
     constructor() {
         super(keys.orbitControlsStart);
+    }
+}
+
+export class FlipperKeyframe extends CameraKeyframeInstance {
+    constructor() {
+        super(keys.flipper);
+    }
+
+    setPose(position: THREE.Vector3, focalPoint: THREE.Vector3) {
+        this.position.copy(position);
+        this.focalPoint.copy(focalPoint);
     }
 }

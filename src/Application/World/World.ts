@@ -68,9 +68,6 @@ export default class World {
             this.car = new Car();
             this.raceTransition = new RaceTransition();
             this.flipper = new Flipper();
-            if (this.flipper.model) {
-                this.screens.addTarget('flipper', this.flipper.model, () => this.room.flipperPose());
-            }
             if (this.room.pc) {
                 this.screens.addTarget('pc', this.room.pc, () => this.room.pcPose());
             }
@@ -222,6 +219,7 @@ export default class World {
     update() {
         this.screens.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
+        if (this.flipper) this.flipper.update();
         if (this.raceManager) this.raceManager.update();
     }
 }

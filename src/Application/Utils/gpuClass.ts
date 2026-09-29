@@ -130,7 +130,9 @@ export type Calibration = {
 // the homepage is far lighter than the race, so one that can't hold about
 // 35 fps means the full race world won't run either
 export const HOME_SLOW_MS = 28;
-const HOME_MIN_FRAMES = 60;
+// the window is 6 s, so a machine under 10 fps still gives a dozen frames.
+// a hidden tab gives none (no frames are drawn, long gaps are dropped)
+const HOME_MIN_FRAMES = 12;
 
 export const calibrate = (found: GpuClass, measured: Calibration): GpuClass => {
     if (found.tier === 'low') return found;
