@@ -914,6 +914,11 @@ body.race-mode-touch #ui-app {
     opacity: 0.5;
 }
 
+.race-menu-credits a {
+    color: inherit;
+    text-decoration: underline;
+}
+
 /* weak gpus and the performance preset: a software compositor pays ~25 ms a
    frame for backdrop blur, so the panels go solid instead */
 .race-lite .race-hud-board,
