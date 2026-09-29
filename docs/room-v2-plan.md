@@ -60,6 +60,22 @@ personal and stay out of the room.
 | Props kept from today | Coffee mug (it has the steam effect), a credits card on the desk | Today's desk credits page moves to a card |
 | Props dropped | Plant, binders, paper tray | Office clutter that isn't his setup |
 
+### Decided for the build (room v2)
+
+Yassin's answers replaced the placeholders. All sizes live in `scripts/room/setup.json`
+(described in `scripts/room/setup.md`); the peripherals research is in `docs/room-v2-peripherals.md`.
+
+| Item | Built |
+|---|---|
+| Monitors | Three identical 27 inch 1440p 16:9 OLEDs, 5 mm bezels, 9 mm chin, slim panel with a rear housing, matte black. Active areas exactly where the blockout has them |
+| Mounts | No stands. M1 on its own single arm, M2 and M3 on one dual arm, both clamped to the desk's back edge: clamp, pole, collar, two links, tilt head, vesa plate on each monitor's housing |
+| Desk | 160 x 80 cm, 74 cm high, matte black top on a black two leg standing frame |
+| PC | Phanteks NV5 on the floor under the desk's right end, inside the right leg, front toward the room, side glass toward the knee space, so the panoramic corner faces the default camera |
+| Chair | Low back, no headrest, pushed back about 0.9 m from the desk and turned 32 degrees toward the PC. Front left spots hide 25 to 45% of the PC glass from the default camera; this one blocks nothing the checks look at (`build_room.py --check`) |
+| Peripherals | Wooting 60HE with its strap, Finalmouse ULX (large) on an Artisan Ninja FX Hien L, Sennheiser HD 599 SE lying on the desk's left side |
+| Props | The coffee mug and a small credits card; no plant or binders. The Flipper Zero spot is an empty for the Flipper agent |
+| Lighting | Studio default: the light grey studio calibrated to RaceReveal's greys, plus cool white light from the screens (6800 K) and the PC's strips and fan rings (7200 K) baked onto the desk, keyboard, pad and floor |
+
 ## 2. Blockout
 
 `scripts/room/blockout.py` builds the setup from flat colored boxes in Blender 5.2 (every size is
@@ -110,6 +126,10 @@ At true scale (site units, y up):
 | Flipper Zero spot | (-995, -925, 580) on the mat, turned 20 degrees | 276 x 69 x 111 |
 | PC centre | (-2569, -2325, 138), front toward the chair, side glass toward -x | 661 x 1318 x 1459 |
 | Car bounds | x -4683 to 8446, y -2995 to 377, z -10493 to -4707 | unchanged |
+
+In the built room (room v2) the PC centre (`anchor_pc`) is at (1727, -2325, 166), under the desk's
+right end, and the Flipper Zero spot (`flipper_spot`, on the desk surface) is at (-995, -939, 580),
+turned 20 degrees. The chair stands at room (0.22, 1.28) m, turned -32 degrees.
 
 What the renders show:
 - From the default camera the setup is small and the car dominates, because the new desk is
@@ -291,6 +311,38 @@ are black; only their light on the desk is baked.
 
 The adaptive resolution and Performance mode caps from #56 apply unchanged; the room adds no
 post effects.
+
+### As built (room v2)
+
+The pipeline is in `scripts/room/` (commands and every `setup.json` key in `scripts/room/setup.md`):
+`build_room.py` with `parts/` (desk, monitors, arms, pc_nv5, keyboard, props, chair, shell, uv,
+materials), `bake.py`, `export.py`, `pack-room.mjs` and `check-room.mjs`. Where it differs from the
+plan above:
+
+- The bake keeps light and colour apart: diffuse light (direct and indirect, no colour) and diffuse
+  colour are baked separately at each tier's final size (128 samples for high, 512 for low), the
+  light is denoised with OIDN through the compositor and multiplied back by the colour, so the
+  credits card's text and part edges stay sharp. 16 px margin. No glossy.
+- The studio is a ceiling sized soft light plus a small key over the setup, with strengths and the
+  floor and wall albedos solved (`bake.py --calibrate`) so the shell matches RaceReveal's greys:
+  the floor ring around the car bakes to srgb (0.714, 0.708, 0.724) against `ROOM_FLOOR`
+  (0.725, 0.72, 0.73) and the walls to (0.627, 0.62, 0.649) against `ROOM_WALL` (0.635, 0.63, 0.65).
+- All three atlases use ETC1S in the ktx2 twins: UASTC came to 5.9 MB for the high tier, and ETC1S
+  at quality 10 decodes within 1/255 on average of the source (6/255 at the 99th percentile) with no
+  visible blocks on the desk top.
+- The baked materials, the leds and the screens carry KHR_materials_unlit; only the glass keeps
+  normals.
+
+Measured with `node scripts/room/check-room.mjs`:
+
+| | High, webp | High, ktx2 | Low, webp | Low, ktx2 |
+|---|---|---|---|---|
+| Triangles | 20,040 | 20,040 | 10,936 | 10,936 |
+| Draws (mesh x material) | 10 | 10 | 10 | 10 |
+| Texture download | 375 KB | 901 KB | 147 KB | 351 KB |
+| Geometry download | 84 KB | 84 KB | 54 KB | 54 KB |
+| File | 468 KB | 993 KB | 209 KB | 413 KB |
+| Texture GPU memory (with mips) | 50 MB (RGBA8) | 6.3 MB | 12.6 MB (RGBA8) | 1.6 MB |
 
 ## 5. Integration
 
