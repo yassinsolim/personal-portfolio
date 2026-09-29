@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import Application from '../../Application';
 import Resources from '../../Utils/Resources';
+import { drain, type Steps } from '../slicing';
 import {
     createAsphaltTextures,
     createConcreteTexture,
@@ -259,7 +260,15 @@ export default class NordschleifeTrack {
     kerbRight: Uint8Array;
     frameHint: number;
 
-    constructor(parent: THREE.Object3D) {
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
+    constructor(parent: THREE.Object3D, defer = false) {
+        this.pending = this.build(parent);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(parent: THREE.Object3D): Steps {
         this.application = new Application();
         this.resources = this.application.resources;
         this.scene = this.application.scene;
@@ -308,6 +317,7 @@ export default class NordschleifeTrack {
             ),
             forest: decodeBase64(data.terrain.forest),
         };
+        yield 'track:data';
 
         const frameCount = FRAME_SAMPLES;
         this.framePoints = new Float32Array(frameCount * 3);
@@ -322,16 +332,26 @@ export default class NordschleifeTrack {
         this.kerbLeft = new Uint8Array(frameCount);
         this.kerbRight = new Uint8Array(frameCount);
         this.buildFrames();
-        this.buildProfiles(data);
+        yield 'track:frames';
+        yield* this.buildProfiles(data);
+        yield 'track:vergeSlopes';
         this.buildKerbZones();
+        yield 'track:kerbZones';
 
         const samples = this.getRibbonSamples();
-        this.visualMesh = this.createRoadMesh(samples);
+        yield 'track:samples';
+        this.visualMesh = yield* this.createRoadMesh(samples);
+        yield 'track:road';
         this.concreteMesh = this.createConcreteMesh();
-        this.vergeMesh = this.createVergeMesh(samples);
-        this.edgeMarkings = this.createEdgeLineMesh(samples);
+        yield 'track:concrete';
+        this.vergeMesh = yield* this.createVergeMesh(samples);
+        yield 'track:verge';
+        this.edgeMarkings = yield* this.createEdgeLineMesh(samples);
+        yield 'track:edges';
         this.kerbMesh = this.createKerbMesh();
+        yield 'track:kerbs';
         this.colliderMesh = this.createColliderMesh();
+        yield 'track:collider';
 
         // each lap long ribbon is cut into map cells so only what's in view
         // is drawn, it used to be the whole 20 km every frame
@@ -344,6 +364,7 @@ export default class NordschleifeTrack {
         ].forEach((mesh) => {
             if (mesh) this.root.add(splitByCell(mesh, RIBBON_CELL));
         });
+        yield 'track:split';
         this.root.add(this.colliderMesh);
         parent.add(this.root);
 
@@ -383,7 +404,7 @@ export default class NordschleifeTrack {
 
     // per frame road width, bank and surface from the section keyframes, each
     // change blended over SECTION_BLEND_METERS
-    buildProfiles(data: TrackAssetData) {
+    *buildProfiles(data: TrackAssetData): Steps {
         const count = FRAME_SAMPLES;
         const spacing = this.length / count;
         // the data's distances are along the raw polyline, the curve is a hair
@@ -455,13 +476,14 @@ export default class NordschleifeTrack {
                 : -Math.sign(curvature) * bank;
             this.frameConcrete[i] = sample(concrete, distance) > 0.5 ? 1 : 0;
         }
-        this.buildVerges(data, scale);
+        yield 'track:profiles';
+        yield* this.buildVerges(data, scale);
     }
 
     // the armco line from osm, linear between its keyframes and kept between
     // VERGE_MIN and VERGE_MAX off the asphalt. unmapped stretches keep the
     // old rule of a VERGE_WIDTH verge
-    buildVerges(data: TrackAssetData, scale: number) {
+    *buildVerges(data: TrackAssetData, scale: number): Steps {
         const count = FRAME_SAMPLES;
         const spacing = this.length / count;
         const keys = data.barriers || [];
@@ -499,7 +521,8 @@ export default class NordschleifeTrack {
                     verge;
             });
         }
-        this.limitVergesNearOtherStretches();
+        yield 'track:verges';
+        yield* this.limitVergesNearOtherStretches();
         // only ever narrows, so every limit above still holds
         const step = VERGE_SLOPE * (this.length / count);
         [this.frameVergeLeft, this.frameVergeRight].forEach((verges) => {
@@ -518,7 +541,7 @@ export default class NordschleifeTrack {
         });
     }
 
-    limitVergesNearOtherStretches() {
+    *limitVergesNearOtherStretches(): Steps {
         const count = FRAME_SAMPLES;
         const points = this.framePoints;
         const cell = 20;
@@ -534,6 +557,7 @@ export default class NordschleifeTrack {
         const apart = Math.round((VERGE_APART / this.length) * count);
         const reach = Math.ceil((VERGE_MAX * 2 + 20) / cell);
         for (let i = 0; i < count; i++) {
+            if (i % 512 === 0) yield 'track:vergeLimits';
             const x = points[i * 3];
             const z = points[i * 3 + 2];
             const cx = Math.floor(x / cell);
@@ -925,7 +949,7 @@ export default class NordschleifeTrack {
     }
 
     // the asphalt texture covers the road's width and 32 m of its length
-    createRoadMesh(samples: number) {
+    *createRoadMesh(samples: number): Generator<string | void, THREE.Mesh, void> {
         const geometry = this.createRibbonGeometry(
             this.visualCurve,
             samples,
@@ -933,6 +957,7 @@ export default class NordschleifeTrack {
             0,
             1 / ASPHALT_REPEAT_METERS
         );
+        yield 'track:roadRibbon';
         const { map, roughnessMap } = createAsphaltTextures();
         map.anisotropy = this.getTextureAnisotropy();
         roughnessMap.anisotropy = this.getTextureAnisotropy();
@@ -962,7 +987,7 @@ export default class NordschleifeTrack {
     // the inner edge is the asphalt's own edge (no lift, so the vertices are
     // the same numbers) and only the outer edge drops. dropping both along a
     // banked normal slid the inner edge sideways and left a hairline gap
-    createVergeMesh(samples: number) {
+    *createVergeMesh(samples: number): Generator<string | void, THREE.Mesh, void> {
         const left = this.createRibbonGeometry(
             this.visualCurve,
             samples,
@@ -970,6 +995,7 @@ export default class NordschleifeTrack {
             [-VERGE_DROP, 0],
             1 / 7
         );
+        yield 'track:vergeLeft';
         const right = this.createRibbonGeometry(
             this.visualCurve,
             samples,
@@ -977,6 +1003,7 @@ export default class NordschleifeTrack {
             [0, -VERGE_DROP],
             1 / 7
         );
+        yield 'track:vergeRight';
         const geometry = this.mergeRibbons([left, right]);
         const grass = createGrassTexture();
         // the verge strip is 3.5 m wide, keep the grass detail about 7 m
@@ -998,7 +1025,7 @@ export default class NordschleifeTrack {
         return mesh;
     }
 
-    createEdgeLineMesh(samples: number) {
+    *createEdgeLineMesh(samples: number): Generator<string | void, THREE.Mesh, void> {
         const inner = (t: number) => this.getRoadHalfWidth(t) - EDGE_LINE_INSET;
         const left = this.createRibbonGeometry(
             this.visualCurve,
@@ -1007,6 +1034,7 @@ export default class NordschleifeTrack {
             MARKING_LIFT,
             0.05
         );
+        yield 'track:edgeLeft';
         const right = this.createRibbonGeometry(
             this.visualCurve,
             samples,
@@ -1014,6 +1042,7 @@ export default class NordschleifeTrack {
             MARKING_LIFT,
             0.05
         );
+        yield 'track:edgeRight';
         const material = new THREE.MeshStandardMaterial({
             color: 0xe8e8e2,
             roughness: 0.6,

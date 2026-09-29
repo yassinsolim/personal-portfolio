@@ -180,10 +180,21 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   as the room's grey; drawing straight to the screen (performance preset) it's the grey itself and
   the plate is a full screen quad over the frame.
 - Hitches: hover prewarms (sky map, post chain, `compileAsync` of the race world in the exact race
-  state including a shadow pass, each program's first use a few a frame, then the textures one a
-  frame); the fly streams the first frames' buffer uploads a batch a frame (`streamStep`, layer 6)
-  and switches to the race resolution at its end. Software GL skips the hover prewarm and compiles
-  behind the car, where the picture is still.
+  state in batches of 6 materials, a shadow pass per caster material, each program's first use a
+  few a frame, then the textures one a frame); the fly streams the first frames' buffer uploads a
+  batch a frame (`streamStep`, layer 6) and switches to the race resolution at its end. Software
+  GL skips the hover prewarm and compiles behind the car, where the picture is still.
+- The race world builds a slice a frame (`Racing/slicing.ts`): the heavy constructors take a
+  `defer` flag and keep their work in a `pending` generator that yields between pieces (`drain`
+  runs it at once, which is what tests and plain `new` get). `World.ensureRaceManager` runs it
+  with `slice`, about 8 ms per task right after a frame, so hovering the car has no long task.
+  Keep new build work behind a `yield`, and keep GPU work in small pieces too: a big batch of
+  compiles or a canvas resize stalls the next frame on the GPU process. Adaptive resolution is
+  held while the build and prewarm run, while the pointer is on the car and through the
+  transition (`Renderer.holdResolution`): the build's slower frames would drop it, the room's
+  climb back to full resolution can land mid hover or mid fly, and each resize is itself a 50 to
+  75 ms stall. `window.__raceBuildSteps = {}` before the hover collects the longest run of each
+  named step.
 - Garage looks: the room car is resprayed toward the saved paint and finish during the fly
   (uniforms only); rims and body kits cross-fade with the car.
 - Any key or click skips straight to the race. prefers-reduced-motion: no rock or fly, a 0.45 s

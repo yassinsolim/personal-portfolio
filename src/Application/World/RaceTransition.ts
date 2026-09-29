@@ -85,6 +85,7 @@ export default class RaceTransition {
         }[];
     } | null = null;
     private lookMatrix: THREE.Matrix4;
+    private releaseResolution: (() => void) | null = null;
 
     constructor() {
         this.application = new Application();
@@ -130,6 +131,8 @@ export default class RaceTransition {
             if (over === this.hovering) return;
             this.hovering = over;
             document.body.style.cursor = over ? 'pointer' : '';
+            if (over) this.holdResolution();
+            else if (!this.busy) this.letResolutionGo();
             // building the ring takes most of a second on the main thread, so
             // start it on hover and the click doesn't have to wait. then the
             // race programs compile in the background
@@ -173,6 +176,21 @@ export default class RaceTransition {
             materials.forEach((original, mesh) => (mesh.material = original));
         }
         target.dispose();
+    }
+
+    // the room's resolution stays put while the pointer is on the car and
+    // through the transition. a change resizes the canvas, which stalls
+    // that frame on the gpu for 50 ms or more
+    holdResolution() {
+        if (this.releaseResolution) return;
+        void this.application.renderer.holdResolution(
+            new Promise<void>((resolve) => (this.releaseResolution = resolve))
+        );
+    }
+
+    letResolutionGo() {
+        this.releaseResolution?.();
+        this.releaseResolution = null;
     }
 
     canStart() {
@@ -223,6 +241,7 @@ export default class RaceTransition {
         this.busy = true;
         this.skipped = false;
         this.joining = false;
+        this.holdResolution();
         mark('start');
         document.body.style.cursor = '';
         // the monitor's iframe stops taking clicks until the race is up, so a
@@ -865,6 +884,7 @@ export default class RaceTransition {
         }
         this.keepRoomGrain(false);
         this.busy = false;
+        this.letResolutionGo();
         window.removeEventListener('keydown', this.skipHandler, true);
         window.removeEventListener('pointerdown', this.skipHandler, true);
         this.returnFocus();
