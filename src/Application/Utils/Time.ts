@@ -20,7 +20,9 @@ export default class Time extends EventEmitter {
             this.tick();
         });
 
-        UIEventBus.on('loadingScreenDone', () => {
+        // keepClock: the idle camera was already moving under the loading screen
+        UIEventBus.on('loadingScreenDone', (data?: { keepClock?: boolean }) => {
+            if (data?.keepClock) return;
             this.start = performance.now();
             this.current = this.start;
             this.delta = 16;
