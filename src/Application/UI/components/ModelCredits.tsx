@@ -1,7 +1,13 @@
 import React from 'react';
 import { MODEL_CREDITS } from '../../modelCredits';
 
-const External = ({ href, children }: { href: string; children: React.ReactNode }) => (
+const External = ({
+    href,
+    children,
+}: {
+    href: string;
+    children: React.ReactNode;
+}) => (
     <a href={href} rel="noreferrer noopener" target="_blank">
         {children}
     </a>
@@ -17,19 +23,25 @@ const ModelCredits = () => (
                 <li key={credit.usedFor}>
                     {credit.usedFor}:{' '}
                     {credit.sourceUrl ? (
-                        <External href={credit.sourceUrl}>"{credit.title}"</External>
+                        <External href={credit.sourceUrl}>
+                            "{credit.title}"
+                        </External>
                     ) : (
                         <>"{credit.title}"</>
                     )}{' '}
                     by{' '}
                     {credit.authorUrl ? (
-                        <External href={credit.authorUrl}>{credit.author}</External>
+                        <External href={credit.authorUrl}>
+                            {credit.author}
+                        </External>
                     ) : (
                         credit.author
                     )}
                     ,{' '}
                     {credit.license ? (
-                        <External href={credit.license.url}>{credit.license.label}</External>
+                        <External href={credit.license.url}>
+                            {credit.license.label}
+                        </External>
                     ) : (
                         'source and license unknown'
                     )}
