@@ -377,6 +377,8 @@ export default class Screens {
                         focused: typeof data.focused === 'string' ? data.focused : null,
                     };
                     UIEventBus.dispatch('room:osState', this.osState);
+                    // the displays listen for the bridge's own name
+                    UIEventBus.dispatch('yassinos:state', this.osState);
                     break;
             }
         });
