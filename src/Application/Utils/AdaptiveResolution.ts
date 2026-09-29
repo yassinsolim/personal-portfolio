@@ -5,8 +5,14 @@
 
 const WINDOW_MS = 1000;
 const MIN_FRAMES = 20;
-// longer frames are loading, shader compiles, or tab switches, not steady load
+// longer frames are loading, shader compiles, or tab switches, not steady load,
+// unless they keep coming: this many in a row is a machine that's just slow
 const HITCH_MS = 250;
+const SLOW_RUN = 4;
+// a slow machine may not fit MIN_FRAMES in a window, so after this long a
+// window closes with whatever it has
+const SLOW_WINDOW_MS = 3000;
+const SLOW_MIN_FRAMES = 4;
 const TRIM = 0.1;
 const LOW = 0.92;
 const HIGH = 0.97;
@@ -47,6 +53,7 @@ export default class AdaptiveResolution {
     private floor: number;
     private floorUntil: number;
     private floorMs: number;
+    private longRun = 0;
 
     constructor(min: number, max: number, start: number, targetFps = 60) {
         this.min = min;
@@ -99,17 +106,24 @@ export default class AdaptiveResolution {
 
     // feed every frame; returns the new ratio when it should change
     frame(intervalMs: number, now: number): number | null {
-        if (!(intervalMs > 0) || intervalMs > HITCH_MS) {
-            this.intervals = [];
-            this.windowStart = now;
-            return null;
-        }
+        if (!(intervalMs > 0)) return null;
+        if (intervalMs > HITCH_MS) {
+            this.longRun++;
+            if (this.longRun < SLOW_RUN) {
+                this.intervals = [];
+                this.windowStart = now;
+                return null;
+            }
+        } else this.longRun = 0;
         if (this.windowStart < 0) this.windowStart = now - intervalMs;
         this.intervals.push(intervalMs);
         const elapsed = now - this.windowStart;
-        if (elapsed < WINDOW_MS || this.intervals.length < MIN_FRAMES) {
-            return null;
-        }
+        const full =
+            elapsed >= WINDOW_MS && this.intervals.length >= MIN_FRAMES;
+        const slowFull =
+            elapsed >= SLOW_WINDOW_MS &&
+            this.intervals.length >= SLOW_MIN_FRAMES;
+        if (!full && !slowFull) return null;
 
         const sorted = this.intervals.slice().sort((a, b) => a - b);
         const kept = sorted.slice(0, Math.ceil(sorted.length * (1 - TRIM)));
