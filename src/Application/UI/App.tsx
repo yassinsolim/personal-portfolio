@@ -4,6 +4,7 @@ import LoadingScreen from './components/LoadingScreen';
 import TerminalLoader from './components/loaders/TerminalLoader';
 import MonitorLoader from './components/loaders/MonitorLoader';
 import PipelineLoader from './components/loaders/PipelineLoader';
+import HybridLoader from './components/loaders/HybridLoader';
 import { loaderVariant } from './loaders/variant';
 import { isWebGLAvailable } from '../Utils/webgl';
 import InterfaceUI from './components/InterfaceUI';
@@ -251,6 +252,7 @@ const Loader = () => {
     if (variant === 'terminal') return <TerminalLoader />;
     if (variant === 'monitor') return <MonitorLoader />;
     if (variant === 'pipeline') return <PipelineLoader />;
+    if (variant === 'hybrid') return <HybridLoader />;
     return <LoadingScreen />;
 };
 

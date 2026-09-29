@@ -1,6 +1,6 @@
-// which loading screen runs: ?loader=monitor|terminal|pipeline, today's
+// which loading screen runs: ?loader=monitor|terminal|pipeline|hybrid, today's
 // bios screen otherwise. the three are prototypes to pick from
-export type LoaderVariant = 'bios' | 'monitor' | 'terminal' | 'pipeline';
+export type LoaderVariant = 'bios' | 'monitor' | 'terminal' | 'pipeline' | 'hybrid';
 
 let cached: LoaderVariant | null = null;
 
@@ -13,7 +13,7 @@ export const loaderVariant = (): LoaderVariant => {
         value = '';
     }
     cached =
-        value === 'monitor' || value === 'terminal' || value === 'pipeline'
+        value === 'monitor' || value === 'terminal' || value === 'pipeline' || value === 'hybrid'
             ? value
             : 'bios';
     return cached;

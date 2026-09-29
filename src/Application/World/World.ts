@@ -76,6 +76,15 @@ export default class World {
         const variant = loaderVariant();
         if (variant === 'monitor') this.intro = new MonitorIntro();
         if (variant === 'pipeline') this.intro = new PipelineIntro();
+        if (variant === 'hybrid') {
+            // the terminal is on the monitor until the room is live; yassinOS
+            // loads after that, so it can't take focus or bandwidth meanwhile
+            MonitorScreen.deferLoad = true;
+            this.intro = new PipelineIntro({
+                ownsMonitor: false,
+                onRelease: (catchUpMs) => UIEventBus.dispatch('hybrid:workDone', { catchUpMs }),
+            });
+        }
     }
 
     bindRaceManagerLoader() {
