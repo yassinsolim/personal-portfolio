@@ -12,6 +12,7 @@ import Time from './Utils/Time';
 import AdaptiveResolution from './Utils/AdaptiveResolution';
 import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
 import FrameStats from './Utils/FrameStats';
+import { calibrate, classifyGpu, readRenderer } from './Utils/gpuClass';
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -53,6 +54,14 @@ export default class Renderer {
     sceneMaxPixelRatio: number;
     keepGrain = false;
     private resolutionHolds = 0;
+    // what the race decided, for the graphics info panel
+    raceGraphics: {
+        tier: string;
+        reason: string;
+        forced: boolean;
+        preset: string;
+        autoStep: number;
+    } | null;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -81,6 +90,7 @@ export default class Renderer {
         this.sceneRender = null;
         this.sceneResize = null;
         this.sceneMaxPixelRatio = Infinity;
+        this.raceGraphics = null;
         this.debugEnabled = new URLSearchParams(window.location.search).has(
             'debugGame'
         );
@@ -93,6 +103,56 @@ export default class Renderer {
             this.frameStats.watchHome(HOME_CALIBRATION_MS)
         );
         this.setupQualityListeners();
+        UIEventBus.on('graphics:requestInfo', () =>
+            UIEventBus.dispatch('graphics:info', this.graphicsInfo())
+        );
+    }
+
+    // everything that says why this machine renders the way it does, for the
+    // graphics info panel and its copy button
+    graphicsInfo() {
+        const gl = this.instance.getContext();
+        const { renderer, vendor } = readRenderer(gl);
+        const nav = navigator as Navigator & { deviceMemory?: number };
+        const home = this.frameStats.home;
+        const detected = calibrate(
+            classifyGpu({
+                renderer,
+                vendor,
+                cores: nav.hardwareConcurrency,
+                memoryGb: nav.deviceMemory,
+                mobile: this.mobileDevice,
+            }),
+            { homeP50: home.percentile(0.5), homeFrames: home.count }
+        );
+        const stats = this.frameStats.summary(120);
+        const round = (value: number | null) =>
+            value === null ? null : Math.round(value * 10) / 10;
+        return {
+            renderer,
+            vendor,
+            kind: detected.kind,
+            detectedTier: detected.tier,
+            reason: detected.reason,
+            homeP50: home.count ? round(home.percentile(0.5)) : null,
+            race: this.raceGraphics,
+            mode: this.renderMode,
+            renderScale: Math.round(this.getPixelRatio() * 1000) / 1000,
+            buffer: `${gl.drawingBufferWidth}x${gl.drawingBufferHeight}`,
+            viewport: `${this.sizes.width}x${this.sizes.height}`,
+            devicePixelRatio: window.devicePixelRatio,
+            cores: nav.hardwareConcurrency || null,
+            memoryGb: nav.deviceMemory ?? null,
+            frameP50: round(stats.frameP50),
+            frameP95: round(stats.frameP95),
+            frameP99: round(stats.frameP99),
+            cpuP50: round(stats.cpuP50),
+            gpuP50: round(stats.gpuP50),
+            gpuTimer: this.frameStats.hasGpuTimer,
+            bound: stats.bound,
+            drawCalls: this.instance.info.render.calls,
+            userAgent: navigator.userAgent,
+        };
     }
 
     setInstance() {

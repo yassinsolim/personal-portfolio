@@ -373,6 +373,13 @@ export default class RaceVisuals {
             this.preset = preset;
             UIEventBus.dispatch('race:preset', { preset });
         }
+        this.application.renderer.raceGraphics = {
+            tier: this.settingsTier(),
+            reason: this.gpu.reason,
+            forced: this.gpu.forced,
+            preset,
+            autoStep: this.autoStep,
+        };
     }
 
     enter() {
