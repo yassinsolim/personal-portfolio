@@ -609,12 +609,16 @@ export default class MonitorScreen extends EventEmitter {
             return;
         }
 
-        this.monitorContainer.style.clipPath = 'none';
-        this.monitorContainer.style.visibility = 'visible';
-        this.monitorContainer.style.opacity = '1';
+        // every frame, so only touch the dom when something else changed it
+        const container = this.monitorContainer.style;
         const pointer = this.iframeTakesPointer(Boolean(this.monitorCssObject?.visible));
-        this.monitorContainer.style.pointerEvents = pointer;
-        this.monitorIframe.style.pointerEvents = pointer;
+        if (container.clipPath !== 'none') container.clipPath = 'none';
+        if (container.visibility !== 'visible') container.visibility = 'visible';
+        if (container.opacity !== '1') container.opacity = '1';
+        if (container.pointerEvents !== pointer) container.pointerEvents = pointer;
+        if (this.monitorIframe.style.pointerEvents !== pointer) {
+            this.monitorIframe.style.pointerEvents = pointer;
+        }
         if (this.monitorOcclusionPlane) {
             this.monitorOcclusionPlane.visible = true;
         }
