@@ -22,6 +22,12 @@ export const assetUrl = (url: string) => {
     return version ? `${url}?v=${version}` : url;
 };
 
+const sizes: Record<string, number> =
+    typeof __ASSET_SIZES__ !== 'undefined' ? __ASSET_SIZES__ : {};
+
+// the size of a static file the build knows, 0 when it doesn't (dev)
+export const assetSize = (path: string) => sizes[path.replace(/^\.?\//, '')] || 0;
+
 // every three.js loader on the default manager (models, textures, the ktx2
 // transcoder, json) asks it for the url it fetches
 export const versionLoaderUrls = () => {

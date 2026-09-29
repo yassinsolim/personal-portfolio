@@ -6,6 +6,8 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 const assetVersions = require('../scripts/asset-versions.js')
 const dracoWorker = require('../scripts/draco-worker.js')
 
+const assets = assetVersions(path.resolve(__dirname, '../static'), dracoWorker())
+
 module.exports = merge(
     commonConfiguration,
     {
@@ -14,9 +16,11 @@ module.exports = merge(
         plugins:
         [
             new CleanWebpackPlugin(),
-            // content hashes of the static files, for their ?v= urls
+            // content hashes of the static files, for their ?v= urls, and
+            // their sizes, for loading progress
             new webpack.DefinePlugin({
-                __ASSET_VERSIONS__: JSON.stringify(assetVersions(path.resolve(__dirname, '../static'), dracoWorker())),
+                __ASSET_VERSIONS__: JSON.stringify(assets.versions),
+                __ASSET_SIZES__: JSON.stringify(assets.sizes),
             }),
         ]
     }

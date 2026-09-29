@@ -125,6 +125,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - No service worker, on purpose: a repeat visit is already one 304 for the HTML (plus the yassinOS
   iframe's own requests). A worker would only save that round trip, and could serve a stale shell
   after a deploy.
+- Loading progress for a loader: `Utils/loadStages.ts` reports each step as a `load:stage` event on
+  the UI bus (`{ scope, stage, progress, done, loaded, total, bytesLoaded, bytesTotal }`) and a
+  `load:<scope>:<stage>` performance mark; `currentStage(scope)` serves a loader that mounts late.
+  Homepage: `download` (by bytes, from the build's `__ASSET_SIZES__`; models and json stream,
+  images count when they finish, dev counts sources), `upload`, `compile`, `ready`. Race:
+  `download`, `build`, then the transition's phases (`start`, `fly`, `settled`, `handoff`,
+  `reveal`, `done`). The BIOS screen still counts sources; a new loader should use these.
+- The room isn't drawn until its textures are on the gpu (one a frame) and its programs have
+  compiled in parallel (`World.warmUp`, `compileAsync`, capped at 4 s), and the loading screen waits
+  for `ready`. The first frame used to hold the main thread for about a second (synchronous
+  program links and 4k uploads).
 - Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
   (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
   `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149
