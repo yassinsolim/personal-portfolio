@@ -90,7 +90,7 @@ def shell_floor_uv(obj, setup):
 
 
 def card_uv(obj):
-    """CardUV: the card's top face to 0..1, text upright for someone at the chair (+z)"""
+    """CardUV: the printed face (material 'card') to 0..1, text upright for someone facing it"""
     me = obj.data
     layer = me.uv_layers.get('CardUV') or me.uv_layers.new(name='CardUV')
     main = me.uv_layers.get('UVMap')
@@ -98,20 +98,19 @@ def card_uv(obj):
         me.uv_layers.active = main
         main.active_render = True
     mw = obj.matrix_world
-    top = max(me.polygons, key=lambda p: (mw.to_3x3() @ p.normal).z)
+    printed = next(i for i, m in enumerate(me.materials) if m and m.get('key') == 'card')
+    top = max((p for p in me.polygons if p.material_index == printed), key=lambda p: p.area)
     xs = [(mw @ me.vertices[i].co) for i in top.vertices]
     c = sum(xs, Vector()) / len(xs)
-    # pick the longest top edge direction as the card's depth (reading) axis
-    edges = [(xs[(i + 1) % len(xs)] - xs[i]) for i in range(len(xs))]
-    depth = max(edges, key=lambda e: e.length).normalized()
-    if depth.y < 0:
-        depth = -depth
-    across = depth.cross(Vector((0, 0, 1))).normalized()
+    n = (mw.to_3x3() @ top.normal).normalized()
+    up = Vector((0, 0, 1))
+    up = (up - n * up.dot(n)).normalized()
+    across = up.cross(n).normalized()
     w = max(abs((p - c).dot(across)) for p in xs) * 2
-    d = max(abs((p - c).dot(depth)) for p in xs) * 2
+    d = max(abs((p - c).dot(up)) for p in xs) * 2
     for li, vi in zip(top.loop_indices, top.vertices):
         p = mw @ me.vertices[vi].co - c
-        layer.data[li].uv = (0.5 + p.dot(across) / w, 0.5 + p.dot(depth) / d)
+        layer.data[li].uv = (0.5 + p.dot(across) / w, 0.5 + p.dot(up) / d)
     for poly in me.polygons:
         if poly.index != top.index:
             for li in poly.loop_indices:
@@ -186,8 +185,13 @@ def unwrap(objs, setup, atlas, size):
         bm.from_mesh(me)
         layer = bm.loops.layers.uv['UVMap']
         mw3 = o.matrix_world.to_3x3()
+        printed = None
+        if o.get('uv_mode') == 'card':
+            printed = next(i for i, m in enumerate(me.materials) if m and m.get('key') == 'card')
         for isl in islands(bm, layer, bm.faces):
             w = float(o.get('uv_weight', 1.0))
+            if printed is not None and all(f.material_index != printed for f in isl):
+                w = 1.0  # only the printed face needs the extra texels
             area = sum(f.calc_area() for f in isl)
             n = sum(((mw3 @ f.normal) * f.calc_area() for f in isl), Vector()) / max(area, 1e-12)
             if o.get('uv_mode') == 'shell':

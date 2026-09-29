@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-the small credits card that lies on the room v2 desk. the text is the desk
-credits page from scripts/build-room-textures.py (imported, so there's one
-copy of the credits), set in the same typewriter layout on a card.
+the small standing credits card on the room v2 desk, in the typewriter
+layout of the old desk credits page. the title, closing lines and fonts come
+from scripts/build-room-textures.py; the credits are room v2's own (the old
+computer and environment models are gone), set large enough to read from the
+desk view.
 
 usage: python3 scripts/room/card_texture.py --out <png> [--repo .]
 """
@@ -11,6 +13,21 @@ import importlib.util
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
+
+CREDITS = [
+    ('DEVELOPMENT', [
+        ('Yassin Soliman', '2025 - 2026'),
+        ('Henry Heffernan', 'Original, 2022'),
+        ('Dustin Brett', 'daedalOS, the OS base'),
+    ]),
+    ('SOUND DESIGN & MUSIC', [('Henry Heffernan', 'Sound & Music')]),
+    ('MODELING', [
+        ('Yassin Soliman', 'Room v2 setup'),
+        ('Henry Heffernan', 'Studio backdrop'),
+        ('Sketchfab Artists', 'Car models'),
+    ]),
+    ('BUILT WITH', [('Three.js', '3D rendering'), ('React', 'Interface')]),
+]
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--out', required=True)
@@ -25,39 +42,43 @@ spec.loader.exec_module(rt)
 W = args.width
 H = round(W * 148 / 105)  # a6 card, 105 x 148 mm
 PAPER = (242, 240, 234)
-INK = (58, 56, 54)
+INK = (44, 42, 40)
 
 img = Image.new('RGB', (W, H), PAPER)
 ink = Image.new('L', (W, H), 0)
 draw = ImageDraw.Draw(ink)
 s = W / 1050
-left, right, center = 110 * s, W - 110 * s, W / 2
-lines = 2 + sum(1 + len(entries) for _, entries in rt.CREDITS) + len(rt.CREDITS_CLOSING)
-size = 30 * s
-face = rt.font(rt.TYPEWRITER, size)
+left, right, center = 90 * s, W - 90 * s, W / 2
+face = rt.font(rt.TYPEWRITER, 38 * s)
+
+# every row has to fit between the margins with a gap between name and role
+for _, entries in CREDITS:
+    for name, role in entries:
+        if face.getlength(name) + face.getlength(role) + 40 * s > right - left:
+            raise SystemExit(f'credits row too wide: {name} / {role}')
 
 
 def line(text, x, y, anchor):
-    draw.text((x, y), text, font=face, fill=255, anchor=anchor, stroke_width=max(1, round(s)), stroke_fill=255)
+    draw.text((x, y), text, font=face, fill=255, anchor=anchor, stroke_width=max(1, round(1.5 * s)), stroke_fill=255)
 
 
-y = 150 * s
+y = 140 * s
 line(rt.CREDITS_TITLE, center, y, 'ms')
-y += 58 * s
+y += 64 * s
 line('CREDITS', center, y, 'ms')
-y += 110 * s
-for header, entries in rt.CREDITS:
+y += 100 * s
+for header, entries in CREDITS:
     line(header, center, y, 'ms')
-    y += 46 * s
+    y += 54 * s
     for name, role in entries:
         line(name, left, y, 'ls')
         line(role, right, y, 'rs')
-        y += 38 * s
-    y += 74 * s
-y = H - 150 * s
+        y += 48 * s
+    y += 70 * s
+y = H - 140 * s
 for text in rt.CREDITS_CLOSING:
     line(text, center, y, 'ms')
-    y += 42 * s
+    y += 50 * s
 
 soft = ink.filter(ImageFilter.GaussianBlur(0.5 * s))
 img.paste(Image.new('RGB', (W, H), INK), (0, 0), soft)
