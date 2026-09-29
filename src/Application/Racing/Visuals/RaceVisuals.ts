@@ -7,6 +7,7 @@ import RaceAtmosphere from './RaceAtmosphere';
 import RacePostProcessing from './RacePostProcessing';
 import {
     detectGpuTier,
+    isSoftwareGl,
     resolvePreset,
     settingsFor,
     type GpuTier,
@@ -20,12 +21,9 @@ import RaceTracksideExtras from './RaceTracksideExtras';
 import Sparks from '../Effects/Sparks';
 import SkidMarks from '../Effects/SkidMarks';
 import { useCheapMaterials } from './cheapMaterials';
-import {
-    applyReveal,
-    applyRevealTo,
-    createRevealUniforms,
-    type RevealUniforms,
-} from './reveal';
+import { applyRevealTo, applySkyReveal } from './reveal';
+import RaceReveal from './RaceReveal';
+import { afterFrame, drain, slice, type Steps } from '../slicing';
 
 // everything race mode looks like: sky and light, the land around the road,
 // sparks and skid marks, and the post chain it all renders through. the room
@@ -33,8 +31,12 @@ import {
 const EXPOSURE = 0.95;
 // the sky probe is bright, at full strength it washes the woods out
 const ENVIRONMENT_INTENSITY = 0.6;
-const REVEAL_SECONDS = 3.2;
-const REVEAL_DISTANCE = 2600;
+// streaming the race world's uploads: a spare layer (1 is the collider, 3
+// the trees' shadow casters) and meshes per frame
+const UPLOAD_LAYER = 6;
+const UPLOAD_BATCH = 24;
+// materials per program compile while prewarming
+const COMPILE_BATCH = 6;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -56,6 +58,9 @@ export default class RaceVisuals {
     renderMode: RenderMode;
     effectsLow: boolean;
     tier: GpuTier;
+    // software gl: shader compiles take seconds, the transition does them
+    // where nothing on screen moves
+    software: boolean;
     preset: RacePreset | null;
     settings: PresetSettings;
     saved: {
@@ -64,44 +69,74 @@ export default class RaceVisuals {
         environment: THREE.Texture | null;
         environmentIntensity: number;
     } | null;
-    reveal: RevealUniforms;
-    revealPending: boolean;
-    revealTime: number;
+    raceRoot: THREE.Object3D;
+    reveal: RaceReveal;
+    prewarming: Promise<void> | null = null;
+    private prewarmKey = '';
+    private uploads: {
+        camera: THREE.PerspectiveCamera;
+        textures: THREE.Texture[];
+        batches: THREE.Mesh[][];
+    } | null = null;
+    private uploadTarget: THREE.WebGLRenderTarget | null = null;
+    private texturesSent = new WeakSet<THREE.Texture>();
+    private revealBackground: THREE.Color;
     private wheelContact: THREE.Vector3;
     private wheelUp: THREE.Vector3;
     private away: THREE.Vector3;
     private light: THREE.Color;
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         track: NordschleifeTrack,
-        vehicle: RaceVehicle
+        vehicle: RaceVehicle,
+        defer = false
     ) {
+        this.pending = this.build(parent, track, vehicle);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(
+        parent: THREE.Object3D,
+        track: NordschleifeTrack,
+        vehicle: RaceVehicle
+    ): Steps {
         this.application = new Application();
         this.scene = this.application.scene;
         this.track = track;
         this.vehicle = vehicle;
+        this.raceRoot = parent;
         this.root = new THREE.Group();
         this.root.name = 'race-visuals';
         parent.add(this.root);
         this.tier = detectGpuTier(
             this.application.renderer.instance.getContext()
         );
+        this.software = isSoftwareGl(this.application.renderer.instance.getContext());
         this.preset = null;
         this.settings = settingsFor(this.getPreset(), this.tier);
         // tree count is set once at build time, from the gpu tier
         const lite = this.tier === 'low';
         this.atmosphere = new RaceAtmosphere(this.root);
-        this.terrain = new RaceTerrain(this.root, track, lite ? 'low' : 'high');
+        yield 'visuals:atmosphere';
+        this.terrain = new RaceTerrain(this.root, track, lite ? 'low' : 'high', true);
+        yield* this.terrain.pending;
         this.forest = new RaceForest(
             this.root,
             this.application.renderer.instance,
             track,
             this.terrain,
-            lite ? 'low' : 'high'
+            lite ? 'low' : 'high',
+            true
         );
-        this.trackside = new RaceTrackside(this.root, track, lite);
-        this.extras = new RaceTracksideExtras(this.root, track, this.terrain, lite);
+        yield* this.forest.pending;
+        this.trackside = new RaceTrackside(this.root, track, lite, true);
+        yield* this.trackside.pending;
+        this.extras = new RaceTracksideExtras(this.root, track, this.terrain, lite, true);
+        yield* this.extras.pending;
         this.sparks = new Sparks(this.root);
         this.skids = new SkidMarks(this.root);
         this.post = null;
@@ -115,30 +150,21 @@ export default class RaceVisuals {
         // the smoke is lit by the low sun plus the sky
         this.light = new THREE.Color(1.25, 1.12, 1.0);
 
-        // the homepage transition: the ring builds out from the car
-        this.reveal = createRevealUniforms();
-        this.revealPending = false;
-        this.revealTime = -1;
         if (lite) {
             vehicle.useCheapMaterials();
             useCheapMaterials(track.root);
             useCheapMaterials(this.trackside.root);
             useCheapMaterials(this.extras.root);
         }
-        applyRevealTo(track.root, this.reveal);
-        applyRevealTo(this.terrain.root, this.reveal);
-        applyReveal(this.forest.nearMaterial, this.reveal, 'instanced');
-        applyReveal(this.forest.impostorMaterial, this.reveal, 'billboard');
-        applyRevealTo(this.trackside.root, this.reveal);
-        applyRevealTo(this.extras.root, this.reveal);
-        UIEventBus.on('race:transitionReveal', () => {
-            this.revealPending = true;
-        });
-        UIEventBus.on('race:transitionSkip', () => {
-            this.revealPending = false;
-            this.revealTime = -1;
-            this.reveal.uRevealRadius.value = 1e9;
-        });
+        yield 'visuals:misc';
+        // the homepage transition builds the ring out from the car. one set
+        // of uniforms in every race world material, so whatever else lands
+        // in the race root joins in (prepareReveal catches late additions)
+        this.reveal = new RaceReveal(this.atmosphere.fog.color, EXPOSURE);
+        this.revealBackground = new THREE.Color();
+        applyRevealTo(parent, this.reveal.uniforms);
+        applySkyReveal(this.atmosphere.sky.material, this.reveal.skyHaze, this.reveal.sky);
+        yield 'visuals:reveal';
 
         UIEventBus.on(
             'render:effects',
@@ -218,40 +244,341 @@ export default class RaceVisuals {
         this.scene.background = null;
         this.scene.fog = this.atmosphere.fog;
         this.vehicle.smoke.setLight(this.light);
-        if (!this.post) {
-            this.post = new RacePostProcessing(
-                gl,
-                this.scene,
-                this.application.camera.instance
-            );
-        }
+        this.ensurePost();
         renderer.setSceneRenderer(
             (deltaSeconds) => this.render(deltaSeconds),
             () => this.post?.resize(),
             settingsFor(this.getPreset(), this.tier).maxPixelRatio
         );
         this.applyQuality();
+        this.atmosphere.sun.shadow.intensity = this.reveal.shadows;
         this.skids.clear();
         this.sparks.clear();
     }
 
-    render(deltaSeconds: number) {
-        if (this.settings.post && this.post) {
-            this.post.render(
-                deltaSeconds,
-                this.application.time.elapsed / 1000
+    // the race world's first frame uploads every buffer and texture it draws
+    // (tens of ms, far more in webkit). the homepage transition streams them
+    // during its camera move instead: from where the race camera starts, a
+    // texture and a batch of meshes a frame, drawn into a tiny target in
+    // the race's own state (its lights, sky, fog, tone mapping) so nothing
+    // new compiles. only the batch and the race lights are on the camera's
+    // layer
+    streamStart(position: THREE.Vector3, look: THREE.Vector3, up: THREE.Vector3, fov: number, aspect: number) {
+        const camera = new THREE.PerspectiveCamera(fov, aspect, 0.1, this.settings.drawDistance || 16000);
+        camera.position.copy(position);
+        camera.up.copy(up);
+        camera.lookAt(look);
+        camera.updateMatrixWorld();
+        camera.layers.set(UPLOAD_LAYER);
+        // the trees the first frames draw
+        this.forest.update(camera, this.vehicle.position, 0);
+        const meshes: THREE.Mesh[] = [];
+        this.raceRoot.traverse((node) => {
+            const mesh = node as THREE.Mesh;
+            if (mesh.isMesh && mesh.layers.isEnabled(0)) meshes.push(mesh);
+        });
+        const batches: THREE.Mesh[][] = [];
+        for (let i = 0; i < meshes.length; i += UPLOAD_BATCH) batches.push(meshes.slice(i, i + UPLOAD_BATCH));
+        const sent = this.texturesSent;
+        this.uploads = {
+            camera,
+            textures: this.raceTextures().filter((texture) => !sent.has(texture)),
+            batches,
+        };
+    }
+
+    // true while there's more to stream. one thing a frame: a texture (the
+    // hover prewarm has usually sent them already, a big canvas one takes
+    // webkit ~20 ms) or a batch of meshes
+    streamStep() {
+        const uploads = this.uploads;
+        if (!uploads) return false;
+        const texture = uploads.textures.shift();
+        if (texture) this.application.renderer.instance.initTexture(texture);
+        else {
+            const batch = uploads.batches.shift();
+            if (batch) this.drawForUpload(batch, uploads.camera);
+        }
+        if (!uploads.textures.length && !uploads.batches.length) this.uploads = null;
+        return Boolean(this.uploads);
+    }
+
+    // every texture the race world draws with, sent to the gpu (a no op for
+    // ones already there)
+    raceTextures() {
+        const textures = new Set<THREE.Texture>();
+        this.raceRoot.traverse((node) => {
+            const mesh = node as THREE.Mesh;
+            if (!mesh.isMesh || !mesh.layers.isEnabled(0)) return;
+            (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((material) => {
+                Object.values(material).forEach((value) => {
+                    const texture = value as THREE.Texture & { isRenderTargetTexture?: boolean };
+                    if (texture?.isTexture && !texture.isRenderTargetTexture) textures.add(texture);
+                });
+            });
+        });
+        return [...textures];
+    }
+
+    private drawForUpload(batch: THREE.Mesh[], camera: THREE.Camera) {
+        const gl = this.application.renderer.instance;
+        const settings = settingsFor(this.getPreset(), this.tier);
+        const lights = [this.atmosphere.sun, this.atmosphere.hemi];
+        batch.forEach((mesh) => mesh.layers.enable(UPLOAD_LAYER));
+        lights.forEach((light) => light.layers.enable(UPLOAD_LAYER));
+        const saved = {
+            raceVisible: this.raceRoot.visible,
+            environment: this.scene.environment,
+            environmentIntensity: this.scene.environmentIntensity,
+            fog: this.scene.fog,
+            background: this.scene.background,
+            toneMapping: gl.toneMapping,
+            exposure: gl.toneMappingExposure,
+            castShadow: this.atmosphere.sun.castShadow,
+            target: gl.getRenderTarget(),
+            viewport: gl.getViewport(new THREE.Vector4()),
+        };
+        this.raceRoot.visible = true;
+        this.scene.environment = this.atmosphere.buildEnvironment(gl);
+        this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
+        this.scene.fog = this.atmosphere.fog;
+        this.scene.background = null;
+        gl.toneMapping = THREE.AgXToneMapping;
+        gl.toneMappingExposure = EXPOSURE;
+        this.atmosphere.sun.castShadow = settings.shadows;
+        // into the kind of target race mode draws into. straight to the
+        // screen, one pixel of it, which the frame's own draw then covers
+        if (settings.post) {
+            if (!this.uploadTarget) {
+                this.uploadTarget = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+            }
+            gl.setRenderTarget(this.uploadTarget);
+        } else {
+            gl.setRenderTarget(null);
+            gl.setViewport(0, 0, 1, 1);
+        }
+        try {
+            gl.render(this.scene, camera);
+        } finally {
+            gl.setRenderTarget(saved.target);
+            gl.setViewport(saved.viewport);
+            this.raceRoot.visible = saved.raceVisible;
+            this.scene.environment = saved.environment;
+            this.scene.environmentIntensity = saved.environmentIntensity;
+            this.scene.fog = saved.fog;
+            this.scene.background = saved.background;
+            gl.toneMapping = saved.toneMapping;
+            gl.toneMappingExposure = saved.exposure;
+            this.atmosphere.sun.castShadow = saved.castShadow;
+            batch.forEach((mesh) => mesh.layers.disable(UPLOAD_LAYER));
+            lights.forEach((light) => light.layers.disable(UPLOAD_LAYER));
+        }
+    }
+
+    // the resolution cap race mode will draw with
+    maxPixelRatio() {
+        return settingsFor(this.getPreset(), this.tier).maxPixelRatio;
+    }
+
+    ensurePost() {
+        if (this.post) return this.post;
+        this.post = new RacePostProcessing(
+            this.application.renderer.instance,
+            this.scene,
+            this.application.camera.instance,
+            this.reveal.plateUniforms
+        );
+        return this.post;
+    }
+
+    // things added to the race world since it was built join the reveal.
+    // returns how many materials were new
+    prepareReveal() {
+        return applyRevealTo(this.raceRoot, this.reveal.uniforms);
+    }
+
+    // the state race mode draws with, for fn: only its own lights, its sky
+    // map and fog, its tone mapping and the post chain's kind of target
+    // bound. three keys programs on exactly these, so compiling in it has
+    // the race frames find them ready. the stand-in scene carries the sky
+    // and fog, the race root brings its lights (it has to be visible for that)
+    private inRaceState<T>(fn: (stage: THREE.Scene) => T): T {
+        const gl = this.application.renderer.instance;
+        const settings = settingsFor(this.getPreset(), this.tier);
+        const stage = new THREE.Scene();
+        stage.environment = this.atmosphere.buildEnvironment(gl);
+        stage.environmentIntensity = ENVIRONMENT_INTENSITY;
+        stage.fog = this.atmosphere.fog;
+        const saved = {
+            raceVisible: this.raceRoot.visible,
+            toneMapping: gl.toneMapping,
+            exposure: gl.toneMappingExposure,
+            castShadow: this.atmosphere.sun.castShadow,
+            target: gl.getRenderTarget(),
+        };
+        this.raceRoot.visible = true;
+        gl.toneMapping = THREE.AgXToneMapping;
+        gl.toneMappingExposure = EXPOSURE;
+        this.atmosphere.sun.castShadow = settings.shadows;
+        const target = settings.post
+            ? new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType })
+            : null;
+        gl.setRenderTarget(target);
+        try {
+            return fn(stage);
+        } finally {
+            gl.setRenderTarget(saved.target);
+            target?.dispose();
+            this.raceRoot.visible = saved.raceVisible;
+            gl.toneMapping = saved.toneMapping;
+            gl.toneMappingExposure = saved.exposure;
+            this.atmosphere.sun.castShadow = saved.castShadow;
+        }
+    }
+
+    // a few materials at a time, each batch done before the next: all of
+    // them at once queued so much in the gpu process that the room's next
+    // frame waited on it (60 ms and more). the rest have no material for
+    // the compile, which is how three skips them
+    private async compileRaceWorld(camera: THREE.Camera) {
+        const gl = this.application.renderer.instance;
+        const drawn: { material: THREE.Material | THREE.Material[] | null }[] = [];
+        const materials = new Set<THREE.Material>();
+        this.raceRoot.traverse((node) => {
+            const object = node as unknown as { material?: THREE.Material | THREE.Material[] | null };
+            if (!object.material) return;
+            drawn.push(object as { material: THREE.Material | THREE.Material[] });
+            (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) =>
+                materials.add(material)
             );
+        });
+        const list = [...materials];
+        for (let i = 0; i < list.length; i += COMPILE_BATCH) {
+            const batch = new Set(list.slice(i, i + COMPILE_BATCH));
+            const kept = drawn.map((object) => object.material);
+            drawn.forEach((object, k) => {
+                const own = kept[k]!;
+                const inBatch = Array.isArray(own) ? own.some((m) => batch.has(m)) : batch.has(own);
+                if (!inBatch) object.material = null;
+            });
+            let pending: Promise<unknown>;
+            try {
+                pending = this.inRaceState((stage) => gl.compileAsync(this.raceRoot, camera, stage));
+            } finally {
+                drawn.forEach((object, k) => (object.material = kept[k]));
+            }
+            await pending;
+            await afterFrame();
+        }
+    }
+
+    // the sun's shadow programs only build in a shadow pass, which links
+    // them on the spot (about 60 ms for all of them). so a pass per caster
+    // material, around the car's start with the trees there filled in. the
+    // lights only compile before each is what sets up the race lights for it
+    private *warmShadows(camera: THREE.Camera): Steps {
+        if (!settingsFor(this.getPreset(), this.tier).shadows) return;
+        const gl = this.application.renderer.instance;
+        this.atmosphere.follow(this.vehicle.position);
+        this.forest.update(camera, this.vehicle.position, 0);
+        this.raceRoot.updateMatrixWorld(true);
+        const casters: THREE.Mesh[] = [];
+        const groups = new Map<string, THREE.Mesh[]>();
+        this.raceRoot.traverse((node) => {
+            const mesh = node as THREE.Mesh;
+            if (!mesh.isMesh || !mesh.castShadow) return;
+            casters.push(mesh);
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            const key = materials.map((material) => material.uuid).join() + mesh.customDepthMaterial?.uuid;
+            groups.set(key, [...(groups.get(key) || []), mesh]);
+        });
+        const lightsOnly = new THREE.Scene();
+        yield 'shadows:casters';
+        for (const group of groups.values()) {
+            casters.forEach((mesh) => (mesh.castShadow = false));
+            group.forEach((mesh) => (mesh.castShadow = true));
+            try {
+                this.inRaceState(() => {
+                    gl.compile(lightsOnly, camera, this.raceRoot as THREE.Scene);
+                    gl.shadowMap.render([this.atmosphere.sun], this.raceRoot as THREE.Scene, camera);
+                });
+            } finally {
+                casters.forEach((mesh) => (mesh.castShadow = true));
+            }
+            yield 'shadows:pass';
+        }
+    }
+
+    // what the first race frame would otherwise do at once: the sky's
+    // environment map, the post chain, and every race program, compiled in
+    // parallel (off the main thread where the driver can) for the exact state
+    // race mode draws with. one step per frame so none of it is a long one.
+    // the homepage starts this when the car is hovered
+    prewarm(camera: THREE.Camera) {
+        // again if the preset moved on since (the room's resolution can drop
+        // it to performance) or the car did (the lite car loads late, a
+        // garage look adds parts), new programs only
+        const settings = settingsFor(this.getPreset(), this.tier);
+        const car = this.vehicle.carModel;
+        const key = `${settings.post}-${settings.shadows}-${car?.uuid}-${JSON.stringify(this.vehicle.look)}`;
+        const added = this.prepareReveal();
+        if (this.prewarming && this.prewarmKey === key && !added) return this.prewarming;
+        this.prewarmKey = key;
+        const gl = this.application.renderer.instance;
+        // each step in a task of its own after a frame, not in the frame's
+        const frame = afterFrame;
+        this.prewarming = this.application.renderer.holdResolution((async () => {
+            await frame();
+            this.atmosphere.buildEnvironment(gl);
+            await frame();
+            await this.compileRaceWorld(camera);
+            await (settings.post
+                ? this.ensurePost().compileAsync(camera, THREE.AgXToneMapping)
+                : this.reveal.compileOverlay(gl));
+            await slice(this.warmShadows(camera));
+            // the first time three draws with a program it reads back its
+            // info log and uniform locations, which stalls, and forty at once
+            // made the first race frame long. a few a frame now instead
+            const programs = gl.info.programs || [];
+            for (let i = 0; i < programs.length; i += 6) {
+                programs.slice(i, i + 6).forEach((program) => {
+                    program.getUniforms();
+                    program.getAttributes();
+                });
+                await frame();
+            }
+            // and the textures, one a frame while the room is still, not
+            // waited for. once the transition streams, it sends the rest
+            void (async () => {
+                for (const texture of this.raceTextures()) {
+                    if (this.uploads || this.active) return;
+                    if (this.texturesSent.has(texture)) continue;
+                    gl.initTexture(texture);
+                    this.texturesSent.add(texture);
+                    await frame();
+                }
+            })();
+        })());
+        return this.prewarming;
+    }
+
+    render(deltaSeconds: number) {
+        const reveal = this.reveal;
+        const post = this.settings.post ? this.post : null;
+        reveal.setOutput(Boolean(post));
+        if (post) {
+            post.render(deltaSeconds, this.application.time.elapsed / 1000);
             return;
         }
-        this.application.renderer.instance.render(
-            this.scene,
-            this.application.camera.instance
-        );
+        const gl = this.application.renderer.instance;
+        gl.render(this.scene, this.application.camera.instance);
+        if (reveal.active) reveal.drawOverlay(gl);
     }
 
     exit() {
         if (!this.active) return;
         this.active = false;
+        this.reveal.finish();
         document.body.classList.remove('race-lite');
         const renderer = this.application.renderer;
         renderer.setSceneRenderer(null, null);
@@ -278,30 +605,25 @@ export default class RaceVisuals {
         return Math.min(1, Math.max(0, slide, spin));
     }
 
-    // radius eases out from the car to past the fog over REVEAL_SECONDS
-    updateReveal(deltaSeconds: number) {
-        if (this.revealPending) {
-            this.revealPending = false;
-            this.revealTime = 0;
-            this.reveal.uRevealCenter.value.copy(this.vehicle.position);
-        }
-        if (this.revealTime < 0) return;
-        this.revealTime += deltaSeconds;
-        // slow near the car so the wave is seen building the road around
-        // it, then racing out to the horizon
-        const t = Math.min(1, this.revealTime / REVEAL_SECONDS);
-        this.reveal.uRevealRadius.value =
-            4 + Math.pow(t, 2.4) * REVEAL_DISTANCE;
-        if (t >= 1) {
-            this.revealTime = -1;
-            this.reveal.uRevealRadius.value = 1e9;
+    // the homepage transition's timeline: shadows fade in, and with no sky
+    // shader the background clears from the haze to the fog color
+    updateReveal() {
+        const reveal = this.reveal;
+        reveal.update();
+        this.atmosphere.sun.shadow.intensity = reveal.shadows;
+        if (!this.settings.sky) {
+            this.scene.background = reveal.active
+                ? this.revealBackground
+                      .copy(reveal.background)
+                      .lerp(this.atmosphere.fog.color, reveal.sky.value)
+                : this.atmosphere.fog.color;
         }
     }
 
     update(deltaSeconds: number) {
         if (!this.active) return;
         const vehicle = this.vehicle;
-        this.updateReveal(deltaSeconds);
+        this.updateReveal();
         this.atmosphere.follow(vehicle.position);
         this.extras.update(this.application.camera.instance.position);
         this.terrain.update(this.application.camera.instance);

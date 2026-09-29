@@ -86,12 +86,16 @@ export default class World {
         }
 
         if (!this.raceManagerLoading) {
-            this.raceManagerLoading = import('../Racing/RaceManager').then(
-                ({ default: RaceManagerClass }) => {
-                    this.raceManager = new RaceManagerClass();
-                    return this.raceManager;
-                }
-            );
+            // built a slice a frame, so the page keeps moving
+            this.raceManagerLoading = Promise.all([
+                import('../Racing/RaceManager'),
+                import('../Racing/slicing'),
+            ]).then(async ([{ default: RaceManagerClass }, { slice }]) => {
+                const manager = new RaceManagerClass(true);
+                await this.application.renderer.holdResolution(slice(manager.pending));
+                this.raceManager = manager;
+                return manager;
+            });
         }
 
         const manager = await this.raceManagerLoading;

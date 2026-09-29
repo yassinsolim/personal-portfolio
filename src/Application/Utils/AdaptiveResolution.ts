@@ -90,6 +90,13 @@ export default class AdaptiveResolution {
         this.floorMs = FLOOR_MS;
     }
 
+    // a frame that isn't the steady load (work spread over frames on
+    // purpose) starts the measurement over instead of counting
+    discard(now: number) {
+        this.intervals = [];
+        this.windowStart = now;
+    }
+
     // feed every frame; returns the new ratio when it should change
     frame(intervalMs: number, now: number): number | null {
         if (!(intervalMs > 0) || intervalMs > HITCH_MS) {

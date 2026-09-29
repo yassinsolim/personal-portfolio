@@ -21,6 +21,7 @@ import MultiplayerService, {
 import RaceVisuals from './Visuals/RaceVisuals';
 import CarCollisions, { type RemoteCar } from './Multiplayer/CarCollisions';
 import { carOptionsById } from '../carOptions';
+import { drain, type Steps } from './slicing';
 
 type RaceModeState = {
     active: boolean;
@@ -91,6 +92,9 @@ export default class RaceManager {
     lapTimer: LapTimer;
     sectors: SectorTimer;
     garageOpen = false;
+    // the homepage transition parks the car while the ring builds around it,
+    // so it sits exactly where the room's last frame shows it
+    transitionHold = false;
     garageSetupAtOpen = '';
     leaderboardBoard: 'stock' | 'tuned' = 'stock';
     lastLapTimeMs = 0;
@@ -140,7 +144,16 @@ export default class RaceManager {
     ghostPlaybackEnabled: boolean;
     lastStartResets: number;
 
-    constructor() {
+    // built when constructed, or with defer by running pending (the
+    // homepage builds it a slice a frame)
+    pending: Steps;
+
+    constructor(defer = false) {
+        this.pending = this.build();
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(): Steps {
         this.application = new Application();
         this.scene = this.application.scene;
         this.active = false;
@@ -153,10 +166,13 @@ export default class RaceManager {
         this.raceRoot.userData.raceRoot = true;
         this.scene.add(this.raceRoot);
 
-        this.track = new NordschleifeTrack(this.raceRoot);
+        this.track = new NordschleifeTrack(this.raceRoot, true);
+        yield* this.track.pending;
         this.vehicle = new RaceVehicle(this.raceRoot, this.track);
+        yield 'vehicle';
         this.chaseCamera = new RaceChaseCamera(this.vehicle);
-        this.visuals = new RaceVisuals(this.raceRoot, this.track, this.vehicle);
+        this.visuals = new RaceVisuals(this.raceRoot, this.track, this.vehicle, true);
+        yield* this.visuals.pending;
         this.collisions = new CarCollisions(this.vehicle);
         this.remoteCars = [];
 
@@ -242,6 +258,7 @@ export default class RaceManager {
             void this.refreshLeaderboard();
         });
         this.setupEvents();
+        yield 'manager';
     }
 
     setupEvents() {
@@ -524,6 +541,7 @@ export default class RaceManager {
 
         this.active = false;
         this.paused = false;
+        this.transitionHold = false;
         this.raceRoot.visible = false;
         this.visuals.exit();
         this.setLobbyObjectsVisible(true);
@@ -1245,7 +1263,7 @@ export default class RaceManager {
             Math.max(0, this.application.time.delta / 1000)
         );
         this.updateRemoteVehicles(delta);
-        if (!this.paused && !this.garageOpen) {
+        if (!this.paused && !this.garageOpen && !this.transitionHold) {
             // equal steps. a leftover sliver (a frame just over 1/60 s) used
             // to run as a microsecond step, and the grounding divides height
             // changes by the step, which could launch the car into the sky

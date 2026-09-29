@@ -3,6 +3,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type NordschleifeTrack from '../Track/NordschleifeTrack';
 import { splitByCell } from '../Track/NordschleifeTrack';
 import type RaceTerrain from './RaceTerrain';
+import { drain, type Steps } from '../slicing';
 
 // the second layer of trackside detail, all from open data or made here:
 // catch fences where osm maps them next to the lap (brünnchen, pflanzgarten,
@@ -222,19 +223,36 @@ export default class RaceTracksideExtras {
     graffitiAt: THREE.Vector3[] = [];
     fenceCells: THREE.Mesh[] = [];
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         track: NordschleifeTrack,
         terrain: RaceTerrain,
         lite: boolean,
+        defer = false,
     ) {
+        this.pending = this.build(parent, track, terrain, lite);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(
+        parent: THREE.Object3D,
+        track: NordschleifeTrack,
+        terrain: RaceTerrain,
+        lite: boolean,
+    ): Steps {
         this.root = new THREE.Group();
         this.root.name = 'race-trackside-extras';
         if (!lite) {
             this.buildFences(track, terrain);
+            yield 'extras:fences';
             this.buildLandmarks(track, terrain);
+            yield 'extras:landmarks';
         }
         this.buildGraffiti(track);
+        yield 'extras:graffiti';
         parent.add(this.root);
     }
 
