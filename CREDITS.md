@@ -10,6 +10,16 @@
   - Repo: https://github.com/DustinBrett/daedalOS
   - License/attribution: per upstream repository
 
+## Room v2 (September 2026)
+
+- The desk setup (desk, arms, the three monitors, the PC and its parts, keyboard, mouse, pad,
+  headphones, chair, mug, credits card) is modelled from scratch by `scripts/room/` (bpy) after
+  the real products' published dimensions (`docs/room-v2-peripherals.md`), with no downloaded
+  models and no brand logos. Lighting baked in Blender Cycles.
+- The studio backdrop mesh is carried over from Henry Heffernan's original room.
+- The old room's desk, computer, chair, plant and paper models (and their bakes) are no longer
+  used and were removed.
+
 ## Racing Mini-game Additions (This Branch)
 
 - Nordschleife track data (`static/models/Tracks/Nordschleife/nordschleife.json`)
