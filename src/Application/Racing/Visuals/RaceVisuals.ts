@@ -6,7 +6,7 @@ import type RaceVehicle from '../Vehicle/RaceVehicle';
 import RaceAtmosphere from './RaceAtmosphere';
 import RacePostProcessing from './RacePostProcessing';
 import {
-    detectGpuTier,
+    detectGpu,
     isSoftwareGl,
     resolvePreset,
     settingsFor,
@@ -14,6 +14,12 @@ import {
     type PresetSettings,
     type RacePreset,
 } from './qualityPresets';
+import {
+    calibrate,
+    readSlowHint,
+    writeSlowHint,
+    type GpuClass,
+} from '../../Utils/gpuClass';
 import RaceTerrain from './RaceTerrain';
 import RaceForest from './RaceForest';
 import RaceTrackside from './RaceTrackside';
@@ -40,6 +46,26 @@ const COMPILE_BATCH = 6;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
+// auto's governor: the frame times it steps down or up at, and how long
+// they have to hold
+const AUTO_CHECK_MS = 1000;
+const AUTO_SLOW_MS = 21.5;
+const AUTO_FAST_MS = 13;
+const AUTO_FAST_WORK_MS = 9;
+const AUTO_DOWN_AFTER_MS = 4000;
+const AUTO_DOWN_GAP_MS = 8000;
+const AUTO_UP_AFTER_MS = 20000;
+const AUTO_UP_GAP_MS = 30000;
+
+const freezeStatic = (root: THREE.Object3D) => {
+    root.traverse((object) => {
+        if (object.name === 'nordschleife-collider-ray-debug') return;
+        object.updateMatrix();
+        object.matrixAutoUpdate = false;
+    });
+    root.updateMatrixWorld(true);
+};
+
 export default class RaceVisuals {
     application: Application;
     scene: THREE.Scene;
@@ -61,6 +87,16 @@ export default class RaceVisuals {
     // software gl: shader compiles take seconds, the transition does them
     // where nothing on screen moves
     software: boolean;
+    // what auto found and why, for the graphics info panel
+    gpu: GpuClass & { renderer: string; vendor: string; forced: boolean };
+    // auto's steps down from the tier it started at: 1 is the performance
+    // preset, 2 the light limits on top
+    autoStep: number;
+    autoSlowMs: number;
+    autoFastMs: number;
+    autoChangedAt: number;
+    autoCheckedAt: number;
+    singlePassModel: THREE.Object3D | null;
     preset: RacePreset | null;
     settings: PresetSettings;
     saved: {
@@ -112,9 +148,26 @@ export default class RaceVisuals {
         this.root = new THREE.Group();
         this.root.name = 'race-visuals';
         parent.add(this.root);
-        this.tier = detectGpuTier(
-            this.application.renderer.instance.getContext()
-        );
+        const renderer = this.application.renderer;
+        const found = detectGpu(renderer.instance.getContext());
+        const home = renderer.frameStats.home;
+        this.gpu = found.forced
+            ? found
+            : {
+                  ...found,
+                  ...calibrate(found, {
+                      homeP50: home.percentile(0.5),
+                      homeFrames: home.count,
+                      slowBefore: readSlowHint(found.renderer),
+                  }),
+              };
+        this.tier = this.gpu.tier;
+        this.autoStep = 0;
+        this.autoSlowMs = 0;
+        this.autoFastMs = 0;
+        this.autoChangedAt = 0;
+        this.autoCheckedAt = 0;
+        this.singlePassModel = null;
         this.software = isSoftwareGl(this.application.renderer.instance.getContext());
         this.preset = null;
         this.settings = settingsFor(this.getPreset(), this.tier);
@@ -165,6 +218,15 @@ export default class RaceVisuals {
         applyRevealTo(parent, this.reveal.uniforms);
         applySkyReveal(this.atmosphere.sky.material, this.reveal.skyHaze, this.reveal.sky);
         yield 'visuals:reveal';
+        // none of this moves once built, so its matrices needn't be redone
+        // every frame (about 800 objects)
+        [
+            this.terrain.root,
+            this.forest.root,
+            this.trackside.root,
+            this.extras.root,
+            track.root,
+        ].forEach(freezeStatic);
 
         UIEventBus.on(
             'render:effects',
@@ -186,12 +248,99 @@ export default class RaceVisuals {
     }
 
     getPreset(): RacePreset {
-        return resolvePreset(this.renderMode, this.tier, this.effectsLow);
+        return resolvePreset(
+            this.renderMode,
+            this.tier,
+            this.effectsLow ||
+                (this.renderMode === 'auto' && this.autoStep >= 1)
+        );
+    }
+
+    // the tier the settings follow: auto's second step puts a gpu it built
+    // the full world for on the light limits
+    settingsTier(): GpuTier {
+        return this.renderMode === 'auto' && this.autoStep >= 2
+            ? 'low'
+            : this.tier;
+    }
+
+    // once a second in auto: step down when frames stay long after the
+    // resolution has done what it can (or the cpu is what's slow), step back
+    // up only after a long run with headroom. never in a manual mode
+    updateAuto() {
+        const now = performance.now();
+        if (now - this.autoCheckedAt < AUTO_CHECK_MS) return;
+        const elapsed = this.autoCheckedAt ? now - this.autoCheckedAt : 0;
+        this.autoCheckedAt = now;
+        if (this.renderMode !== 'auto' || this.gpu.forced) return;
+        const renderer = this.application.renderer;
+        const stats = renderer.frameStats.summary(90);
+        if (stats.frames < 20) return;
+        const slow = stats.frameP50 > AUTO_SLOW_MS;
+        // at a capped refresh rate the frame time can't show headroom, the
+        // work inside it can
+        const work = Math.max(stats.cpuP50, stats.gpuP50 ?? 0);
+        const fast =
+            stats.frameP50 < AUTO_FAST_MS ||
+            (stats.gpuP50 !== null && work < AUTO_FAST_WORK_MS);
+        this.autoSlowMs = slow ? this.autoSlowMs + elapsed : 0;
+        this.autoFastMs = fast ? this.autoFastMs + elapsed : 0;
+        const adaptive = renderer.adaptive;
+        const scaled = adaptive.ratio <= adaptive.min + 0.051;
+        if (
+            this.autoStep < 2 &&
+            this.autoSlowMs >= AUTO_DOWN_AFTER_MS &&
+            now - this.autoChangedAt > AUTO_DOWN_GAP_MS &&
+            (scaled ||
+                stats.bound === 'cpu' ||
+                stats.frameP50 > AUTO_SLOW_MS * 2.5)
+        ) {
+            this.setAutoStep(this.autoStep + 1, now);
+        } else if (
+            this.autoStep > 0 &&
+            this.autoFastMs >= AUTO_UP_AFTER_MS &&
+            now - this.autoChangedAt > AUTO_UP_GAP_MS
+        ) {
+            this.setAutoStep(this.autoStep - 1, now);
+        }
+    }
+
+    setAutoStep(step: number, now: number) {
+        this.autoStep = step;
+        this.autoChangedAt = now;
+        this.autoSlowMs = 0;
+        this.autoFastMs = 0;
+        writeSlowHint(this.gpu.renderer, step >= 2);
+        const renderer = this.application.renderer;
+        renderer.frameStats.reset();
+        renderer.adaptive.reset();
+        this.applyQuality();
+        UIEventBus.dispatch('race:autoStep', { step });
+    }
+
+    // three draws a transparent double sided material twice a frame (backs,
+    // then fronts), rebuilding its program lookup both times. the car's glass
+    // is 17 of those; one pass looks the same from outside
+    singlePassGlass() {
+        const model = this.vehicle.carModel;
+        if (!model || model === this.singlePassModel) return;
+        this.singlePassModel = model;
+        model.traverse((object) => {
+            const mesh = object as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            (Array.isArray(mesh.material)
+                ? mesh.material
+                : [mesh.material]
+            ).forEach((material) => {
+                if (material.transparent && material.side === THREE.DoubleSide)
+                    material.forceSinglePass = true;
+            });
+        });
     }
 
     applyQuality() {
         const preset = this.getPreset();
-        const settings = settingsFor(preset, this.tier);
+        const settings = settingsFor(preset, this.settingsTier());
         this.settings = settings;
         this.post?.applyPreset(settings);
         // flipping this recompiles the lit materials, so only on a change
@@ -248,7 +397,7 @@ export default class RaceVisuals {
         renderer.setSceneRenderer(
             (deltaSeconds) => this.render(deltaSeconds),
             () => this.post?.resize(),
-            settingsFor(this.getPreset(), this.tier).maxPixelRatio
+            settingsFor(this.getPreset(), this.settingsTier()).maxPixelRatio
         );
         this.applyQuality();
         this.atmosphere.sun.shadow.intensity = this.reveal.shadows;
@@ -623,6 +772,8 @@ export default class RaceVisuals {
     update(deltaSeconds: number) {
         if (!this.active) return;
         const vehicle = this.vehicle;
+        this.updateAuto();
+        this.singlePassGlass();
         this.updateReveal();
         this.atmosphere.follow(vehicle.position);
         this.extras.update(this.application.camera.instance.position);

@@ -11,6 +11,7 @@ import screenFrag from './Shaders/screen/fragment.glsl';
 import Time from './Utils/Time';
 import AdaptiveResolution from './Utils/AdaptiveResolution';
 import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
+import FrameStats from './Utils/FrameStats';
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -18,6 +19,9 @@ const MIN_PIXEL_RATIO = 0.5;
 // once auto has to render below one pixel per css pixel, the extras (film
 // grain overlay, heavy drift smoke) switch off too
 const EFFECTS_MIN_PIXEL_RATIO = 1;
+// performance mode renders no more pixels than 720p, the browser scales it up
+export const PERFORMANCE_PIXELS = 1280 * 720;
+const HOME_CALIBRATION_MS = 6000;
 
 export default class Renderer {
     application: Application;
@@ -34,6 +38,7 @@ export default class Renderer {
     raiseExposure: boolean;
     renderMode: RenderMode;
     adaptive: AdaptiveResolution;
+    frameStats: FrameStats;
     lastFrameAt: number;
     effectsLow: boolean;
     raceActive: boolean;
@@ -81,6 +86,12 @@ export default class Renderer {
         );
 
         this.setInstance();
+        this.frameStats = new FrameStats(this.instance.getContext());
+        // the homepage's first seconds tell auto how fast this machine is,
+        // before the race world is built
+        UIEventBus.on('loadingScreenDone', () =>
+            this.frameStats.watchHome(HOME_CALIBRATION_MS)
+        );
         this.setupQualityListeners();
     }
 
@@ -194,7 +205,19 @@ export default class Renderer {
     getPixelRatio() {
         if (this.renderMode === 'quality') return this.sizes.pixelRatio;
         if (this.renderMode === 'performance') {
-            return Math.min(this.sizes.pixelRatio, 1);
+            const budget = Math.sqrt(
+                PERFORMANCE_PIXELS /
+                    Math.max(1, this.sizes.width * this.sizes.height)
+            );
+            return Math.max(
+                MIN_PIXEL_RATIO,
+                Math.min(
+                    this.sizes.pixelRatio,
+                    1,
+                    budget,
+                    this.sceneRender ? this.sceneMaxPixelRatio : Infinity
+                )
+            );
         }
         return this.adaptive.ratio;
     }
@@ -360,11 +383,13 @@ export default class Renderer {
             this.uniforms.u_time.value = Math.sin(this.time.current * 0.01);
         }
 
+        this.frameStats.beginGpu();
         if (this.sceneRender) {
             this.sceneRender(this.time.delta / 1000);
         } else {
             this.instance.render(this.scene, this.camera.instance);
         }
+        this.frameStats.endGpu();
         // the monitor's css layer is fully covered while racing
         if (!this.sceneRender) {
             this.cssInstance.render(this.cssScene, this.camera.instance);

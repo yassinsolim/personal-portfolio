@@ -209,3 +209,19 @@ test('phones and tablets go low', () => {
         'low'
     );
 });
+
+const { calibrate } = await import('../../src/Application/Utils/gpuClass.ts');
+
+test('a slow homepage or a slow race before sends a high guess low', () => {
+    const high = classifyGpu({ renderer: 'Apple GPU', ...laptop });
+    assert.equal(
+        calibrate(high, { homeP50: 16.7, homeFrames: 300 }).tier,
+        'high'
+    );
+    assert.equal(calibrate(high, { homeP50: 45, homeFrames: 120 }).tier, 'low');
+    // too few frames to judge
+    assert.equal(calibrate(high, { homeP50: 45, homeFrames: 10 }).tier, 'high');
+    assert.equal(calibrate(high, { slowBefore: true }).tier, 'low');
+    const low = classifyGpu({ renderer: 'Google SwiftShader', ...laptop });
+    assert.equal(calibrate(low, { homeP50: 10, homeFrames: 300 }).tier, 'low');
+});

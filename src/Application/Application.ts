@@ -100,9 +100,11 @@ export default class Application {
 
     update() {
         if (this.stats) this.stats.begin();
+        this.renderer.frameStats.beginTick();
         this.camera.update();
         this.world.update();
         this.renderer.update();
+        this.renderer.frameStats.endTick();
         if (this.stats) this.stats.end();
     }
 

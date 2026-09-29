@@ -74,9 +74,11 @@ export const PRESETS: Record<RacePreset, PresetSettings> = {
         grain: 0,
         shadowSize: 1024,
         treeShadowRange: 0,
-        nearTreeRange: 50,
-        drawDistance: 2500,
-        sky: true,
+        // billboards only, a short view and the fog color for a sky: the
+        // light path, whatever the gpu
+        nearTreeRange: 0,
+        drawDistance: 1600,
+        sky: false,
     },
 };
 
