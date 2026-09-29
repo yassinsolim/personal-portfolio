@@ -44,6 +44,9 @@ export default class Camera extends EventEmitter {
     freeCamTransitionToken: number;
     // the homepage to race transition moves the camera itself, from here
     externalControl: (() => void) | null;
+    // the loading screen places the camera itself (the hybrid keeps the idle
+    // view from the first frame): no monitor zoom or desk toggle until it's done
+    introLock = false;
 
 
     currentKeyframe: CameraKey | undefined;
@@ -84,7 +87,7 @@ export default class Camera extends EventEmitter {
             ) {
                 return;
             }
-            if (event.button === 2 || this.freeCam || this.raceModeActive)
+            if (event.button === 2 || this.freeCam || this.raceModeActive || this.introLock)
                 return;
             event.preventDefault();
             this.toggleIdleDesk();
@@ -171,6 +174,7 @@ export default class Camera extends EventEmitter {
 
     setMonitorListeners() {
         this.on('enterMonitor', () => {
+            if (this.introLock) return;
             this.transition(
                 CameraKey.MONITOR,
                 2000,
@@ -179,6 +183,7 @@ export default class Camera extends EventEmitter {
             UIEventBus.dispatch('enterMonitor', {});
         });
         this.on('leftMonitor', () => {
+            if (this.introLock) return;
             this.transition(CameraKey.DESK);
             UIEventBus.dispatch('leftMonitor', {});
         });
@@ -211,7 +216,9 @@ export default class Camera extends EventEmitter {
     }
 
     setPostLoadTransition() {
-        UIEventBus.on('loadingScreenDone', () => {
+        // camera: 'intro' when the loading screen placed the camera itself
+        UIEventBus.on('loadingScreenDone', (data?: { camera?: string }) => {
+            if (data?.camera === 'intro') return;
             this.transition(CameraKey.IDLE, 2500, TWEEN.Easing.Exponential.Out);
         });
     }

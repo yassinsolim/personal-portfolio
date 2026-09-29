@@ -116,7 +116,7 @@ export default class Application {
         this.world.update();
         // the room isn't drawn while its programs compile (the loading
         // screen covers it), or the draw would wait for all of them
-        if (!this.world.warming) this.renderer.update();
+        if (!this.world.warming || this.world.drawWhileWarming) this.renderer.update();
         this.renderer.frameStats.endTick();
         if (this.stats) this.stats.end();
     }
