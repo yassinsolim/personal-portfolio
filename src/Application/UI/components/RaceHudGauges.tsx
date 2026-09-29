@@ -16,6 +16,8 @@ type Props = {
     tachMaxRpm?: number;
     lapTimeMs: number;
     lapRunning: boolean;
+    // at the start, the clock waits at 0 for the car to move
+    lapArmed?: boolean;
     lastLapMs: number;
     bestLapMs: number;
     sectors: SectorHud | null;
@@ -170,7 +172,11 @@ const RaceHudGauges = (props: Props) => (
         />
         <div className="race-laps">
             <div className="race-lap-now">
-                {props.lapRunning ? formatTime(props.lapTimeMs) : '--:--.---'}
+                {props.lapRunning
+                    ? formatTime(props.lapTimeMs)
+                    : props.lapArmed
+                      ? '0:00.000'
+                      : '--:--.---'}
             </div>
             <div className="race-lap-row">
                 <span>Last</span>

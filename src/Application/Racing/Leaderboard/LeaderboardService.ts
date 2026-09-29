@@ -17,9 +17,9 @@ const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
 // the season tag on car_id. bumped whenever lap times stop being comparable
-// (last: the lidar road profile and camber, before that the real
-// drivetrains). the board only reads the current tag and old rows stay
-const SEASON_TAG = '@v5';
+// (last: the clock waiting for the car to move, before that the lidar road
+// profile). the board only reads the current tag and old rows stay
+const SEASON_TAG = '@v6';
 const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
 
