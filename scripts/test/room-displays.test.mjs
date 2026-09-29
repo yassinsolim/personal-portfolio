@@ -514,10 +514,11 @@ test('the room theme and span image are in place and in budget', () => {
         fs.readFileSync(path.join(dir, 'room-theme.json'), 'utf8')
     );
     const resolved = kit.resolveTheme(theme);
+    // yassinOS's nested theme or the flat one, as the displays read it
     for (const id of ['m1', 'm2', 'm3'])
-        assert.ok(kit.isRect(theme.rects?.[id]), `${id} rect`);
+        assert.ok(kit.isRect(resolved.rects?.[id]), `${id} rect`);
     const image = fs.readFileSync(
-        path.join(dir, theme.spanImage.split('/').pop())
+        path.join(dir, resolved.spanImage.split('/').pop())
     );
     assert.ok(image.length < 300 * 1024, `${image.length} bytes`);
     const [w, h] = webpSize(image);
