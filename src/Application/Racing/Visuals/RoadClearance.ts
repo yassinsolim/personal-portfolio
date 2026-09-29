@@ -21,7 +21,8 @@ const TRIANGLE_BIN = 8;
 // floats per station in frames
 const FRAME = 9;
 
-type SampleVisitor = (x: number, z: number, ceiling: number) => void;
+export type SampleVisitor = (x: number, z: number, ceiling: number) => void;
+export type SampleSource = (visit: SampleVisitor) => void;
 
 export default class RoadClearance {
     stations: number;
@@ -113,10 +114,12 @@ export default class RoadClearance {
         cell: number,
         minX: number,
         minZ: number,
-        mobility: Float32Array
+        mobility: Float32Array,
+        // other surfaces to clear instead of the lap, like the underpasses
+        each: SampleSource = (visit) => this.forEachSample(visit)
     ) {
         let lowered = 0;
-        this.forEachSample((x, z, ceiling) => {
+        each((x, z, ceiling) => {
             const fx = (x - minX) / cell;
             const fz = (z - minZ) / cell;
             const col = Math.floor(fx);
@@ -165,12 +168,13 @@ export default class RoadClearance {
         index: ArrayLike<number>,
         mobility: Float32Array,
         triangles?: ArrayLike<number>,
-        mask?: Uint8Array
+        mask?: Uint8Array,
+        each: SampleSource = (visit) => this.forEachSample(visit, mask)
     ) {
         const lookup = new TriangleIndex(positions, index, triangles);
         if (!lookup.count) return 0;
         let lowered = 0;
-        this.forEachSample((x, z, ceiling) => {
+        each((x, z, ceiling) => {
             lookup.forEachAt(x, z, (ia, ib, ic, wa, wb, wc) => {
                 lowered += lower(
                     positions,
@@ -184,7 +188,7 @@ export default class RoadClearance {
                     wc
                 );
             });
-        }, mask);
+        });
         return lowered;
     }
 }

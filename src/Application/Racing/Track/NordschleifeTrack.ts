@@ -147,6 +147,21 @@ export type TrackLandmark = {
     height: number;
     outline: [number, number][];
 };
+// an osm road passing under one of the lap's bridges, on the lidar ground:
+// x, y, z every 4 m for 70 m each side of the span
+export type TrackUnderpass = {
+    span: number;
+    ref: string | null;
+    name: string | null;
+    highway: string;
+    width: number;
+    points: [number, number, number][];
+};
+// stretches where the lap itself is a bridge, meters along the lap
+export type TrackSpan = {
+    start: number;
+    end: number;
+};
 export type TrackTerrainData = {
     x: number;
     z: number;
@@ -177,6 +192,8 @@ type TrackAssetData = {
     // catch fence runs near the lap (osm), x, z every 6 m
     fences?: [number, number][][];
     landmarks?: TrackLandmark[];
+    spans?: TrackSpan[];
+    underpasses?: TrackUnderpass[];
     terrain: {
         x: number;
         z: number;
@@ -234,6 +251,8 @@ export default class NordschleifeTrack {
     bridges: TrackBridge[];
     fences: [number, number][][];
     landmarks: TrackLandmark[];
+    spans: TrackSpan[];
+    underpasses: TrackUnderpass[];
     distanceScale: number;
     terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
@@ -275,6 +294,8 @@ export default class NordschleifeTrack {
         this.bridges = data.bridges;
         this.fences = data.fences || [];
         this.landmarks = data.landmarks || [];
+        this.spans = data.spans || [];
+        this.underpasses = data.underpasses || [];
         this.terrain = {
             x: data.terrain.x,
             z: data.terrain.z,

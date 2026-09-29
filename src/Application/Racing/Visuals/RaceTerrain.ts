@@ -19,6 +19,11 @@ const DETAIL_METERS = 7;
 const WEAK_SKY_FILL = 0x060a16;
 // the skirt's outer columns sit on every third ribbon station
 const SKIRT_STRIDE = 3;
+// ground under an underpass road, and how far past its edges that holds
+const UNDERPASS_DEPTH = 0.35;
+const UNDERPASS_SHOULDER = 2;
+// the skirt stops this far past each end of a lap bridge
+const SPAN_MARGIN = 3;
 // another stretch of the lap closer than this (and at least CROWD_ALONG away
 // along it) can be under this skirt, so the skirt there gets carved too
 const CROWD_REACH = 70;
@@ -40,6 +45,37 @@ const smoothstep = (edge0: number, edge1: number, x: number) => {
 
 // quads per side of a culling tile
 const TILE_QUADS = 40;
+// level of detail: grid step per tile by distance from the camera (meters to
+// the tile's box). 40 quads divide by all of these
+const LOD_STEPS = [1, 2, 4];
+const LOD_RANGES = [700, 1600];
+const LOD_CHECK_MS = 250;
+
+type TileRange = { r0: number; c0: number; r1: number; c1: number };
+
+// partial tiles at the field edge only take steps that divide them
+const fitStep = (tile: TileRange, step: number) => {
+    while (
+        step > 1 &&
+        ((tile.r1 - tile.r0) % step || (tile.c1 - tile.c0) % step)
+    )
+        step /= 2;
+    return step;
+};
+
+type Tile = {
+    mesh: THREE.Mesh;
+    lodIndex: Record<string, THREE.BufferAttribute>;
+    // coarsest step this tile may take: 1 where the road is near
+    cap: number;
+    r0: number;
+    c0: number;
+    r1: number;
+    c1: number;
+    box: THREE.Box3;
+    step: number;
+    key: string;
+};
 // skirt pieces along the lap, for culling
 const SKIRT_CHUNKS = 20;
 const srgbToLinear = (value: number) => Math.pow(value, 2.2);
@@ -49,6 +85,11 @@ export default class RaceTerrain {
     field: TrackField;
     root: THREE.Group;
     ground: THREE.Group;
+    tiles: Tile[] = [];
+    gridCols = 0;
+    tileCols = 0;
+    tileRows = 0;
+    lodCheckedAt = 0;
     skirt: THREE.Group;
     material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial;
     barrier: number;
@@ -110,8 +151,29 @@ export default class RaceTerrain {
     // or stitched edge that can be on screen goes in here too, as meshes
     // with that level's index
     levels(): { name: string; meshes: THREE.Mesh[] }[] {
+        // the tiles as drawn, then each coarser step and every stitched
+        // border, as meshes over the same vertices
+        const lod = (name: string, index: (tile: Tile) => Uint32Array) => ({
+            name,
+            meshes: this.tiles.map((tile) => {
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute(
+                    'position',
+                    tile.mesh.geometry.getAttribute('position')
+                );
+                geometry.setIndex(new THREE.BufferAttribute(index(tile), 1));
+                return new THREE.Mesh(geometry);
+            }),
+        });
         return [
             { name: 'ground', meshes: this.ground.children as THREE.Mesh[] },
+            ...LOD_STEPS.filter((step) => step > 1).map((step) =>
+                lod(`ground-lod${step}`, (tile) => {
+                    const fit = Math.min(tile.cap, fitStep(tile, step));
+                    return this.tileTriangles(tile, fit, fit, fit, fit, fit);
+                })
+            ),
+            lod('ground-stitched', (tile) => this.coarseTriangles(tile)),
             { name: 'skirt', meshes: this.skirt.children as THREE.Mesh[] },
         ];
     }
@@ -228,6 +290,178 @@ export default class RaceTerrain {
         return target;
     }
 
+    // picks each tile's grid step from the camera distance, and where a tile
+    // meets a coarser one its edge vertices snap to the coarser spacing, so
+    // both edges run along the same line and nothing cracks open between them
+    update(camera: THREE.Camera) {
+        const now = performance.now();
+        if (now - this.lodCheckedAt < LOD_CHECK_MS || !this.tiles.length)
+            return;
+        this.lodCheckedAt = now;
+        const eye = camera.position;
+        this.tiles.forEach((tile) => {
+            const distance = tile.box.distanceToPoint(eye);
+            let level = LOD_RANGES.findIndex((range) => distance < range);
+            if (level < 0) level = LOD_STEPS.length - 1;
+            const step = Math.min(tile.cap, fitStep(tile, LOD_STEPS[level]));
+            tile.step = step;
+        });
+        const at = (tr: number, tc: number) =>
+            tr < 0 || tc < 0 || tr >= this.tileRows || tc >= this.tileCols
+                ? null
+                : this.tiles[tr * this.tileCols + tc];
+        this.tiles.forEach((tile, i) => {
+            const tr = Math.floor(i / this.tileCols);
+            const tc = i % this.tileCols;
+            const edge = (other: Tile | null) =>
+                Math.max(tile.step, other ? other.step : tile.step);
+            const top = edge(at(tr - 1, tc));
+            const bottom = edge(at(tr + 1, tc));
+            const left = edge(at(tr, tc - 1));
+            const right = edge(at(tr, tc + 1));
+            const key = `${tile.step}:${top}:${bottom}:${left}:${right}`;
+            if (key === tile.key) return;
+            tile.key = key;
+            tile.mesh.geometry.setIndex(
+                this.tileIndex(tile, tile.step, top, bottom, left, right)
+            );
+        });
+    }
+
+    tileIndex(
+        tile: Tile,
+        step: number,
+        top: number,
+        bottom: number,
+        left: number,
+        right: number
+    ) {
+        const cache = tile.lodIndex;
+        const key = `${step}:${top}:${bottom}:${left}:${right}`;
+        if (cache[key]) return cache[key];
+        const attribute = new THREE.BufferAttribute(
+            this.tileTriangles(tile, step, top, bottom, left, right),
+            1
+        );
+        cache[key] = attribute;
+        return attribute;
+    }
+
+    // the triangles of one lod variant of a tile. edgesOnly keeps the strip
+    // along the tile's border, the only part that stitching changes
+    tileTriangles(
+        tile: TileRange,
+        step: number,
+        top: number,
+        bottom: number,
+        left: number,
+        right: number,
+        edgesOnly = false
+    ) {
+        const cols = this.gridCols;
+        const snap = (
+            value: number,
+            origin: number,
+            spacing: number,
+            end: number
+        ) =>
+            Math.min(
+                end,
+                origin + Math.round((value - origin) / spacing) * spacing
+            );
+        const vertex = (row: number, col: number) => {
+            // edge vertices move onto the neighbor's coarser grid
+            if (row === tile.r0 && top > step)
+                col = snap(col, tile.c0, top, tile.c1);
+            else if (row === tile.r1 && bottom > step)
+                col = snap(col, tile.c0, bottom, tile.c1);
+            if (col === tile.c0 && left > step)
+                row = snap(row, tile.r0, left, tile.r1);
+            else if (col === tile.c1 && right > step)
+                row = snap(row, tile.r0, right, tile.r1);
+            return row * cols + col;
+        };
+        const index: number[] = [];
+        for (let row = tile.r0; row < tile.r1; row += step) {
+            for (let col = tile.c0; col < tile.c1; col += step) {
+                if (
+                    edgesOnly &&
+                    row !== tile.r0 &&
+                    row + step !== tile.r1 &&
+                    col !== tile.c0 &&
+                    col + step !== tile.c1
+                )
+                    continue;
+                const a = vertex(row, col);
+                const b = vertex(row, col + step);
+                const c = vertex(row + step, col);
+                const d = vertex(row + step, col + step);
+                if (a !== c && a !== b && b !== c) index.push(a, c, b);
+                if (b !== c && b !== d && c !== d) index.push(b, c, d);
+            }
+        }
+        return new Uint32Array(index);
+    }
+
+    // every triangle a tile can draw at a step coarser than the grid, within
+    // its cap and its neighbors': the uniform levels, and the border strip
+    // for each way its edges can snap. levels() hands these to the road test
+    coarseTriangles(tile: Tile) {
+        const parts: Uint32Array[] = [];
+        const i = this.tiles.indexOf(tile);
+        const tr = Math.floor(i / this.tileCols);
+        const tc = i % this.tileCols;
+        // an edge only snaps as far as the tile across it can go
+        const capAt = (r: number, c: number) =>
+            r < 0 || c < 0 || r >= this.tileRows || c >= this.tileCols
+                ? 1
+                : this.tiles[r * this.tileCols + c].cap;
+        const across = [
+            capAt(tr - 1, tc),
+            capAt(tr + 1, tc),
+            capAt(tr, tc - 1),
+            capAt(tr, tc + 1),
+        ];
+        LOD_STEPS.filter((step) => step <= tile.cap).forEach((step) => {
+            if (step > 1)
+                parts.push(
+                    this.tileTriangles(tile, step, step, step, step, step)
+                );
+            const [tops, bottoms, lefts, rights] = across.map((cap) =>
+                LOD_STEPS.filter((s) => s >= step && s <= Math.max(step, cap))
+            );
+            tops.forEach((top) =>
+                bottoms.forEach((bottom) =>
+                    lefts.forEach((left) =>
+                        rights.forEach((right) => {
+                            if (Math.max(top, bottom, left, right) === step)
+                                return;
+                            parts.push(
+                                this.tileTriangles(
+                                    tile,
+                                    step,
+                                    top,
+                                    bottom,
+                                    left,
+                                    right,
+                                    true
+                                )
+                            );
+                        })
+                    )
+                )
+            );
+        });
+        const total = parts.reduce((n, part) => n + part.length, 0);
+        const out = new Uint32Array(total);
+        let k = 0;
+        parts.forEach((part) => {
+            out.set(part, k);
+            k += part.length;
+        });
+        return out;
+    }
+
     buildGround(cell: number) {
         const field = this.field;
         const cols = Math.ceil((field.maxX - field.minX) / cell) + 1;
@@ -302,6 +536,17 @@ export default class RaceTerrain {
             field.minZ,
             mobility
         );
+        // then open the ground down to the roads under the lap's bridges
+        this.clearance.carveGrid(
+            positions,
+            cols,
+            rows,
+            cell,
+            field.minX,
+            field.minZ,
+            mobility,
+            (visit) => this.forEachUnderpassSample(visit)
+        );
         this.grid = { positions, cols, rows, cell };
 
         // tiles share the vertex buffers and only differ in index, so each can
@@ -310,6 +555,10 @@ export default class RaceTerrain {
         group.name = 'race-terrain-ground';
         const tileCols = Math.ceil((cols - 1) / TILE_QUADS);
         const tileRows = Math.ceil((rows - 1) / TILE_QUADS);
+        this.gridCols = cols;
+        this.tileCols = tileCols;
+        this.tileRows = tileRows;
+        this.tiles = [];
         const box = new THREE.Box3();
         const point = new THREE.Vector3();
         for (let tr = 0; tr < tileRows; tr++) {
@@ -342,9 +591,57 @@ export default class RaceTerrain {
                 mesh.name = `race-terrain-tile-${tr}-${tc}`;
                 mesh.receiveShadow = true;
                 group.add(mesh);
+                this.tiles.push({
+                    mesh,
+                    lodIndex: {},
+                    cap: fitStep(
+                        { r0, c0, r1, c1 },
+                        LOD_STEPS[LOD_STEPS.length - 1]
+                    ),
+                    r0,
+                    c0,
+                    r1,
+                    c1,
+                    box: box.clone(),
+                    step: 1,
+                    key: '1:1:1:1:1',
+                });
             }
         }
+        this.capRoadTiles(cell);
         return group;
+    }
+
+    // a coarse triangle over the road would have to be carved into a crater
+    // to stay under it, so tiles within one coarse cell of the road keep the
+    // full grid. the stitched border strip a finer tile draws next to a
+    // coarser one lies within a cell of that neighbor, so the road can't be
+    // under it either: the neighbor would be a road tile and never coarse
+    capRoadTiles(cell: number) {
+        const reach = LOD_STEPS[LOD_STEPS.length - 1];
+        const field = this.field;
+        const quads = TILE_QUADS;
+        this.clearance.forEachSample((x, z) => {
+            const col = (x - field.minX) / cell;
+            const row = (z - field.minZ) / cell;
+            const tc0 = Math.floor((col - reach) / quads);
+            const tc1 = Math.floor((col + reach) / quads);
+            const tr0 = Math.floor((row - reach) / quads);
+            const tr1 = Math.floor((row + reach) / quads);
+            for (
+                let tr = Math.max(0, tr0);
+                tr <= Math.min(this.tileRows - 1, tr1);
+                tr++
+            ) {
+                for (
+                    let tc = Math.max(0, tc0);
+                    tc <= Math.min(this.tileCols - 1, tc1);
+                    tc++
+                ) {
+                    this.tiles[tr * this.tileCols + tc].cap = 1;
+                }
+            }
+        });
     }
 
     // from the barrier line out onto the terrain, on the same banked frames
@@ -352,6 +649,35 @@ export default class RaceTerrain {
     // is the verge's outer edge exactly (no gap, and no overlap to flicker).
     // the outer columns take every SKIRT_STRIDE-th station, and the first
     // strip is stitched between the two
+    // across each underpass road and a shoulder, every 2 m along it, with
+    // the ground kept UNDERPASS_DEPTH under the lidar road height
+    forEachUnderpassSample(
+        visit: (x: number, z: number, ceiling: number) => void
+    ) {
+        this.track.underpasses.forEach((road) => {
+            const reach = road.width / 2 + UNDERPASS_SHOULDER;
+            const points = road.points;
+            for (let i = 0; i + 1 < points.length; i++) {
+                const [x0, y0, z0] = points[i];
+                const [x1, y1, z1] = points[i + 1];
+                const length = Math.hypot(x1 - x0, z1 - z0);
+                if (length < 1e-3) continue;
+                const nx = -(z1 - z0) / length;
+                const nz = (x1 - x0) / length;
+                const steps = Math.max(1, Math.ceil(length / 2));
+                for (let k = 0; k <= steps; k++) {
+                    const f = k / steps;
+                    const x = x0 + (x1 - x0) * f;
+                    const y = y0 + (y1 - y0) * f;
+                    const z = z0 + (z1 - z0) * f;
+                    for (let l = -reach; l <= reach + 1e-6; l += 0.75) {
+                        visit(x + nx * l, z + nz * l, y - UNDERPASS_DEPTH);
+                    }
+                }
+            }
+        });
+    }
+
     buildSkirt() {
         const track = this.track;
         const curve = track.visualCurve;
@@ -431,11 +757,20 @@ export default class RaceTerrain {
         // triangles per side and ring, in lap order
         const index: number[] = [];
         const segmentStart: number[] = [];
+        // no skirt under the lap's bridges, the road below shows through
+        const bridged = (s: number) => {
+            const d = ((s / stations) * track.length) / track.distanceScale;
+            return track.spans.some(
+                (span) =>
+                    d > span.start - SPAN_MARGIN && d < span.end + SPAN_MARGIN
+            );
+        };
         for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
             for (let j = 0; j < rings; j++) {
                 segmentStart.push(index.length / 3);
                 const s0 = ringStation(j);
                 const s1 = ringStation(j + 1);
+                if (bridged(s0) || bridged(s1)) continue;
                 const mid = s0 + Math.floor((s1 - s0) / 2);
                 const r0 = ringVertex(sideIndex, j, 1);
                 const r1 = ringVertex(sideIndex, j + 1, 1);
@@ -524,6 +859,15 @@ export default class RaceTerrain {
             }
         }
         this.clearance.carveTriangles(positions, index, mobility, carve, mask);
+        // and where an underpass road runs out under the skirt at an angle
+        this.clearance.carveTriangles(
+            positions,
+            index,
+            mobility,
+            undefined,
+            undefined,
+            (visit) => this.forEachUnderpassSample(visit)
+        );
 
         this.skirtSurface = { positions, index: geometry.getIndex()!.array };
         this.skirtLookup = null;
