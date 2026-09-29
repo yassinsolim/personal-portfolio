@@ -8,6 +8,8 @@ import Resources from '../Utils/Resources';
 import Sizes from '../Utils/Sizes';
 import Camera from '../Camera/Camera';
 import EventEmitter from '../Utils/EventEmitter';
+import { classifyGpu, readRenderer } from '../Utils/gpuClass';
+import { isMobileDevice } from '../Utils/Device';
 
 const SCREEN_SIZE = { w: 1280, h: 1024 };
 const IFRAME_MARGIN = {
@@ -85,6 +87,35 @@ export default class MonitorScreen extends EventEmitter {
         this.setMonitorVisualVisibility(true);
     }
 
+    embedQuality() {
+        // ?raceTier forces the light path for testing, the monitor follows it
+        const forced = new URLSearchParams(window.location.search).get('raceTier');
+        if (forced === 'low' || forced === 'high') return forced;
+        const { renderer, vendor } = readRenderer(
+            this.application.renderer.instance.getContext()
+        );
+        const nav = navigator as Navigator & { deviceMemory?: number };
+        return classifyGpu({
+            renderer,
+            vendor,
+            cores: nav.hardwareConcurrency,
+            memoryGb: nav.deviceMemory,
+            mobile: isMobileDevice(),
+        }).tier === 'low'
+            ? 'low'
+            : 'high';
+    }
+
+    postToOs(type: string) {
+        const iframe = this.monitorIframe;
+        if (!iframe?.contentWindow) return;
+        try {
+            iframe.contentWindow.postMessage({ type }, new URL(iframe.src).origin);
+        } catch {
+            // not loaded yet: it starts unpaused and the next change catches up
+        }
+    }
+
     bindRaceModeVisibility() {
         UIEventBus.on(
             'raceMode:changed',
@@ -92,6 +123,8 @@ export default class MonitorScreen extends EventEmitter {
                 const active = Boolean(state?.active);
                 this.raceModeActive = active;
                 this.setMonitorVisualVisibility(!active);
+                // the race covers the monitor, so yassinOS can stop drawing
+                this.postToOs(active ? 'yassinos:pause' : 'yassinos:resume');
                 if (active) {
                     this.releaseFocus();
                     this.clearPendingMonitorLeave();
@@ -300,8 +333,10 @@ export default class MonitorScreen extends EventEmitter {
         const iframe = document.createElement('iframe');
 
         // Set iframe attributes
-        const productionSrc = 'https://os.yassin.app/?embed=1&quality=high';
-        const localDevSrc = 'http://localhost:3000/';
+        // yassinOS draws a lighter wallpaper for quality=low
+        const embed = `?embed=1&quality=${this.embedQuality()}`;
+        const productionSrc = `https://os.yassin.app/${embed}`;
+        const localDevSrc = `http://localhost:3000/${embed}`;
         const urlParams = new URLSearchParams(window.location.search);
         const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
             window.location.hostname
