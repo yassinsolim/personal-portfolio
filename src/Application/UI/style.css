@@ -1650,3 +1650,46 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     max-width: min(460px, calc(100vw - 28px));
     font-size: 10px;
 }
+
+/* the room's film grain: a noise tile under soft light, stepped between
+   offsets like per frame noise. transform only, so it stays on the
+   compositor */
+.film-grain {
+    position: absolute;
+    top: -256px;
+    left: -256px;
+    width: calc(100% + 512px);
+    height: calc(100% + 512px);
+    mix-blend-mode: soft-light;
+    pointer-events: none;
+    z-index: 3;
+    will-change: transform;
+    animation: film-grain 0.6s steps(1) infinite;
+}
+
+@keyframes film-grain {
+    0% {
+        transform: translate(0, 0);
+    }
+    17% {
+        transform: translate(-83px, 47px);
+    }
+    33% {
+        transform: translate(61px, -109px);
+    }
+    50% {
+        transform: translate(-131px, -29px);
+    }
+    67% {
+        transform: translate(113px, 89px);
+    }
+    83% {
+        transform: translate(-37px, 151px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .film-grain {
+        animation: none;
+    }
+}

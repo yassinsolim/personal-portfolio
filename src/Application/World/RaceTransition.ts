@@ -840,19 +840,20 @@ export default class RaceTransition {
         renderer.setClearColor(clearColor, clearAlpha);
     }
 
-    // the room's film grain stays on (it's its own canvas over the scene) and
+    // the room's film grain stays on (it's its own layer over the scene) and
     // fades with the room, instead of blinking off when the race starts
     keepRoomGrain(on: boolean, amount = 1) {
         const renderer = this.application.renderer;
-        const grain = renderer.overlayInstance.domElement;
+        const grain = renderer.grain;
         renderer.keepGrain = on;
         if (!on) {
-            grain.style.opacity = '0.12';
+            grain.style.opacity = String(renderer.grainOpacity);
             renderer.applyEffects();
             return;
         }
-        if (!renderer.effectsLow) grain.style.display = '';
-        grain.style.opacity = String(0.12 * amount);
+        if (!renderer.effectsLow && renderer.grainAllowed)
+            grain.style.display = '';
+        grain.style.opacity = String(renderer.grainOpacity * amount);
     }
 
     skip() {
