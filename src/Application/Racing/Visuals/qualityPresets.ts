@@ -1,4 +1,5 @@
-import { isLowPowerDevice, isMobileDevice } from '../../Utils/Device';
+import { isMobileDevice } from '../../Utils/Device';
+import { classifyGpu, readRenderer, type GpuClass } from '../../Utils/gpuClass';
 
 // race graphics presets. auto picks balanced on a capable gpu and performance
 // on weak or software ones, and the adaptive resolution still runs on top.
@@ -109,9 +110,34 @@ export const settingsFor = (
 
 export type GpuTier = 'high' | 'low';
 
-// software rasterizers and old mobile or integrated parts get the light preset
-const WEAK_GPU =
-    /swiftshader|llvmpipe|softpipe|software|microsoft basic|mali-[t4]|adreno \(tm\) [3-5]\d\d|powervr|intel\(r\) (?:hd|uhd) graphics [1-6]?\d{2,3}\b|(?:intel.*hd graphics$)/i;
+// the starting tier, from the renderer string plus cpu and memory hints
+// (gpuClass.ts). ?raceTier=low or high forces it, for testing either path
+export const detectGpu = (
+    gl: WebGLRenderingContext | WebGL2RenderingContext
+): GpuClass & { renderer: string; vendor: string; forced: boolean } => {
+    const { renderer, vendor } = readRenderer(gl);
+    const { deviceMemory, hardwareConcurrency } = navigator as Navigator & {
+        deviceMemory?: number;
+    };
+    const found = classifyGpu({
+        renderer,
+        vendor,
+        cores: hardwareConcurrency,
+        memoryGb: deviceMemory,
+        mobile: isMobileDevice(),
+    });
+    const forced = new URLSearchParams(window.location.search).get('raceTier');
+    if (forced === 'low' || forced === 'high')
+        return {
+            ...found,
+            tier: forced,
+            reason: `forced by ?raceTier`,
+            renderer,
+            vendor,
+            forced: true,
+        };
+    return { ...found, renderer, vendor, forced: false };
+};
 
 // a cpu rasterizer: every shader compile takes seconds there
 export const isSoftwareGl = (gl: WebGLRenderingContext | WebGL2RenderingContext) => {
@@ -128,24 +154,7 @@ export const isSoftwareGl = (gl: WebGLRenderingContext | WebGL2RenderingContext)
 
 export const detectGpuTier = (
     gl: WebGLRenderingContext | WebGL2RenderingContext
-): GpuTier => {
-    // ?raceTier=low or high forces it, for testing the light path on a fast machine
-    const forced = new URLSearchParams(window.location.search).get('raceTier');
-    if (forced === 'low' || forced === 'high') return forced;
-    if (isLowPowerDevice() || isMobileDevice()) return 'low';
-    let renderer = '';
-    try {
-        const info = gl.getExtension('WEBGL_debug_renderer_info');
-        renderer = String(
-            info
-                ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL)
-                : gl.getParameter(gl.RENDERER)
-        );
-    } catch {
-        return 'high';
-    }
-    return WEAK_GPU.test(renderer) ? 'low' : 'high';
-};
+): GpuTier => detectGpu(gl).tier;
 
 // render mode (the existing auto / quality / performance switch) to a preset.
 // in auto, once the adaptive resolution has to drop below 1x the heavy extras
