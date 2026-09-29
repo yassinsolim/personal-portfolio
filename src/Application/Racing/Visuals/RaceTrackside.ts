@@ -66,6 +66,7 @@ export default class RaceTrackside {
         this.buildStart();
         this.buildBridges();
         this.buildTrackBridges();
+        this.buildUnderpasses();
         this.buildBoards();
     }
 
@@ -222,6 +223,34 @@ export default class RaceTrackside {
                 });
             });
         });
+        // the deck's underside, level with the bottom of the fascia
+        track.spans.forEach((span) => {
+            const from = span.start - 4;
+            const to = span.end + 4;
+            const steps = Math.max(2, Math.ceil((to - from) / 1.5));
+            const first = positions.length / 3;
+            for (let i = 0; i <= steps; i++) {
+                const t = this.frameAt(
+                    from + ((to - from) * i) / steps,
+                    point,
+                    tangent,
+                    normal,
+                    side
+                );
+                const half = track.getVergeHalfWidth(t) + 0.15 + THICK;
+                [1, -1].forEach((sign) =>
+                    positions.push(
+                        point.x + side.x * sign * half,
+                        point.y - FASCIA,
+                        point.z + side.z * sign * half
+                    )
+                );
+            }
+            for (let i = 0; i < steps; i++) {
+                const a = first + i * 2;
+                indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+            }
+        });
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute(
             'position',
@@ -241,6 +270,66 @@ export default class RaceTrackside {
         );
         mesh.name = 'race-track-bridges';
         mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        this.root.add(mesh);
+    }
+
+    // the osm roads under the lap's bridges, on the lidar heights, in the
+    // lap's asphalt. a short flap hangs off each edge so the ends never float
+    // where the drawn ground is a little lower than the lidar road
+    buildUnderpasses() {
+        const track = this.track;
+        if (!track.underpasses.length) return;
+        const positions: number[] = [];
+        const uvs: number[] = [];
+        const indices: number[] = [];
+        const FLAP = 1.5;
+        track.underpasses.forEach((road) => {
+            const half = road.width / 2;
+            const points = road.points;
+            const first = positions.length / 3;
+            let along = 0;
+            points.forEach(([x, y, z], i) => {
+                const a = points[Math.max(0, i - 1)];
+                const b = points[Math.min(points.length - 1, i + 1)];
+                const length = Math.hypot(b[0] - a[0], b[2] - a[2]) || 1;
+                const nx = -(b[2] - a[2]) / length;
+                const nz = (b[0] - a[0]) / length;
+                if (i > 0)
+                    along += Math.hypot(
+                        x - points[i - 1][0],
+                        z - points[i - 1][2]
+                    );
+                const top = y + 0.04;
+                // flap left, left edge, right edge, flap right
+                [
+                    [-half, top - FLAP, 0],
+                    [-half, top, 0],
+                    [half, top, 1],
+                    [half, top - FLAP, 1],
+                ].forEach(([lateral, height, u]) => {
+                    positions.push(x + nx * lateral, height, z + nz * lateral);
+                    uvs.push(u, along / 32);
+                });
+            });
+            for (let i = 0; i + 1 < points.length; i++) {
+                for (let f = 0; f < 3; f++) {
+                    const a = first + i * 4 + f;
+                    indices.push(a, a + 1, a + 4, a + 1, a + 5, a + 4);
+                }
+            }
+        });
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute(
+            'position',
+            new THREE.Float32BufferAttribute(positions, 3)
+        );
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+        geometry.computeBoundingSphere();
+        const mesh = new THREE.Mesh(geometry, track.visualMesh.material);
+        mesh.name = 'race-underpasses';
         mesh.receiveShadow = true;
         this.root.add(mesh);
     }
@@ -610,5 +699,4 @@ export default class RaceTrackside {
         line.receiveShadow = true;
         group.add(line);
     }
-
 }
