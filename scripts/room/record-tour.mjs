@@ -103,6 +103,12 @@ for (const id of ['m2', 'm3', 'm1']) {
     await page.keyboard.press('Escape');
     await sleep(1600);
 }
+// the pc, with its spec card
+await page.evaluate(() => window.Application.world.screens.focus('pc'));
+await sleep(2600);
+await shot('focus_pc');
+await page.keyboard.press('Escape');
+await sleep(1600);
 // the flipper zero, zoomed in by its own focus
 await page.evaluate(() => window.Application.world.flipper?.focus());
 await sleep(3500);
