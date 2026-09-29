@@ -6,12 +6,11 @@
   - Repo: https://github.com/henryjeff/portfolio-website
   - License: MIT, Copyright 2024 Henry Heffernan (notice below)
   - Files from that repo, byte for byte: the room models (`static/models/Computer/computer_setup.glb`,
-    `static/models/Decor/decor.glb`, `static/models/World/environment.glb`), the environment map
-    (`static/textures/environmentMap/`) and everything in `static/audio/`. The baked room
-    textures next to the models are re-encoded or edited versions of upstream's
-  - Upstream doesn't say where the environment map, the room sounds or the three radio tracks
-    (`static/audio/radio/`) came from. The site hasn't loaded any `static/audio/` file since
-    `b35f2d4`
+    `static/models/Decor/decor.glb`, `static/models/World/environment.glb`) and the environment map
+    (`static/textures/environmentMap/`). The baked room textures next to the models are
+    re-encoded or edited versions of upstream's
+  - Upstream doesn't say where the environment map came from. Its room sounds and radio tracks
+    (`static/audio/`) were never loaded or deployed here and were removed
 
 - Inner OS inspiration: Dustin Brett (daedalOS)
   - Repo: https://github.com/DustinBrett/daedalOS
