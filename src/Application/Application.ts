@@ -13,11 +13,15 @@ import Resources from './Utils/Resources';
 
 import sources from './sources';
 
-import Stats from 'stats.js';
+import type Stats from 'stats.js';
 import Loading from './Utils/Loading';
 
 import UI from './UI';
-import SceneExportController from './Utils/SceneExportController';
+import type SceneExportController from './Utils/SceneExportController';
+
+// the glb export (GLTFExporter) and the fps panel are dev tools, only
+// downloaded when their url flags are there
+const EXPORT_FLAGS = ['export', 'export-ui', 'exportUi', 'debug'];
 
 let instance: Application | null = null;
 
@@ -35,7 +39,7 @@ export default class Application {
     mouse: Mouse;
     loading: Loading;
     ui: UI;
-    sceneExportController: SceneExportController;
+    sceneExportController: SceneExportController | undefined;
     stats: Stats | undefined;
 
     constructor() {
@@ -72,14 +76,21 @@ export default class Application {
         this.world = new World();
 
         this.ui = new UI();
-        this.sceneExportController = new SceneExportController(this);
 
         const urlParams = new URLSearchParams(window.location.search);
+        if (EXPORT_FLAGS.some((flag) => urlParams.has(flag))) {
+            void import('./Utils/SceneExportController').then(
+                ({ default: Controller }) => {
+                    this.sceneExportController = new Controller(this);
+                }
+            );
+        }
         if (urlParams.has('debug')) {
-            this.stats = new Stats();
-            this.stats.showPanel(0);
-
-            document.body.appendChild(this.stats.dom);
+            void import('stats.js').then(({ default: StatsPanel }) => {
+                this.stats = new StatsPanel();
+                this.stats.showPanel(0);
+                document.body.appendChild(this.stats.dom);
+            });
         }
 
         // Resize event
@@ -130,6 +141,6 @@ export default class Application {
 
         this.renderer.instance.dispose();
 
-        if (this.debug.active) this.debug.ui.destroy();
+        this.debug.ui?.destroy();
     }
 }

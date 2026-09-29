@@ -12,7 +12,12 @@ import Car from './Car';
 import RaceTransition from './RaceTransition';
 import Flipper from './Flipper';
 import UIEventBus from '../UI/EventBus';
+import { raceSources } from '../sources';
+import { isLowPowerDevice } from '../Utils/Device';
 import type RaceManager from '../Racing/RaceManager';
+
+// the camera's intro move takes 2.5 s after the loading screen
+const RACE_PREFETCH_DELAY_MS = 3000;
 
 type RaceAction = {
     event: string;
@@ -36,6 +41,9 @@ export default class World {
     flipper: Flipper;
     raceManager: RaceManager | null;
     raceManagerLoading: Promise<RaceManager> | null;
+    raceLoading: Promise<
+        [typeof import('../Racing/RaceManager'), typeof import('../Racing/slicing'), void]
+    > | null = null;
     pendingRaceAction: RaceAction | null;
 
     constructor() {
@@ -46,6 +54,7 @@ export default class World {
         this.raceManagerLoading = null;
         this.pendingRaceAction = null;
         this.bindRaceManagerLoader();
+        UIEventBus.on('loadingScreenDone', () => this.prefetchRaceWhenIdle());
         // Wait for resources
         this.resources.on('ready', () => {
             // Setup
@@ -75,9 +84,48 @@ export default class World {
                 }
 
                 this.pendingRaceAction = { event, payload };
-                void this.ensureRaceManager();
+                // a failure is logged and the next press tries again
+                this.ensureRaceManager().catch(() => (this.pendingRaceAction = null));
             });
         });
+    }
+
+    // the race code and its track data, downloaded but nothing built yet
+    loadRace() {
+        if (!this.raceLoading) {
+            // chrome starts its audio service with the first AudioContext,
+            // which then blocks for 100 to 150 ms, and race audio makes that
+            // context in the car click. listing the devices starts the
+            // service in the background, so the click doesn't pay for it
+            void navigator.mediaDevices?.enumerateDevices?.().catch(() => undefined);
+            this.raceLoading = Promise.all([
+                import('../Racing/RaceManager'),
+                import('../Racing/slicing'),
+                this.resources.loadExtra(raceSources),
+            ]);
+            this.raceLoading.catch(() => (this.raceLoading = null));
+        }
+        return this.raceLoading;
+    }
+
+    // capable desktops on a fast connection fetch the race once the room is
+    // up and the camera's intro is over, so the car click never waits on the
+    // network. phones, slow or metered connections wait for the hover
+    prefetchRaceWhenIdle() {
+        const connection = (navigator as Navigator & {
+            connection?: { saveData?: boolean; effectiveType?: string };
+        }).connection;
+        if (connection?.saveData) return;
+        if (connection?.effectiveType && connection.effectiveType !== '4g') return;
+        if (isLowPowerDevice()) return;
+        const load = () => void this.loadRace().catch(() => undefined);
+        window.setTimeout(() => {
+            if (typeof window.requestIdleCallback === 'function') {
+                window.requestIdleCallback(load, { timeout: 5000 });
+            } else {
+                load();
+            }
+        }, RACE_PREFETCH_DELAY_MS);
     }
 
     async ensureRaceManager() {
@@ -86,15 +134,19 @@ export default class World {
         }
 
         if (!this.raceManagerLoading) {
-            // built a slice a frame, so the page keeps moving
-            this.raceManagerLoading = Promise.all([
-                import('../Racing/RaceManager'),
-                import('../Racing/slicing'),
-            ]).then(async ([{ default: RaceManagerClass }, { slice }]) => {
+            // the race code and its track data come down together, then the
+            // world is built a slice a frame, so the page keeps moving
+            this.raceManagerLoading = this.loadRace().then(async ([{ default: RaceManagerClass }, { slice }]) => {
                 const manager = new RaceManagerClass(true);
                 await this.application.renderer.holdResolution(slice(manager.pending));
                 this.raceManager = manager;
                 return manager;
+            });
+            // a failed download (offline, or a deploy replaced the chunks)
+            // can be tried again on the next hover or click
+            this.raceManagerLoading.catch((error) => {
+                console.error('[World] race mode failed to load', error);
+                this.raceManagerLoading = null;
             });
         }
 

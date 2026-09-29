@@ -205,67 +205,83 @@ export default class Resources extends EventEmitter {
     }
 
     startLoading() {
-
-        // Load each source
         for (const source of this.sources) {
-            if (source.type === 'gltfModel') {
-                this.loadModel(
-                    source.path,
-                    (file) => this.sourceLoaded(source, file),
-                    (error) => this.sourceFailed(source, error)
-                );
-            } else if (source.type === 'texture') {
-                this.loaders.textureLoader.load(
-                    source.path,
-                    (file) => {
-                        file.colorSpace = THREE.SRGBColorSpace;
-                        this.sourceLoaded(source, file);
-                    },
-                    undefined,
-                    (error) => {
-                        this.sourceFailed(source, error);
-                    }
-                );
-            } else if (source.type === 'cubeTexture') {
-                this.loaders.cubeTextureLoader.load(
-                    source.path,
-                    (file) => {
-                        this.sourceLoaded(source, file);
-                    },
-                    undefined,
-                    (error) => {
-                        this.sourceFailed(source, error);
-                    }
-                );
-            } else if (source.type === 'audio') {
-                this.loaders.audioLoader.load(
-                    source.path,
-                    (buffer) => {
-                        this.sourceLoaded(source, buffer);
-                    },
-                    undefined,
-                    (error) => {
-                        this.sourceFailed(source, error);
-                    }
-                );
-            } else if (source.type === 'json') {
-                this.loaders.jsonLoader.load(
-                    source.path,
-                    (file) => {
-                        try {
-                            const parsed = JSON.parse(file as string);
-                            this.sourceLoaded(source, parsed);
-                        } catch (error) {
-                            this.sourceFailed(source, error);
-                        }
-                    },
-                    undefined,
-                    (error) => {
-                        this.sourceFailed(source, error);
-                    }
-                );
-            }
+            this.loadSource(
+                source,
+                (file) => this.sourceLoaded(source, file),
+                (error) => this.sourceFailed(source, error)
+            );
         }
+    }
+
+    // fetches one source with the loader for its type
+    loadSource(
+        source: Resource,
+        onLoad: (file: LoadedResource) => void,
+        onError: (error: unknown) => void
+    ) {
+        if (source.type === 'gltfModel') {
+            this.loadModel(source.path, onLoad, onError);
+        } else if (source.type === 'texture') {
+            this.loaders.textureLoader.load(
+                source.path,
+                (file) => {
+                    file.colorSpace = THREE.SRGBColorSpace;
+                    onLoad(file);
+                },
+                undefined,
+                onError
+            );
+        } else if (source.type === 'cubeTexture') {
+            this.loaders.cubeTextureLoader.load(source.path, onLoad, undefined, onError);
+        } else if (source.type === 'audio') {
+            this.loaders.audioLoader.load(source.path, onLoad, undefined, onError);
+        } else if (source.type === 'json') {
+            this.loaders.jsonLoader.load(
+                source.path,
+                (file) => {
+                    try {
+                        onLoad(JSON.parse(file as string));
+                    } catch (error) {
+                        onError(error);
+                    }
+                },
+                undefined,
+                onError
+            );
+        }
+    }
+
+    // sources that aren't part of the homepage load (race mode's track data):
+    // same items table, but they don't count towards the loading screen or
+    // its 'ready'. each source is fetched once, a failed one can be retried
+    private extraLoads = new Map<string, Promise<void>>();
+
+    loadExtra(sources: Resource[]): Promise<void> {
+        return Promise.all(
+            sources.map((source) => {
+                const key = `${source.type}:${source.name}`;
+                if (this.items[source.type][source.name]) return Promise.resolve();
+                let pending = this.extraLoads.get(key);
+                if (!pending) {
+                    pending = new Promise<void>((resolve, reject) => {
+                        this.loadSource(
+                            source,
+                            (file) => {
+                                this.items[source.type][source.name] = file;
+                                resolve();
+                            },
+                            (error) => {
+                                this.extraLoads.delete(key);
+                                reject(error);
+                            }
+                        );
+                    });
+                    this.extraLoads.set(key, pending);
+                }
+                return pending;
+            })
+        ).then(() => undefined);
     }
 
     // CubeTextureLoader forwards these callbacks to each of its six faces, so a

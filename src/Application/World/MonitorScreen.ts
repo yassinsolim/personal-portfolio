@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
-import GUI from 'lil-gui';
+import type GUI from 'lil-gui';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import Debug from '../Utils/Debug';

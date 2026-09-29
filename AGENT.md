@@ -98,6 +98,29 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   they're there. Previews sit behind Vercel Authentication; `vercel curl` gets through it on its
   own (the last line prints the response headers).
 
+## Load Notes (2026-09-29)
+- The homepage only downloads what the room draws (`sources.ts`). Race data (`raceSources`, the
+  lidar track json) comes down with the race chunks (`World.loadRace`, through
+  `Resources.loadExtra`: same `items` table, not counted by the loading screen). Capable desktops
+  on a 4g connection fetch them in idle time 3 s after the loading screen
+  (`World.prefetchRaceWhenIdle`); phones, Save-Data and slower connections wait for the car hover
+  or a race button. Don't add race or debug assets to `sources`.
+- The old monitor layers (smudges, shadow, the two static videos) were unused since May and cost
+  7.7 MB a visit; they're gone, along with framer-motion (only the empty `InterfaceUI` wrapper used
+  it) and the unused toggle components. lil-gui (`#debug`), stats.js (`?debug`) and the GLB
+  exporter (`?export`, `?export-ui`, `?debug`) are dynamic imports.
+- A failed race download leaves the room as it was (`RaceTransition.abort`) and the next hover or
+  click tries again.
+- Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
+  (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
+  `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149
+  (real gpu), with per request bytes and cache state, milestones and long tasks.
+  `lighthouse.mjs` wraps a scratch Lighthouse install. Serve on the LAN IP and pass `--spki`
+  (the cert's key hash): Chrome doesn't cache anything from a host whose certificate error was
+  ignored, so without it every repeat visit looks cold. Playwright's `route()` turns the cache off
+  too, so Supabase is blocked in DNS instead. Interleave before and after runs when the machine
+  is busy.
+
 ## Race Physics Notes (2026-09-26)
 - Ride height comes from real geometry (`getGeometricContactBottom`): the lowest vertex under
   each wheel, or an axle's own rim/tire meshes for merged axles (AMG One). Detected wheel radii

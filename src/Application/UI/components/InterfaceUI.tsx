@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import UIEventBus from '../EventBus';
 
 interface InterfaceUIProps {}
@@ -54,38 +53,18 @@ const InterfaceUI: React.FC<InterfaceUIProps> = ({}) => {
     }, []);
 
     return !loading ? (
-        <motion.div
-            initial="hide"
-            variants={vars}
-            animate={visible ? 'visible' : 'hide'}
-            style={styles.wrapper}
+        <div
+            style={Object.assign(
+                {},
+                styles.wrapper,
+                visible ? styles.visible : styles.hide
+            )}
             className="interface-wrapper"
             id="prevent-click"
-        >
-        </motion.div>
+        />
     ) : (
         <></>
     );
-};
-
-const vars = {
-    visible: {
-        opacity: 1,
-        x: 0,
-        transition: {
-            duration: 0.5,
-            delay: 0.3,
-            ease: 'easeOut',
-        },
-    },
-    hide: {
-        x: -32,
-        opacity: 0,
-        transition: {
-            duration: 0.3,
-            ease: 'easeOut',
-        },
-    },
 };
 
 interface StyleSheetCSS {
@@ -98,6 +77,16 @@ const styles: StyleSheetCSS = {
         display: 'flex',
         position: 'absolute',
         boxSizing: 'border-box',
+    },
+    visible: {
+        opacity: 1,
+        transform: 'translateX(0)',
+        transition: 'opacity 0.5s ease-out 0.3s, transform 0.5s ease-out 0.3s',
+    },
+    hide: {
+        opacity: 0,
+        transform: 'translateX(-32px)',
+        transition: 'opacity 0.3s ease-out, transform 0.3s ease-out',
     },
 };
 
