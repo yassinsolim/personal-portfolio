@@ -4,6 +4,7 @@ import { VERGE_DROP } from '../Track/NordschleifeTrack';
 import TrackField, { fbm, type TrackNearest } from './TrackField';
 import RoadClearance, { CARVE_DEPTH, TriangleIndex } from './RoadClearance';
 import { createGrassTexture } from './proceduralTextures';
+import { drain, type Steps } from '../slicing';
 
 // ground around the track: the real eifel from the dem, blended into the road
 // near it. the grid stays under the road and verges, and a skirt strip runs
@@ -137,14 +138,29 @@ export default class RaceTerrain {
     private skirtLookup: TriangleIndex | null = null;
     private nearest: TrackNearest;
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         track: NordschleifeTrack,
-        quality: TerrainQuality
+        quality: TerrainQuality,
+        defer = false
     ) {
+        this.pending = this.build(parent, track, quality);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(
+        parent: THREE.Object3D,
+        track: NordschleifeTrack,
+        quality: TerrainQuality
+    ): Steps {
         this.track = track;
         this.field = new TrackField(track, MARGIN);
+        yield 'terrain:field';
         this.clearance = new RoadClearance(track);
+        yield 'terrain:clearance';
         this.nearest = { distance: 0, roadY: 0, index: -1 };
         this.barrier = track.getVergeHalfWidth(0.5);
         this.root = new THREE.Group();
@@ -174,8 +190,9 @@ export default class RaceTerrain {
         this.tileQuads = TILE_QUADS[quality];
         this.lodRanges = LOD_RANGES[quality];
         this.batched = BATCH_GROUND[quality];
-        this.ground = this.buildGround(GROUND_CELL[quality]);
-        this.skirt = this.buildSkirt();
+        yield 'terrain:texture';
+        this.ground = yield* this.buildGround(GROUND_CELL[quality]);
+        this.skirt = yield* this.buildSkirt();
         this.root.add(this.ground);
         this.root.add(this.skirt);
     }
@@ -540,7 +557,7 @@ export default class RaceTerrain {
         return out;
     }
 
-    buildGround(cell: number) {
+    *buildGround(cell: number): Generator<string | void, THREE.Group, void> {
         const field = this.field;
         const cols = Math.ceil((field.maxX - field.minX) / cell) + 1;
         const rows = Math.ceil((field.maxZ - field.minZ) / cell) + 1;
@@ -566,6 +583,7 @@ export default class RaceTerrain {
                 uvs[i * 2] = x / DETAIL_METERS;
                 uvs[i * 2 + 1] = z / DETAIL_METERS;
             }
+            yield 'ground:row';
         }
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute(
@@ -597,10 +615,12 @@ export default class RaceTerrain {
             for (let col = 0; col < cols - 1; col++, k += 6)
                 quad(all, k, row, col);
         }
+        yield 'ground:index';
         // normals over the whole grid so tiles meet without seams, taken
         // before the carve so it only moves hidden ground, not the shading
         geometry.setIndex(new THREE.BufferAttribute(all, 1));
         geometry.computeVertexNormals();
+        yield 'ground:normals';
         // the push above keeps most of the grid under the road, but a big
         // cell reaches past it and the karussell's bank drops the inside
         // below the centerline. the carve covers both, on the triangles as
@@ -614,6 +634,7 @@ export default class RaceTerrain {
             field.minZ,
             mobility
         );
+        yield 'ground:carve';
         // then open the ground down to the roads under the lap's bridges
         this.clearance.carveGrid(
             positions,
@@ -625,6 +646,7 @@ export default class RaceTerrain {
             mobility,
             (visit) => this.forEachUnderpassSample(visit)
         );
+        yield 'ground:underpasses';
         this.grid = { positions, cols, rows, cell };
 
         // tiles share the vertex buffers and only differ in index, so each can
@@ -686,8 +708,10 @@ export default class RaceTerrain {
                     key: '1:1:1:1:1',
                 });
             }
+            yield 'ground:tiles';
         }
         this.capRoadTiles(cell);
+        yield 'ground:cap';
         if (this.batched) {
             // starts as the whole grid, the first update trims it to the view
             const index = new THREE.BufferAttribute(all.slice(), 1);
@@ -780,7 +804,7 @@ export default class RaceTerrain {
         });
     }
 
-    buildSkirt() {
+    *buildSkirt(): Generator<string | void, THREE.Group, void> {
         const track = this.track;
         const curve = track.visualCurve;
         const stations = track.getRibbonSamples();
@@ -818,9 +842,10 @@ export default class RaceTerrain {
             uvs[v * 2] = x / DETAIL_METERS;
             uvs[v * 2 + 1] = z / DETAIL_METERS;
         };
-        [1, -1].forEach((sign, sideIndex) => {
+        for (const [sideIndex, sign] of [1, -1].entries()) {
             previousSide.set(1, 0, 0);
             for (let s = 0; s <= stations; s++) {
+                if (s % 64 === 0) yield 'skirt:stations';
                 // same t and frame sequence as createRibbonGeometry
                 const t = (((s / stations) % 1) + 1) % 1;
                 track.getRibbonFrame(
@@ -854,7 +879,8 @@ export default class RaceTerrain {
                         tucks.push(v, this.groundGridAt(x, z) - SKIRT_TUCK);
                 }
             }
-        });
+        }
+        yield 'skirt:stations';
 
         // triangles per side and ring, in lap order
         const index: number[] = [];
@@ -894,6 +920,7 @@ export default class RaceTerrain {
             }
         }
         segmentStart.push(index.length / 3);
+        yield 'skirt:index';
 
         const geometry = new THREE.BufferGeometry();
         geometry.setIndex(index);
@@ -905,6 +932,7 @@ export default class RaceTerrain {
         geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
         // normals from the shape before the tuck and the carve, like the grid
         geometry.computeVertexNormals();
+        yield 'skirt:normals';
         // both sides wind the same way in their own frame, so make every
         // normal face up
         const normals = geometry.getAttribute(
@@ -926,6 +954,7 @@ export default class RaceTerrain {
             const v = tucks[k];
             positions[v * 3 + 1] = Math.min(positions[v * 3 + 1], tucks[k + 1]);
         }
+        yield 'skirt:tucks';
         // where another stretch of the lap comes close (the karussell's way
         // in and out), the skirt can reach over that road, so carve it there
         const frames = track.getSampleCount();
@@ -943,6 +972,7 @@ export default class RaceTerrain {
             for (let k = j - 2; k <= j + 2; k++)
                 crowded[(k + rings) % rings] = 1;
         }
+        yield 'skirt:crowded';
         // crowding goes both ways, so the other road's samples are all at
         // crowded stations too
         const carve: number[] = [];
@@ -961,6 +991,7 @@ export default class RaceTerrain {
             }
         }
         this.clearance.carveTriangles(positions, index, mobility, carve, mask);
+        yield 'skirt:carve';
         // and where an underpass road runs out under the skirt at an angle
         this.clearance.carveTriangles(
             positions,
@@ -970,6 +1001,7 @@ export default class RaceTerrain {
             undefined,
             (visit) => this.forEachUnderpassSample(visit)
         );
+        yield 'skirt:underpasses';
 
         this.skirtSurface = { positions, index: geometry.getIndex()!.array };
         this.skirtLookup = null;
@@ -1009,6 +1041,7 @@ export default class RaceTerrain {
             mesh.name = `race-terrain-skirt-${chunk}`;
             mesh.receiveShadow = true;
             group.add(mesh);
+            yield 'skirt:chunk';
         }
         return group;
     }
