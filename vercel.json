@@ -54,7 +54,7 @@
       ]
     },
     {
-      "source": "/flipper/(.*)",
+      "source": "/handheld/(.*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
@@ -90,7 +90,7 @@
       ]
     },
     {
-      "source": "/(models|textures|sounds|basis|draco|flipper)/(.*)",
+      "source": "/(models|textures|sounds|basis|draco|handheld)/(.*)",
       "has": [
         {
           "type": "query",

@@ -13,15 +13,15 @@
 ## Flipper Zero on the desk
 
 - Firmware: the official Flipper Zero firmware 1.4.3 by Flipper Devices Inc. and contributors,
-  compiled to WebAssembly by the `flipper-wasm` project (`static/flipper`)
+  compiled to WebAssembly by the `flipper-wasm` project (`static/handheld`)
   - Source: https://github.com/yassinsolim/flipper-wasm (release v0.1.0), upstream
     https://github.com/flipperdevices/flipperzero-firmware
   - License: GPL-3.0, modified; a separate program the site talks to only through a Web Worker
-    (see `static/flipper/NOTICE.md` and `LICENSE`). Includes the firmware's icons and dolphin
+    (see `static/handheld/NOTICE.md` and `LICENSE`). Includes the firmware's icons and dolphin
     animations under the same license
   - Unofficial, not affiliated with Flipper Devices Inc.; "Flipper" and "Flipper Zero" are their
     trademarks
-- 3D model (`models/Props/flipper_device.glb`): made from scratch in Blender by
+- 3D model (`models/Props/handheld.glb`): made from scratch in Blender by
   `scripts/blender/build-flipper.py` from the public dimensions; Flipper's official CAD
   (flipperdevices/flipperzero-3d-models, GPL-3.0) was a visual reference only, no geometry is
   taken from it. No logo

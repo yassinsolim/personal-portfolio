@@ -1,6 +1,6 @@
 # builds the desk flipper zero from scratch and bakes its lighting.
 #
-#   blender -b -P scripts/blender/build-flipper.py -- --out models-src/models/Props/flipper_device.glb
+#   blender -b -P scripts/blender/build-flipper.py -- --out models-src/models/Props/handheld.glb
 #
 # modelled from the public dimensions (100.3 x 40.1 x 25.6 mm) and photos; flipper's
 # official cad (flipperdevices/flipperzero-3d-models, gpl-3.0) was only used as a
@@ -16,7 +16,7 @@ import bmesh
 import bpy
 
 argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
-out_path = argv[argv.index("--out") + 1] if "--out" in argv else "/tmp/flipper_device.glb"
+out_path = argv[argv.index("--out") + 1] if "--out" in argv else "/tmp/handheld.glb"
 atlas_size = int(argv[argv.index("--atlas") + 1]) if "--atlas" in argv else 512
 
 MM = 0.001

@@ -19,22 +19,24 @@ tapped, and a Done button leaves.
 - `World/flipper/FlipperLcd.ts`: the 128x64 framebuffer drawn as the orange backlit LCD. Left
   handed mode draws the frame upside down on a real device; here the screen stays upright and
   the d-pad turns with it.
-- `static/flipper/`: the firmware build, byte for byte the v0.1.0 release (`flipper.wasm`,
-  `flipper.mjs`, `flipper-worker.js`, `sd.img`), with its GPL-3.0 `LICENSE` and `NOTICE.md`.
+- `static/handheld/`: the firmware build, byte for byte the v0.1.0 release (`firmware.wasm`,
+  `firmware.mjs` and `worker.js` are the release's `flipper.wasm`, `flipper.mjs` and
+  `flipper-worker.js`, renamed so the trademark stays out of public URLs; `FILES.md` has the
+  mapping and checksums), plus `sd.img`, its GPL-3.0 `LICENSE` and `NOTICE.md`.
 - `scripts/blender/build-flipper.py`: the model, built and baked from scratch. Output goes
   through `npm run optimize:models flipper` like the other models.
 - `scripts/flipper-room-check.mjs`: drives it in a production build and prints frame times.
 
 ## Serving: same origin, vendored under static/
 
-The release artifacts are copied into `static/flipper/`, hashed by `scripts/asset-versions.js`
+The release artifacts are copied into `static/handheld/`, hashed by `scripts/asset-versions.js`
 and cached for a year with the other versioned files. Why this and not a CDN:
 
 - No CSP change for the page: `worker-src 'self'`, `script-src 'self' 'wasm-unsafe-eval'` and
   `connect-src 'self'` already cover a same-origin module worker, its wasm and its SD image. A
   CDN would need new `worker-src`, `script-src` and `connect-src` entries, and module workers
   can't be cross-origin anyway without a blob shim.
-- The worker gets its own tighter CSP in `vercel.json` (`/flipper/(.*)`: no network except
+- The worker gets its own tighter CSP in `vercel.json` (`/handheld/(.*)`: no network except
   same origin), like the draco decoder.
 - Cost is zero: the files ride the existing static hosting and compression. They are lazy: the
   worker, wasm and SD image (about 460 KB over the wire) load on the first hover or tap, never

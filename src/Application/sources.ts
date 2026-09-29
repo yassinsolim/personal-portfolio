@@ -73,7 +73,7 @@ const sources: Resource[] = [
     {
         name: 'flipperModel',
         type: 'gltfModel',
-        path: 'models/Props/flipper_device.glb',
+        path: 'models/Props/handheld.glb',
     },
 ];
 

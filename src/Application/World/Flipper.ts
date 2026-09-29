@@ -9,7 +9,7 @@ import UIEventBus from '../UI/EventBus';
 import { isLowPowerDevice, isMobileDevice } from '../Utils/Device';
 import FlipperDevice, { FlipperButton, FLIPPER_BUTTONS } from './flipper/FlipperDevice';
 
-// the flipper zero on the desk, running its real firmware (static/flipper).
+// the flipper zero on the desk, running its real firmware (static/handheld).
 // model: scripts/blender/build-flipper.py, parts named flipper-body, -screen,
 // -led and -btn-<button>. hover loads and wakes it, a click zooms in (the
 // FLIPPER camera keyframe), arrows, enter or space and backspace work its
@@ -114,7 +114,7 @@ export default class Flipper {
         });
         document.addEventListener('visibilitychange', () => this.updateRunning());
         // test harnesses find the device through this (scripts/flipper-room-check.mjs)
-        if (new URLSearchParams(window.location.search).has('flipperDebug')) {
+        if (new URLSearchParams(window.location.search).has('handheldDebug')) {
             (window as unknown as { __flipper: Flipper }).__flipper = this;
         }
     }
@@ -229,7 +229,7 @@ export default class Flipper {
             'left:50%',
             'bottom:22px',
             'transform:translateX(-50%)',
-            'max-width:92vw',
+            'max-width:min(92vw,760px)',
             'box-sizing:border-box',
             'padding:7px 14px',
             'border-radius:18px',
@@ -237,7 +237,7 @@ export default class Flipper {
             'color:#e9e6e1',
             'font:12px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif',
             'text-align:center',
-            `white-space:${touch ? 'normal' : 'nowrap'}`,
+            'white-space:normal',
             'z-index:20',
             'opacity:0',
             'pointer-events:none',
@@ -245,7 +245,8 @@ export default class Flipper {
         ].join(';');
         const hint = touch ? 'Tap the keys' : 'Arrows, Enter, Backspace &middot; Esc to leave';
         chip.innerHTML =
-            `${hint} &middot; Unofficial Flipper Zero firmware 1.4.3, GPL-3.0, modified, ` +
+            `${hint} &middot; Unofficial build of the Flipper Zero firmware 1.4.3, not affiliated ` +
+            `with Flipper Devices &middot; GPL-3.0, modified, ` +
             `<a href="${SOURCE_URL}" target="_blank" rel="noopener" style="color:#ffb35c">source</a>`;
         if (touch) {
             // phones have no esc key

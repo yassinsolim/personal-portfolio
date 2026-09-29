@@ -93,7 +93,7 @@ const sample = async (label, ms = 3000) => {
 };
 
 const started = Date.now();
-await page.goto(`${url}?flipperDebug=1`, { waitUntil: 'commit', timeout: 120000 });
+await page.goto(`${url}?handheldDebug=1`, { waitUntil: 'commit', timeout: 120000 });
 await page.waitForFunction(() => window.__events?.some((e) => e.name === 'loadingScreenDone'), null, { timeout: 180000 });
 await page.waitForFunction(() => window.__flipper, null, { timeout: 60000 });
 await wait(3500);

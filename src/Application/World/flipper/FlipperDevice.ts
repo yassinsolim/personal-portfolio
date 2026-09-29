@@ -1,6 +1,6 @@
 // the page side of the webassembly flipper zero firmware.
 //
-// the firmware (gpl-3.0, static/flipper, source at github.com/yassinsolim/flipper-wasm)
+// the firmware (gpl-3.0, static/handheld, source at github.com/yassinsolim/flipper-wasm)
 // runs in its own worker and is only reached through postMessage, so it stays a
 // separate program from the portfolio. this file is the portfolio's own code.
 //
@@ -83,10 +83,10 @@ export default class FlipperDevice extends EventTarget {
 
     start() {
         if (this.worker && this.ready) return this.ready;
-        const url = (file: string) => new URL(assetUrl(`flipper/${file}`), document.baseURI).href;
+        const url = (file: string) => new URL(assetUrl(`handheld/${file}`), document.baseURI).href;
         this.setState('booting');
         this.rebooting = false;
-        this.worker = new Worker(url('flipper-worker.js'), { type: 'module' });
+        this.worker = new Worker(url('worker.js'), { type: 'module' });
         this.worker.onmessage = (event) => this.onMessage(event.data as WorkerMessage);
         this.worker.onerror = (event) => this.fail(event.message || 'worker error');
         this.ready = new Promise((resolve, reject) => {
@@ -106,8 +106,8 @@ export default class FlipperDevice extends EventTarget {
         });
         this.worker.postMessage({
             type: 'init',
-            moduleUrl: url('flipper.mjs'),
-            wasmUrl: url('flipper.wasm'),
+            moduleUrl: url('firmware.mjs'),
+            wasmUrl: url('firmware.wasm'),
             sdUrl: url('sd.img'),
             name: 'Yassin',
             storageKey: 'ofw',

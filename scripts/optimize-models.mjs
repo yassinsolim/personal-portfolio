@@ -57,7 +57,7 @@ const extraModels = [
     {
         // self-made (scripts/blender/build-flipper.py), already low poly and baked
         id: 'flipper',
-        modelPath: 'models/Props/flipper_device.glb',
+        modelPath: 'models/Props/handheld.glb',
         lengthMeters: 0.1003,
         simplifyAll: false,
     },
