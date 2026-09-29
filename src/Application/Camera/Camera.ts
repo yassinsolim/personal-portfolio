@@ -176,7 +176,8 @@ export default class Camera extends EventEmitter {
         focus.provider = pose;
         focus.update();
         if (this.currentKeyframe === CameraKey.FOCUS) this.currentKeyframe = undefined;
-        this.transition(CameraKey.FOCUS, 1100, BezierEasing(0.13, 0.99, 0, 1));
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        this.transition(CameraKey.FOCUS, reduced ? 1 : 1100, BezierEasing(0.13, 0.99, 0, 1));
     }
 
     setFreeCamListeners() {

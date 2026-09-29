@@ -95,6 +95,7 @@ export default class Screens {
     chip: HTMLDivElement;
     back: HTMLButtonElement;
     openOs: HTMLButtonElement;
+    specCard: HTMLDivElement;
     overlay: HTMLDivElement | null = null;
     displaysReady: Promise<void>;
     private resolveDisplays!: () => void;
@@ -111,6 +112,8 @@ export default class Screens {
         this.chip = this.createChip();
         this.back = this.createButton('Back', 'room-back', () => this.backOut());
         this.openOs = this.createButton('Open yassinOS', 'room-open-os', () => this.openOverlay());
+        this.createNav();
+        this.specCard = this.createSpecCard();
         this.bindPointer();
         this.bindKeys();
         this.bindRace();
@@ -478,6 +481,7 @@ export default class Screens {
         if (this.iframe) this.iframe.style.pointerEvents = live && this.focused === 'm1' ? 'auto' : 'none';
         this.back.style.display = live && this.focused ? '' : 'none';
         this.openOs.style.display = live && this.mobile && this.focused === 'm1' ? '' : 'none';
+        this.specCard.style.display = live && this.focused === 'pc' ? '' : 'none';
     }
 
     // --- pointer ---
@@ -657,6 +661,69 @@ export default class Screens {
 
     update() {
         this.updateVisibility();
+    }
+
+    // the room's targets for the keyboard: hidden until tabbed to, enter
+    // focuses (or races), esc goes back
+    createNav() {
+        const nav = document.createElement('nav');
+        nav.className = 'room-nav';
+        nav.setAttribute('aria-label', 'Room');
+        nav.dataset.preventClick = '';
+        const items: [string, () => void][] = [
+            ['yassinOS, the main screen', () => this.focus('m1')],
+            ['Widgets, the top screen', () => this.focus('m2')],
+            ['Terminal, the side screen', () => this.focus('m3')],
+            ['The PC', () => this.focus('pc')],
+            ['Flipper Zero', () => this.focus('flipper')],
+            ['Race the car on the Nordschleife', () => {
+                this.backOut(true);
+                void this.application.world.raceTransition?.start();
+            }],
+        ];
+        items.forEach(([label, action]) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.addEventListener('click', (event) => {
+                event.stopPropagation();
+                action();
+            });
+            nav.appendChild(button);
+        });
+        document.body.appendChild(nav);
+    }
+
+    // what the pc is, next to it while it's the focus
+    createSpecCard() {
+        const card = document.createElement('div');
+        card.className = 'room-spec-card';
+        card.dataset.preventClick = '';
+        card.style.display = 'none';
+        const rows: [string, string][] = [
+            ['CPU', 'Intel Core i9-14900KF'],
+            ['GPU', 'Gigabyte GeForce RTX 5080 GAMING OC'],
+            ['Memory', '48 GB DDR5-6800'],
+            ['Cooling', '360 mm AIO'],
+            ['Case', 'Phanteks NV5, white'],
+            ['Screens', 'Three 27 inch 1440p OLEDs'],
+        ];
+        const title = document.createElement('div');
+        title.className = 'room-spec-title';
+        title.textContent = "Yassin's PC";
+        card.appendChild(title);
+        rows.forEach(([key, value]) => {
+            const row = document.createElement('div');
+            row.className = 'room-spec-row';
+            const k = document.createElement('span');
+            k.textContent = key;
+            const v = document.createElement('span');
+            v.textContent = value;
+            row.append(k, v);
+            card.appendChild(row);
+        });
+        document.body.appendChild(card);
+        return card;
     }
 
     createChip() {

@@ -47,3 +47,74 @@
     top: 14px;
     right: 14px;
 }
+
+/* the room's targets for keyboard users, shown only while one has focus */
+.room-nav {
+    position: fixed;
+    left: 18px;
+    top: 50%;
+    z-index: 31;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transform: translateY(-50%);
+}
+
+.room-nav button {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.room-nav:focus-within button {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: rgba(12, 12, 16, 0.82);
+    color: #fff;
+    font: 500 14px/1 -apple-system, 'Segoe UI', Roboto, sans-serif;
+    text-align: left;
+    cursor: pointer;
+}
+
+.room-nav button:focus-visible {
+    outline: 2px solid #7cc4ff;
+    outline-offset: 2px;
+}
+
+.room-spec-card {
+    position: fixed;
+    right: 22px;
+    bottom: 22px;
+    z-index: 30;
+    min-width: 280px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    background: rgba(12, 12, 16, 0.84);
+    color: #fff;
+    font: 400 13px/1.5 -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+.room-spec-title {
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.room-spec-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.room-spec-row span:first-child {
+    color: rgba(255, 255, 255, 0.55);
+}
