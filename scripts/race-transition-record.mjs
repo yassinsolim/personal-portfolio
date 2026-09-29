@@ -258,7 +258,8 @@ const findCar = async (page) => {
     for (const [dx, dy] of offsets) {
         await page.mouse.move(c.x + dx, c.y + dy);
         await sleep(250);
-        if ((await page.evaluate(() => document.body.style.cursor)) === 'pointer') {
+        // the screens show a pointer too: it has to be the car's hover
+        if (await page.evaluate(() => document.body.style.cursor === 'pointer' && window.Application.world.raceTransition.hovering)) {
             return { x: c.x + dx, y: c.y + dy };
         }
     }
