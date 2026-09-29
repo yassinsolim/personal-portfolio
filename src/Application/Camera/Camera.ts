@@ -42,6 +42,8 @@ export default class Camera extends EventEmitter {
     freeCamLocked: boolean;
     raceModeActive: boolean;
     freeCamTransitionToken: number;
+    // the homepage to race transition moves the camera itself, from here
+    externalControl: (() => void) | null;
 
 
     currentKeyframe: CameraKey | undefined;
@@ -64,6 +66,7 @@ export default class Camera extends EventEmitter {
         this.freeCamLocked = false;
         this.raceModeActive = false;
         this.freeCamTransitionToken = 0;
+        this.externalControl = null;
 
         this.keyframes = {
             idle: new IdleKeyframe(),
@@ -373,6 +376,10 @@ export default class Camera extends EventEmitter {
         TWEEN.update();
 
         if (this.raceModeActive) {
+            return;
+        }
+        if (this.externalControl) {
+            this.externalControl();
             return;
         }
 

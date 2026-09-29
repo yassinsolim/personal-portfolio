@@ -5,11 +5,15 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
 import type { PresetSettings } from './qualityPresets';
+import { PLATE_GLSL, type PlateUniforms } from './RaceReveal';
+
+const BLOOM_STRENGTH = 0.24;
 
 // one pass for everything after bloom: speed streaks at the screen edges (the
 // middle stays sharp), a touch of chromatic aberration out there too, a mild
 // grade, vignette and grain, then the renderer's tone map and output color
-// space, so there's no separate output pass
+// space, so there's no separate output pass. during the homepage transition
+// it also lays the room's last frame over the top as it melts away
 const GradeShader = {
     name: 'RaceGradeShader',
     uniforms: {
@@ -39,6 +43,7 @@ const GradeShader = {
         uniform float uAberration;
         uniform int uTaps;
         varying vec2 vUv;
+        ${PLATE_GLSL}
 
         float hash(vec2 p) {
             p = fract(p * vec2(123.34, 456.21));
@@ -90,6 +95,12 @@ const GradeShader = {
             gl_FragColor = vec4(max(color, 0.0), 1.0);
             #include <tonemapping_fragment>
             #include <colorspace_fragment>
+
+            // the plate holds the screen's srgb bytes, so it mixes in last
+            float cover = plateCover(vUv);
+            if (cover > 0.0) {
+                gl_FragColor.rgb = mix(gl_FragColor.rgb, texture2D(tPlate, vUv).rgb, cover);
+            }
         }
     `,
 };
@@ -108,7 +119,8 @@ export default class RacePostProcessing {
     constructor(
         renderer: THREE.WebGLRenderer,
         scene: THREE.Scene,
-        camera: THREE.Camera
+        camera: THREE.Camera,
+        plate: PlateUniforms
     ) {
         this.renderer = renderer;
         this.samples = 4;
@@ -131,11 +143,13 @@ export default class RacePostProcessing {
         this.renderPass = new RenderPass(scene, camera);
         this.bloom = new UnrealBloomPass(
             new THREE.Vector2(size.x, size.y),
-            0.24,
+            BLOOM_STRENGTH,
             0.45,
             2.6
         );
         this.grade = new ShaderPass(GradeShader);
+        // the reveal's own uniform objects, so its updates land here too
+        Object.assign(this.grade.uniforms, plate);
         this.composer.addPass(this.renderPass);
         this.composer.addPass(this.bloom);
         this.composer.addPass(this.grade);
@@ -175,6 +189,43 @@ export default class RacePostProcessing {
     // 0..1: how hard the speed streaks pull
     setSpeed(speed: number) {
         this.speed = speed;
+    }
+
+    // the chain's programs, compiled in parallel before its first frame. the
+    // bloom passes draw into targets and the grade to the screen through the
+    // tone map, and three builds a different program for each. the stand-in
+    // quad has what the passes' full screen triangle has (no normals), which
+    // is part of the program key too
+    compileAsync(camera: THREE.Camera, toneMapping: THREE.ToneMapping) {
+        const renderer = this.renderer;
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
+        const quad = new THREE.Mesh(geometry);
+        const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+        const previous = renderer.getRenderTarget();
+        const previousToneMapping = renderer.toneMapping;
+        const pending: Promise<unknown>[] = [];
+        const compile = (material: THREE.Material) => {
+            quad.material = material;
+            pending.push(renderer.compileAsync(quad, camera));
+        };
+        renderer.setRenderTarget(target);
+        [
+            this.bloom.materialHighPassFilter,
+            ...this.bloom.separableBlurMaterials,
+            this.bloom.compositeMaterial,
+            this.bloom.blendMaterial,
+        ].forEach(compile);
+        renderer.setRenderTarget(null);
+        renderer.toneMapping = toneMapping;
+        compile(this.grade.material);
+        renderer.toneMapping = previousToneMapping;
+        renderer.setRenderTarget(previous);
+        return Promise.all(pending).finally(() => {
+            geometry.dispose();
+            target.dispose();
+        });
     }
 
     render(deltaSeconds: number, elapsedSeconds: number) {

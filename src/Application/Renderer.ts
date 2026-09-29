@@ -46,6 +46,7 @@ export default class Renderer {
     sceneResize: (() => void) | null;
     // the race preset caps auto resolution, quality mode ignores it
     sceneMaxPixelRatio: number;
+    keepGrain = false;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -199,8 +200,12 @@ export default class Renderer {
 
     applyPixelRatio() {
         const ratio = this.getPixelRatio();
-        this.instance.setPixelRatio(ratio);
-        this.overlayInstance.setPixelRatio(ratio);
+        // resizing the canvas clears it, even to the same size, and between
+        // frames that shows as a blank frame
+        if (ratio !== this.instance.getPixelRatio()) {
+            this.instance.setPixelRatio(ratio);
+            this.overlayInstance.setPixelRatio(ratio);
+        }
         this.sceneResize?.();
         this.applyEffects();
         UIEventBus.dispatch('render:resolution', {
@@ -214,9 +219,10 @@ export default class Renderer {
             this.renderMode === 'performance' ||
             (this.renderMode === 'auto' &&
                 this.adaptive.ratio < EFFECTS_MIN_PIXEL_RATIO - 1e-6);
-        // race mode grades its own image, the room grain would double up
+        // race mode grades its own image, the room grain would double up.
+        // the homepage transition keeps it while the room fades out
         this.overlayInstance.domElement.style.display =
-            low || this.sceneRender ? 'none' : '';
+            low || (this.sceneRender && !this.keepGrain) ? 'none' : '';
         if (low === this.effectsLow) return;
         this.effectsLow = low;
         UIEventBus.dispatch('render:effects', { low });
@@ -235,6 +241,18 @@ export default class Renderer {
         // back in the room, start from full resolution again like on load
         if (!render) this.adaptive.ratio = this.adaptive.max;
         this.adaptive.reset();
+        this.applyPixelRatio();
+    }
+
+    // the resolution a scene renderer with this cap would start at, now. the
+    // homepage transition calls it inside a frame before drawing, so the
+    // canvas resize (which clears it) is never seen, and setSceneRenderer
+    // then finds nothing to change
+    matchScenePixelRatio(maxPixelRatio: number) {
+        this.adaptive.setBounds(
+            MIN_PIXEL_RATIO,
+            Math.min(this.sizes.pixelRatio, maxPixelRatio)
+        );
         this.applyPixelRatio();
     }
 

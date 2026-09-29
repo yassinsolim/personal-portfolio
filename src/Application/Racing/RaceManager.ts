@@ -91,6 +91,9 @@ export default class RaceManager {
     lapTimer: LapTimer;
     sectors: SectorTimer;
     garageOpen = false;
+    // the homepage transition parks the car while the ring builds around it,
+    // so it sits exactly where the room's last frame shows it
+    transitionHold = false;
     garageSetupAtOpen = '';
     leaderboardBoard: 'stock' | 'tuned' = 'stock';
     lastLapTimeMs = 0;
@@ -519,6 +522,7 @@ export default class RaceManager {
 
         this.active = false;
         this.paused = false;
+        this.transitionHold = false;
         this.raceRoot.visible = false;
         this.visuals.exit();
         this.setLobbyObjectsVisible(true);
@@ -1239,7 +1243,7 @@ export default class RaceManager {
             Math.max(0, this.application.time.delta / 1000)
         );
         this.updateRemoteVehicles(delta);
-        if (!this.paused && !this.garageOpen) {
+        if (!this.paused && !this.garageOpen && !this.transitionHold) {
             // equal steps. a leftover sliver (a frame just over 1/60 s) used
             // to run as a microsecond step, and the grounding divides height
             // changes by the step, which could launch the car into the sky
