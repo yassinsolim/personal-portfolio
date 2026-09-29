@@ -16,6 +16,7 @@ import {
     LoadingKeyframe,
     DeskKeyframe,
     OrbitControlsStart,
+    FlipperKeyframe,
 } from './CameraKeyframes';
 
 export enum CameraKey {
@@ -24,6 +25,7 @@ export enum CameraKey {
     LOADING = 'loading',
     DESK = 'desk',
     ORBIT_CONTROLS_START = 'orbitControlsStart',
+    FLIPPER = 'flipper',
 }
 export default class Camera extends EventEmitter {
     application: Application;
@@ -45,6 +47,11 @@ export default class Camera extends EventEmitter {
     // the homepage to race transition moves the camera itself, from here
     externalControl: (() => void) | null;
 
+
+    // room objects that handle their own clicks (World/Flipper.ts); true means taken
+    clickInterceptors: Array<(event: MouseEvent) => boolean> = [];
+    // clicks an interceptor took, so later listeners (the car's look around) skip them
+    handledClicks = new WeakSet<Event>();
 
     currentKeyframe: CameraKey | undefined;
     targetKeyframe: CameraKey | undefined;
@@ -74,6 +81,7 @@ export default class Camera extends EventEmitter {
             loading: new LoadingKeyframe(),
             desk: new DeskKeyframe(),
             orbitControlsStart: new OrbitControlsStart(),
+            flipper: new FlipperKeyframe(),
         };
 
         document.addEventListener('mousedown', (event) => {
@@ -87,6 +95,10 @@ export default class Camera extends EventEmitter {
             if (event.button === 2 || this.freeCam || this.raceModeActive)
                 return;
             event.preventDefault();
+            if (this.clickInterceptors.some((intercept) => intercept(event))) {
+                this.handledClicks.add(event);
+                return;
+            }
             this.toggleIdleDesk();
         });
 

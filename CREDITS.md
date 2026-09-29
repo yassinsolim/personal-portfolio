@@ -10,14 +10,24 @@
   - Repo: https://github.com/DustinBrett/daedalOS
   - License/attribution: per upstream repository
 
-## Room Models
+## Flipper Zero on the desk
 
-- Flipper Zero on the desk (`static/models/Props/flipper_zero.glb`)
-  - Title: "Flipper Zero"
-  - Author: Pavel Zhovner (https://sketchfab.com/zhovner)
-  - Source: https://sketchfab.com/3d-models/flipper-zero-1f246cff5f03472283f4e52fb0c84684
-  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
-  - Changes: optimized for the web (Draco-compressed geometry)
+- Firmware: the official Flipper Zero firmware 1.4.3 by Flipper Devices Inc. and contributors,
+  compiled to WebAssembly by the `flipper-wasm` project (`static/flipper`)
+  - Source: https://github.com/yassinsolim/flipper-wasm (release v0.1.0), upstream
+    https://github.com/flipperdevices/flipperzero-firmware
+  - License: GPL-3.0, modified; a separate program the site talks to only through a Web Worker
+    (see `static/flipper/NOTICE.md` and `LICENSE`). Includes the firmware's icons and dolphin
+    animations under the same license
+  - Unofficial, not affiliated with Flipper Devices Inc.; "Flipper" and "Flipper Zero" are their
+    trademarks
+- 3D model (`models/Props/flipper_device.glb`): made from scratch in Blender by
+  `scripts/blender/build-flipper.py` from the public dimensions; Flipper's official CAD
+  (flipperdevices/flipperzero-3d-models, GPL-3.0) was a visual reference only, no geometry is
+  taken from it. No logo
+  - License: project-owned
+  - Replaces Pavel Zhovner's "Flipper Zero" Sketchfab model (CC BY 4.0), which the desk used
+    before and is no longer shipped
 
 ## Racing Mini-game Additions (This Branch)
 

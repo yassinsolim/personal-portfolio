@@ -8,10 +8,10 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const DIRS = ['models', 'textures', 'sounds', 'basis', 'draco'];
+const DIRS = ['models', 'textures', 'sounds', 'basis', 'draco', 'flipper'];
 const EXTENSIONS = new Set([
     '.glb', '.json', '.jpg', '.jpeg', '.png', '.webp', '.avif', '.ktx2',
-    '.webm', '.m4a', '.mp3', '.ogg', '.wasm', '.js',
+    '.webm', '.m4a', '.mp3', '.ogg', '.wasm', '.js', '.mjs', '.img',
 ]);
 
 const walk = (dir) =>
