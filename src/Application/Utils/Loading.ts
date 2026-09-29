@@ -71,6 +71,39 @@ type TimingEntry = {
     responseEnd: number;
 };
 
+// a 304 or a cache hit moves headers only, and for images and scripts a
+// 304 reports no body sizes at all
+export const isCachedTiming = (t: {
+    transferSize: number;
+    encodedBodySize: number;
+    decodedBodySize: number;
+}) =>
+    t.transferSize === 0
+        ? t.encodedBodySize > 0 || t.decodedBodySize > 0
+        : t.encodedBodySize <= 0
+          ? t.transferSize > 0 && t.transferSize < 2048
+          : t.transferSize < t.encodedBodySize / 2;
+
+// file sizes from an earlier visit, for when a 304 leaves resource timing
+// without them
+const SIZES_KEY = 'yassinverse:loadSizes';
+
+const rememberedSizes = (): Record<string, number> => {
+    try {
+        return JSON.parse(window.localStorage.getItem(SIZES_KEY) || '{}');
+    } catch {
+        return {};
+    }
+};
+
+const rememberSizes = (sizes: Record<string, number>) => {
+    try {
+        window.localStorage.setItem(SIZES_KEY, JSON.stringify(sizes));
+    } catch {
+        // storage blocked
+    }
+};
+
 const absolute = (path: string) => {
     try {
         return new URL(path, document.baseURI).href;
@@ -303,13 +336,19 @@ export default class Loading extends EventEmitter {
         const found = source.urls.map((url) => this.timings.get(url));
         if (found.some((t) => !t)) return false;
         const entries = found as TimingEntry[];
-        const size = entries.reduce((sum, t) => sum + Math.max(0, t.decodedBodySize), 0);
-        const body = entries.reduce((sum, t) => sum + Math.max(0, t.encodedBodySize), 0);
-        const transfer = entries.reduce((sum, t) => sum + Math.max(0, t.transferSize), 0);
+        const cached = entries.every(isCachedTiming);
+        let size = entries.reduce((sum, t) => sum + Math.max(0, t.decodedBodySize), 0);
+        const known = rememberedSizes();
+        if (size > 0) {
+            source.urls.forEach((url, i) => (known[url] = Math.max(0, entries[i].decodedBodySize)));
+            rememberSizes(known);
+        } else if (cached && source.urls.every((url) => known[url] > 0)) {
+            // the same file (the etag matched) as on the visit that measured it
+            size = source.urls.reduce((sum, url) => sum + known[url], 0);
+        }
         source.size = size;
-        source.transfer = transfer;
-        // a 304 or a cache hit moves headers only, never the body
-        source.cached = body > 0 && transfer < body / 2;
+        source.transfer = entries.reduce((sum, t) => sum + Math.max(0, t.transferSize), 0);
+        source.cached = cached;
         if (!source.fetchedAt) {
             source.fetchedAt = Math.max(...entries.map((t) => t.responseEnd));
         }
