@@ -19,6 +19,11 @@ const DETAIL_METERS = 7;
 const WEAK_SKY_FILL = 0x060a16;
 // the skirt's outer columns sit on every third ribbon station
 const SKIRT_STRIDE = 3;
+// ground under an underpass road, and how far past its edges that holds
+const UNDERPASS_DEPTH = 0.35;
+const UNDERPASS_SHOULDER = 2;
+// the skirt stops this far past each end of a lap bridge
+const SPAN_MARGIN = 3;
 // another stretch of the lap closer than this (and at least CROWD_ALONG away
 // along it) can be under this skirt, so the skirt there gets carved too
 const CROWD_REACH = 70;
@@ -531,6 +536,17 @@ export default class RaceTerrain {
             field.minZ,
             mobility
         );
+        // then open the ground down to the roads under the lap's bridges
+        this.clearance.carveGrid(
+            positions,
+            cols,
+            rows,
+            cell,
+            field.minX,
+            field.minZ,
+            mobility,
+            (visit) => this.forEachUnderpassSample(visit)
+        );
         this.grid = { positions, cols, rows, cell };
 
         // tiles share the vertex buffers and only differ in index, so each can
@@ -633,6 +649,35 @@ export default class RaceTerrain {
     // is the verge's outer edge exactly (no gap, and no overlap to flicker).
     // the outer columns take every SKIRT_STRIDE-th station, and the first
     // strip is stitched between the two
+    // across each underpass road and a shoulder, every 2 m along it, with
+    // the ground kept UNDERPASS_DEPTH under the lidar road height
+    forEachUnderpassSample(
+        visit: (x: number, z: number, ceiling: number) => void
+    ) {
+        this.track.underpasses.forEach((road) => {
+            const reach = road.width / 2 + UNDERPASS_SHOULDER;
+            const points = road.points;
+            for (let i = 0; i + 1 < points.length; i++) {
+                const [x0, y0, z0] = points[i];
+                const [x1, y1, z1] = points[i + 1];
+                const length = Math.hypot(x1 - x0, z1 - z0);
+                if (length < 1e-3) continue;
+                const nx = -(z1 - z0) / length;
+                const nz = (x1 - x0) / length;
+                const steps = Math.max(1, Math.ceil(length / 2));
+                for (let k = 0; k <= steps; k++) {
+                    const f = k / steps;
+                    const x = x0 + (x1 - x0) * f;
+                    const y = y0 + (y1 - y0) * f;
+                    const z = z0 + (z1 - z0) * f;
+                    for (let l = -reach; l <= reach + 1e-6; l += 0.75) {
+                        visit(x + nx * l, z + nz * l, y - UNDERPASS_DEPTH);
+                    }
+                }
+            }
+        });
+    }
+
     buildSkirt() {
         const track = this.track;
         const curve = track.visualCurve;
@@ -712,11 +757,20 @@ export default class RaceTerrain {
         // triangles per side and ring, in lap order
         const index: number[] = [];
         const segmentStart: number[] = [];
+        // no skirt under the lap's bridges, the road below shows through
+        const bridged = (s: number) => {
+            const d = ((s / stations) * track.length) / track.distanceScale;
+            return track.spans.some(
+                (span) =>
+                    d > span.start - SPAN_MARGIN && d < span.end + SPAN_MARGIN
+            );
+        };
         for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
             for (let j = 0; j < rings; j++) {
                 segmentStart.push(index.length / 3);
                 const s0 = ringStation(j);
                 const s1 = ringStation(j + 1);
+                if (bridged(s0) || bridged(s1)) continue;
                 const mid = s0 + Math.floor((s1 - s0) / 2);
                 const r0 = ringVertex(sideIndex, j, 1);
                 const r1 = ringVertex(sideIndex, j + 1, 1);
@@ -805,6 +859,15 @@ export default class RaceTerrain {
             }
         }
         this.clearance.carveTriangles(positions, index, mobility, carve, mask);
+        // and where an underpass road runs out under the skirt at an angle
+        this.clearance.carveTriangles(
+            positions,
+            index,
+            mobility,
+            undefined,
+            undefined,
+            (visit) => this.forEachUnderpassSample(visit)
+        );
 
         this.skirtSurface = { positions, index: geometry.getIndex()!.array };
         this.skirtLookup = null;

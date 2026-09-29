@@ -128,6 +128,21 @@ export type TrackLandmark = {
     height: number;
     outline: [number, number][];
 };
+// an osm road passing under one of the lap's bridges, on the lidar ground:
+// x, y, z every 4 m for 70 m each side of the span
+export type TrackUnderpass = {
+    span: number;
+    ref: string | null;
+    name: string | null;
+    highway: string;
+    width: number;
+    points: [number, number, number][];
+};
+// stretches where the lap itself is a bridge, meters along the lap
+export type TrackSpan = {
+    start: number;
+    end: number;
+};
 export type TrackTerrainData = {
     x: number;
     z: number;
@@ -156,6 +171,8 @@ type TrackAssetData = {
     // catch fence runs near the lap (osm), x, z every 6 m
     fences?: [number, number][][];
     landmarks?: TrackLandmark[];
+    spans?: TrackSpan[];
+    underpasses?: TrackUnderpass[];
     terrain: {
         x: number;
         z: number;
@@ -210,6 +227,8 @@ export default class NordschleifeTrack {
     bridges: TrackBridge[];
     fences: [number, number][][];
     landmarks: TrackLandmark[];
+    spans: TrackSpan[];
+    underpasses: TrackUnderpass[];
     distanceScale: number;
     terrain: TrackTerrainData;
     kerbLeft: Uint8Array;
@@ -251,6 +270,8 @@ export default class NordschleifeTrack {
         this.bridges = data.bridges;
         this.fences = data.fences || [];
         this.landmarks = data.landmarks || [];
+        this.spans = data.spans || [];
+        this.underpasses = data.underpasses || [];
         this.terrain = {
             x: data.terrain.x,
             z: data.terrain.z,
@@ -368,14 +389,20 @@ export default class NordschleifeTrack {
         };
         // the measured camber is per data point, the lidar says which way
         // (off camber corners too)
-        const roll = data.rollDeg && data.rollDeg.length === data.points.length ? data.rollDeg : null;
+        const roll =
+            data.rollDeg && data.rollDeg.length === data.points.length
+                ? data.rollDeg
+                : null;
         const sampleRoll = (distance: number) => {
             if (!roll) return 0;
             const f = distance / scale / data.spacing;
             const i = Math.floor(f);
             const k = f - i;
             const n = roll.length;
-            return roll[((i % n) + n) % n] * (1 - k) + roll[(((i + 1) % n) + n) % n] * k;
+            return (
+                roll[((i % n) + n) % n] * (1 - k) +
+                roll[(((i + 1) % n) + n) % n] * k
+            );
         };
         const concrete = data.concrete.map(
             ([distance, on]) => [distance, on ? 1 : 0] as [number, number]
