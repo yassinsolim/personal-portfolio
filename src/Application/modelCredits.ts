@@ -1,4 +1,4 @@
-// third party 3d models, for the race menu credits. CREDITS.md has the same
+// third party 3d models (the cars), for the race menu credits. CREDITS.md has the same
 // list with more detail; keep the two in step
 
 export type ModelLicense = {
@@ -135,15 +135,5 @@ export const MODEL_CREDITS: ModelCredit[] = [
             'https://sketchfab.com/3d-models/toyota-crown-2025-9f48fc0a66e44a69a09fda2f864e5944',
         license: CC_BY,
         changes: `geometry welded and Draco compressed (it has no textures); a low detail version with simplified geometry; ${GARAGE}`,
-    },
-    {
-        usedFor: 'Flipper Zero on the desk',
-        title: 'Flipper Zero',
-        author: 'Pavel Zhovner',
-        authorUrl: 'https://sketchfab.com/zhovner',
-        sourceUrl:
-            'https://sketchfab.com/3d-models/flipper-zero-1f246cff5f03472283f4e52fb0c84684',
-        license: CC_BY,
-        changes: 'geometry simplified and Draco compressed',
     },
 ];

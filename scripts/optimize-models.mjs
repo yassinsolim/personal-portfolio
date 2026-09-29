@@ -55,11 +55,11 @@ const simplifyMaterialsByModel = {
 
 const extraModels = [
     {
+        // self-made (scripts/blender/build-flipper.py), already low poly and baked
         id: 'flipper',
-        modelPath: 'models/Props/flipper_zero.glb',
-        // the prop is ~15cm long and only ever seen from across the desk
-        lengthMeters: 0.15,
-        simplifyAll: true,
+        modelPath: 'models/Props/handheld.glb',
+        lengthMeters: 0.1003,
+        simplifyAll: false,
     },
 ];
 

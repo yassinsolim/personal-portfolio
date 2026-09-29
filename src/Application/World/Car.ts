@@ -556,6 +556,7 @@ export default class Car {
         const canvas = this.application.renderer.instance.domElement;
         window.addEventListener('mousedown', (event) => {
             if (event.button !== 0 || !this.model) return;
+            if (this.application.camera.handledClicks.has(event)) return;
             const rect = canvas.getBoundingClientRect();
             const pointer = new THREE.Vector2(
                 ((event.clientX - rect.left) / rect.width) * 2 - 1,
