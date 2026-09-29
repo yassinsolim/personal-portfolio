@@ -64,6 +64,7 @@ export default class Flipper {
     hovered = false;
     private raycaster = new THREE.Raycaster();
     private pointer = new THREE.Vector2();
+    private keyCentre = new THREE.Vector3();
     private heldByPointer: FlipperButton | null = null;
     private chip: HTMLDivElement;
     private raceActive = false;
@@ -278,10 +279,21 @@ export default class Flipper {
         this.raycaster.setFromCamera(this.pointer, this.camera.instance);
         const hits = this.raycaster.intersectObjects(this.pickTargets, true);
         if (!hits.length) return null;
-        const button = hits.find((hit) => hit.object.userData.button)?.object.userData.button as
-            | FlipperButton
-            | undefined;
-        return { button: button ?? null };
+        // the grown hit boxes overlap (ok's covers most of the d-pad), so the
+        // first box along the ray isn't the key under the finger: take the key
+        // whose centre is closest to the ray
+        let button: FlipperButton | null = null;
+        let best = Infinity;
+        for (const hit of hits) {
+            if (!hit.object.userData.button) continue;
+            hit.object.getWorldPosition(this.keyCentre);
+            const distance = this.raycaster.ray.distanceSqToPoint(this.keyCentre);
+            if (distance < best) {
+                best = distance;
+                button = hit.object.userData.button as FlipperButton;
+            }
+        }
+        return { button };
     }
 
     interactive() {
