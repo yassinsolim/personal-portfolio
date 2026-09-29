@@ -134,7 +134,7 @@ no ads, sales or sponsorship.
 
 - Firmware: the official Flipper Zero firmware 1.4.3 by Flipper Devices Inc. and contributors,
   compiled to WebAssembly by the `flipper-wasm` project (`static/handheld`)
-  - Source: https://github.com/yassinsolim/flipper-wasm (release v0.1.0), upstream
+  - Source: https://github.com/yassinsolim/flipper-wasm (release v0.1.1), upstream
     https://github.com/flipperdevices/flipperzero-firmware
   - License: GPL-3.0, modified; a separate program the site talks to only through a Web Worker
     (see `static/handheld/NOTICE.md` and `LICENSE`). Includes the firmware's icons and dolphin

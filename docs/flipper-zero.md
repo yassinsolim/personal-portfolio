@@ -1,7 +1,7 @@
 # Flipper Zero on the desk
 
 The desk's Flipper Zero runs its real firmware (official 1.4.3, compiled to WebAssembly by
-[flipper-wasm](https://github.com/yassinsolim/flipper-wasm), release v0.1.0). Hover it and it
+[flipper-wasm](https://github.com/yassinsolim/flipper-wasm), release v0.1.1). Hover it and it
 boots; click it and the camera zooms in; arrows, Enter or Space and Backspace are its d-pad, OK
 and Back; Esc or a click outside goes back to the desk. On phones a tap zooms in, the keys are
 tapped, and a Done button leaves.
@@ -19,7 +19,7 @@ tapped, and a Done button leaves.
 - `World/flipper/FlipperLcd.ts`: the 128x64 framebuffer drawn as the orange backlit LCD. Left
   handed mode draws the frame upside down on a real device; here the screen stays upright and
   the d-pad turns with it.
-- `static/handheld/`: the firmware build, byte for byte the v0.1.0 release (`firmware.wasm`,
+- `static/handheld/`: the firmware build, byte for byte the v0.1.1 release (`firmware.wasm`,
   `firmware.mjs` and `worker.js` are the release's `flipper.wasm`, `flipper.mjs` and
   `flipper-worker.js`, renamed so the trademark stays out of public URLs; `FILES.md` has the
   mapping and checksums), plus `sd.img`, its GPL-3.0 `LICENSE` and `NOTICE.md`.
