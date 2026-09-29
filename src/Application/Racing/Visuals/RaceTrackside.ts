@@ -140,7 +140,10 @@ export default class RaceTrackside {
                     end * (span / 2 - 0.7)
                 ).applyQuaternion(quaternion);
                 matrix.compose(
-                    point.clone().add(offset).add(new THREE.Vector3(0, 2.6, 0)),
+                    point
+                        .clone()
+                        .add(offset)
+                        .add(new THREE.Vector3(0, 2.6, 0)),
                     quaternion,
                     new THREE.Vector3(1, 1, 1)
                 );
@@ -253,7 +256,8 @@ export default class RaceTrackside {
                 .crossVectors(new THREE.Vector3(0, 1, 0), back)
                 .normalize();
             basis.makeBasis(right, new THREE.Vector3(0, 1, 0), back);
-            const lateral = label.side * (track.getVergeHalfWidth(t) + 0.9);
+            const lateral =
+                label.side * (track.getVergeHalfWidth(t, label.side) + 0.9);
             const base = point.clone().addScaledVector(side, lateral);
             basis.setPosition(base.x, base.y + 1.5, base.z);
             boards.push(geometry.applyMatrix4(basis));
@@ -319,7 +323,7 @@ export default class RaceTrackside {
                     previousSide
                 );
                 const lateral =
-                    sign * (track.getVergeHalfWidth(t) - BARRIER_INSET);
+                    sign * (track.getVergeHalfWidth(t, sign) - BARRIER_INSET);
                 base.copy(point).addScaledVector(side, lateral);
                 posts[sign].push(
                     base.x + side.x * sign * 0.1,
@@ -519,5 +523,4 @@ export default class RaceTrackside {
         line.receiveShadow = true;
         group.add(line);
     }
-
 }

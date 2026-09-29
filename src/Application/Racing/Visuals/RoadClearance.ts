@@ -18,18 +18,21 @@ const LATERAL_STEP = 0.75;
 // the skirt is attached
 const EDGE_INSET = 0.05;
 const TRIANGLE_BIN = 8;
+// floats per station in frames
+const FRAME = 9;
 
 type SampleVisitor = (x: number, z: number, ceiling: number) => void;
 
 export default class RoadClearance {
     stations: number;
-    // point, banked side vector, road and verge half widths per ribbon station
+    // point, banked side vector, road half width, left and right verge per
+    // ribbon station
     frames: Float32Array;
 
     constructor(track: NordschleifeTrack) {
         const stations = track.getRibbonSamples();
         this.stations = stations;
-        this.frames = new Float32Array(stations * 8);
+        this.frames = new Float32Array(stations * FRAME);
         const point = new THREE.Vector3();
         const tangent = new THREE.Vector3();
         const normal = new THREE.Vector3();
@@ -46,7 +49,7 @@ export default class RoadClearance {
                 side,
                 previousSide
             );
-            const o = i * 8;
+            const o = i * FRAME;
             this.frames[o] = point.x;
             this.frames[o + 1] = point.y;
             this.frames[o + 2] = point.z;
@@ -54,7 +57,8 @@ export default class RoadClearance {
             this.frames[o + 4] = side.y;
             this.frames[o + 5] = side.z;
             this.frames[o + 6] = track.getRoadHalfWidth(t);
-            this.frames[o + 7] = track.getVergeHalfWidth(t);
+            this.frames[o + 7] = track.getVergeHalfWidth(t, 1);
+            this.frames[o + 8] = track.getVergeHalfWidth(t, -1);
         }
     }
 
@@ -65,8 +69,8 @@ export default class RoadClearance {
         const stations = this.stations;
         for (let i = 0; i < stations; i++) {
             if (mask && !mask[i]) continue;
-            const a = i * 8;
-            const b = ((i + 1) % stations) * 8;
+            const a = i * FRAME;
+            const b = ((i + 1) % stations) * FRAME;
             for (let half = 0; half < 2; half++) {
                 const k = half * 0.5;
                 const lerp = (offset: number) =>
@@ -78,15 +82,16 @@ export default class RoadClearance {
                 const sy = lerp(4);
                 const sz = lerp(5);
                 const roadHalf = lerp(6);
-                const reach = lerp(7) - EDGE_INSET;
-                const lanes = Math.ceil((reach * 2) / LATERAL_STEP);
+                const left = lerp(7) - EDGE_INSET;
+                const right = lerp(8) - EDGE_INSET;
+                const lanes = Math.ceil((left + right) / LATERAL_STEP);
                 for (let n = 0; n <= lanes + 2; n++) {
                     const lateral =
                         n <= lanes
-                            ? -reach + ((reach * 2) / lanes) * n
+                            ? -right + ((left + right) / lanes) * n
                             : n === lanes + 1
-                            ? roadHalf
-                            : -roadHalf;
+                              ? roadHalf
+                              : -roadHalf;
                     visit(
                         px + sx * lateral,
                         pz + sz * lateral,

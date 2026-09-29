@@ -260,7 +260,9 @@ export default class RaceTracksideExtras {
             return run.map(([x, z]): [number, number] => {
                 track.queryFrame(x, z, frame, last);
                 last = frame.index;
-                const min = frame.barrierOffset + FENCE_BEHIND_BARRIER;
+                const barrier =
+                    frame.lateral >= 0 ? frame.barrierLeft : frame.barrierRight;
+                const min = barrier + FENCE_BEHIND_BARRIER;
                 if (Math.abs(frame.lateral) >= min) return [x, z];
                 const push = (Math.sign(frame.lateral) || 1) * min - frame.lateral;
                 return [x + frame.leftX * push, z + frame.leftZ * push];
