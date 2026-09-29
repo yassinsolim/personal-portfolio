@@ -68,3 +68,6 @@ type LoadedAudio = AudioBuffer;
 type LoadedJson = Record<string, any>;
 
 type ResourceType = 'texture' | 'cubeTexture' | 'gltfModel' | 'audio' | 'json';
+
+// path under static/ -> content hash, set by the production build
+declare const __ASSET_VERSIONS__: Record<string, string>;

@@ -111,6 +111,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   exporter (`?export`, `?export-ui`, `?debug`) are dynamic imports.
 - A failed race download leaves the room as it was (`RaceTransition.abort`) and the next hover or
   click tries again.
+- Caching (`vercel.json`): webpack's hashed files (`bundle.<hash>.js|css`, `<hash>.js|wasm|...`,
+  `assets/`) are `immutable` for a year. The static files the game fetches get `?v=<content hash>`
+  from the production build (`scripts/asset-versions.js` bakes `__ASSET_VERSIONS__` in,
+  `Utils/assetUrl.ts` adds it; three's loaders go through the default LoadingManager's URL
+  modifier) and those urls are immutable too, so a repeat visit only revalidates the HTML. A new
+  `fetch()` or `new Worker()` of a static file needs `assetUrl()`, or it revalidates every visit.
+  The HTML keeps Vercel's default (revalidate every time, never stale-while-revalidate: it names
+  the hashed bundles, which the next deploy removes), and `config/` is `no-cache`.
+- No service worker, on purpose: a repeat visit is already one 304 for the HTML (plus the yassinOS
+  iframe's own requests). A worker would only save that round trip, and could serve a stale shell
+  after a deploy.
 - Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
   (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
   `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149

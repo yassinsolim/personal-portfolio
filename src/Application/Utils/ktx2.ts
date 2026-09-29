@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+import { assetUrl } from './assetUrl';
 
 // the decoder runs in a real same origin worker file (scripts/build-ktx2-worker.mjs),
 // never a blob, so it gets its own content security policy from vercel.json
@@ -51,7 +52,7 @@ export class SameOriginKTX2Loader extends KTX2Loader {
                 .then((binary) => {
                     self.transcoderBinary = binary as ArrayBuffer;
                     self.workerPool.setWorkerCreator(() => {
-                        const worker = new Worker(workerUrl);
+                        const worker = new Worker(assetUrl(workerUrl));
                         // a policy block, a missing file or a crash in the
                         // transcoder all land here, and the loads fall back
                         worker.addEventListener('error', () => this.fail());

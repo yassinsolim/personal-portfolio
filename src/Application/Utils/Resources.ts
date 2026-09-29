@@ -11,6 +11,7 @@ import UIEventBus from '../UI/EventBus';
 import EventEmitter from './EventEmitter';
 import Loading from './Loading';
 import { disableTransmission } from './Transmission';
+import { versionLoaderUrls } from './assetUrl';
 
 // browsers without 'wasm-unsafe-eval' support in CSP block wasm entirely,
 // so draco has to fall back to its asm.js decoder there
@@ -161,6 +162,7 @@ export default class Resources extends EventEmitter {
         this.application = new Application();
         this.loading = this.application.loading;
 
+        versionLoaderUrls();
         this.setLoaders();
         this.startLoading();
     }
