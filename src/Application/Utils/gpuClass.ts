@@ -117,3 +117,69 @@ export const readRenderer = (
         return { renderer: '', vendor: '' };
     }
 };
+
+// what was measured on this machine, on top of the renderer string
+export type Calibration = {
+    // the homepage's first seconds after loading
+    homeP50?: number;
+    homeFrames?: number;
+    // a race here fell back to the light limits before
+    slowBefore?: boolean;
+};
+
+// the homepage is far lighter than the race, so one that can't hold about
+// 35 fps means the full race world won't run either
+export const HOME_SLOW_MS = 28;
+const HOME_MIN_FRAMES = 60;
+
+export const calibrate = (found: GpuClass, measured: Calibration): GpuClass => {
+    if (found.tier === 'low') return found;
+    if (measured.slowBefore)
+        return {
+            ...found,
+            tier: 'low',
+            reason: `${found.reason}, but the race ran slow here before`,
+        };
+    if (
+        (measured.homeFrames || 0) >= HOME_MIN_FRAMES &&
+        (measured.homeP50 || 0) > HOME_SLOW_MS
+    )
+        return {
+            ...found,
+            tier: 'low',
+            reason: `${found.reason}, but the homepage ran at ${Math.round(
+                1000 / measured.homeP50!
+            )} fps`,
+        };
+    return found;
+};
+
+// the renderer that ran slow, kept so the next visit builds the light world
+const HINT_KEY = 'yassinverse:gpuSlow';
+const HINT_DAYS = 30;
+
+export const readSlowHint = (renderer: string) => {
+    try {
+        const hint = JSON.parse(localStorage.getItem(HINT_KEY) || 'null');
+        return Boolean(
+            hint &&
+            hint.renderer === renderer &&
+            Date.now() - hint.at < HINT_DAYS * 86400000
+        );
+    } catch {
+        return false;
+    }
+};
+
+export const writeSlowHint = (renderer: string, slow: boolean) => {
+    try {
+        if (slow)
+            localStorage.setItem(
+                HINT_KEY,
+                JSON.stringify({ renderer, at: Date.now() })
+            );
+        else localStorage.removeItem(HINT_KEY);
+    } catch {
+        // private mode, no storage: it just measures again next time
+    }
+};
