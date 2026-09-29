@@ -5,13 +5,11 @@
 - Outer portfolio baseline and room assets: Henry Heffernan
   - Repo: https://github.com/henryjeff/portfolio-website
   - License: MIT, Copyright 2024 Henry Heffernan (notice below)
-  - Files from that repo, byte for byte: the environment map (`static/textures/environmentMap/`)
-    and everything in `static/audio/`. The old room models and their bakes are gone since room
-    v2; its studio backdrop mesh comes from upstream's `environment.glb` (re-baked, inside
-    `static/models/Room/room_v2*.glb`)
-  - Upstream doesn't say where the environment map, the room sounds or the three radio tracks
-    (`static/audio/radio/`) came from. The site hasn't loaded any `static/audio/` file since
-    `b35f2d4`
+  - Files from that repo, byte for byte: the environment map (`static/textures/environmentMap/`).
+    The old room models and their bakes are gone since room v2; its studio backdrop mesh comes
+    from upstream's `environment.glb` (re-baked, inside `static/models/Room/room_v2*.glb`)
+  - Upstream doesn't say where the environment map came from. Its room sounds and radio tracks
+    (`static/audio/`) were never loaded or deployed here and were removed
 
 - Inner OS inspiration: Dustin Brett (daedalOS)
   - Repo: https://github.com/DustinBrett/daedalOS
