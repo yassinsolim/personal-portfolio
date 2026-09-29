@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import Application from '../Application';
 import Resources from '../Utils/Resources';
+import { UNITS_PER_METRE } from './screens/layout';
 
-// Flipper Zero placement next to keyboard, left side of desk
-const FLIPPER_TARGET_LENGTH = 420;
-const PAPER_ANCHOR = new THREE.Vector3(-2064, -444, 986); // paper center on desk
-const FLIPPER_OFFSET = new THREE.Vector3(520, 0, 380); // relative to paper (toward keyboard area)
+// the flipper zero's reserved spot left of the keyboard (the room's
+// flipper_spot), at its real 100 mm length. a clickable one that runs its os
+// replaces this model later
+const FLIPPER_TARGET_LENGTH = 0.1 * UNITS_PER_METRE;
 const FLIPPER_PITCH = 0;
-const FLIPPER_YAW = -50 * THREE.MathUtils.DEG2RAD;
+const FLIPPER_YAW = -30 * THREE.MathUtils.DEG2RAD;
 const FLIPPER_ROLL = 0;
 
 export default class Flipper {
@@ -36,7 +37,7 @@ export default class Flipper {
         const maxDimension = Math.max(size.x, size.y, size.z);
         const scale = maxDimension > 0 ? FLIPPER_TARGET_LENGTH / maxDimension : 1;
 
-        const targetPos = new THREE.Vector3().copy(PAPER_ANCHOR).add(FLIPPER_OFFSET);
+        const targetPos = this.application.world.room.anchor('flipper_spot');
         flipper.scale.setScalar(scale);
         flipper.rotation.set(FLIPPER_PITCH, FLIPPER_YAW, FLIPPER_ROLL);
         flipper.position.set(0, 0, 0);

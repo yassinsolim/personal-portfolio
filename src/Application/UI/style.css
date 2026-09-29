@@ -1650,3 +1650,13 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     max-width: min(460px, calc(100vw - 28px));
     font-size: 10px;
 }
+
+/* a room target has the camera: the panel fades out of its way */
+.look-hint.room-focused {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.look-hint {
+    transition: opacity 0.3s ease;
+}

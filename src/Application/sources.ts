@@ -1,10 +1,5 @@
 import { carOptions, getStoredCarId } from './carOptions';
-import { isLowPowerDevice } from './Utils/Device';
-
-// the baked room textures are 4k (about 85 MB of gpu memory each with mips),
-// so mobile and low power devices get the 2k copies
-const roomTexture = (path: string) =>
-    isLowPowerDevice() ? path.replace(/\.jpg$/, '_2k.jpg') : path;
+import { roomTier } from './Utils/roomTier';
 
 const initialCarId = getStoredCarId();
 const preloadIds = new Set(
@@ -22,40 +17,11 @@ const carModelSources: Resource[] = carOptions
 
 const sources: Resource[] = [
     {
-        name: 'computerSetupModel',
+        // room v2 (scripts/room). low tier gpus, low power devices and
+        // phones get the lighter one: simpler pc and keyboard, 1k atlases
+        name: 'roomModel',
         type: 'gltfModel',
-        path: 'models/Computer/computer_setup.glb',
-    },
-    {
-        name: 'computerSetupTexture',
-        type: 'texture',
-        // baked for the model's uvs (BakedModel)
-        flipY: false,
-        path: roomTexture('models/Computer/baked_computer.jpg'),
-    },
-    {
-        name: 'environmentModel',
-        type: 'gltfModel',
-        path: 'models/World/environment.glb',
-    },
-    {
-        name: 'environmentTexture',
-        type: 'texture',
-        // baked for the model's uvs (BakedModel)
-        flipY: false,
-        path: roomTexture('models/World/baked_environment.jpg'),
-    },
-    {
-        name: 'decorModel',
-        type: 'gltfModel',
-        path: 'models/Decor/decor.glb',
-    },
-    {
-        name: 'decorTexture',
-        type: 'texture',
-        // baked for the model's uvs (BakedModel)
-        flipY: false,
-        path: roomTexture('models/Decor/baked_decor_modified.jpg'),
+        path: roomTier() === 'low' ? 'models/Room/room_v2.low.glb' : 'models/Room/room_v2.glb',
     },
     {
         name: 'environmentMapTexture',

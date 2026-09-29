@@ -245,6 +245,9 @@ const App = () => {
     const [freeCamActive, setFreeCamActive] = useState(false);
     const [freeCamPending, setFreeCamPending] = useState(false);
     const [raceModeActive, setRaceModeActive] = useState(false);
+    // a monitor (or the flipper, the pc) is the camera's focus: the room
+    // panel steps aside so it doesn't sit over the screen
+    const [roomFocus, setRoomFocus] = useState(false);
     const [racePaused, setRacePaused] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
@@ -342,6 +345,10 @@ const App = () => {
                 setPointerLocked(Boolean(state?.locked));
             }
         );
+
+        eventBus.on('room:focus', (state: { target?: string | null } | undefined) => {
+            setRoomFocus(Boolean(state?.target));
+        });
 
         eventBus.on(
             'freeCam:state',
@@ -692,7 +699,7 @@ const App = () => {
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <LoadingScreen />
             {showHint && (
-                <div className="look-hint">
+                <div className={roomFocus ? 'look-hint room-focused' : 'look-hint'}>
                     <div>
                         Click anywhere to begin.
                     </div>

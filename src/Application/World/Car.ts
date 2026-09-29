@@ -5,6 +5,7 @@ import UIEventBus from '../UI/EventBus';
 import { applyBmwM5GlassTint } from '../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../Utils/CarFinish';
 import { addContactShadow } from './CarContactShadow';
+import { CAR_GROUND_Y, OLD_DESK_CENTER } from './screens/layout';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
 import {
@@ -331,13 +332,9 @@ export default class Car {
         return center;
     }
 
+    // where the old computer model sat: the toyota crown is placed from it
     getDeskCenter() {
-        const deskModel = this.resources.items.gltfModel.computerSetupModel;
-        if (!deskModel) return new THREE.Vector3();
-        const bbox = new THREE.Box3().setFromObject(deskModel.scene);
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
-        return center;
+        return OLD_DESK_CENTER.clone();
     }
 
     applyEnvironment(car: THREE.Object3D) {
@@ -512,15 +509,10 @@ export default class Car {
         }
     }
 
+    // a constant, not the lowest mesh in the scene: the car must not move
+    // when the room does (the race handoff maps through its matrix)
     getGroundYFromScene() {
-        let groundY = Infinity;
-        this.scene.traverse((child) => {
-            if (child instanceof THREE.Mesh) {
-                const box = new THREE.Box3().setFromObject(child);
-                groundY = Math.min(groundY, box.min.y);
-            }
-        });
-        return groundY === Infinity ? 0 : groundY;
+        return CAR_GROUND_Y;
     }
 
     addLights() {
