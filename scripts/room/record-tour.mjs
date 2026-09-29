@@ -2,7 +2,7 @@
 // view, the desk view, each screen focused by a click and left with esc, then
 // the car click into the race. real time (playwright's video), headed.
 //
-//   node scripts/room/record-tour.mjs --url http://192.168.1.166:8531/ --out ~/Assets/portfolio-room/v2/tour
+//   node scripts/room/record-tour.mjs --url http://192.168.1.166:8531/ --out ~/Assets/portfolio-room/v2/tour [--os http://192.168.1.166:3100] [--tier low]
 //
 // writes tour.webm, tour.mp4 (ffmpeg) and a few stills
 import { chromium } from 'playwright';
@@ -20,6 +20,8 @@ const url = new URL(opt('url', 'http://192.168.1.166:8531/'));
 url.searchParams.set('raceDebug', '1');
 url.searchParams.set('mpmock', '1');
 if (opt('tier')) url.searchParams.set('raceTier', opt('tier'));
+// a local yassinOS for m1 (lan ip), e.g. the embed bridge's branch before it deploys
+if (opt('os')) url.searchParams.set('os', opt('os'));
 const out = path.resolve(opt('out', '').replace(/^~/, os.homedir()) || '.tmp-validation/tour');
 const width = 1512;
 const height = 900;
