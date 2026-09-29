@@ -62,6 +62,8 @@ export default class Flipper {
     pickTargets: THREE.Object3D[] = [];
     focused = false;
     hovered = false;
+    // the car's hover sets the cursor too, so only write it when this changes
+    private pointerShown = false;
     private raycaster = new THREE.Raycaster();
     private pointer = new THREE.Vector2();
     private keyCentre = new THREE.Vector3();
@@ -313,7 +315,10 @@ export default class Flipper {
             }
             this.updateRunning();
         }
-        document.body.style.cursor = over ? 'pointer' : '';
+        if (over !== this.pointerShown) {
+            this.pointerShown = over;
+            document.body.style.cursor = over ? 'pointer' : '';
+        }
     }
 
     onMouseDown(event: MouseEvent) {
@@ -381,6 +386,7 @@ export default class Flipper {
         this.device.setAwake(false);
         this.chip.style.opacity = '0';
         this.chip.style.pointerEvents = 'none';
+        this.pointerShown = false;
         document.body.style.cursor = '';
         if (moveCamera) this.camera.transition(CameraKey.DESK);
         UIEventBus.dispatch('flipper:focus', { focused: false });
