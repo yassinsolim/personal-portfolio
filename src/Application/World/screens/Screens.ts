@@ -120,6 +120,10 @@ export default class Screens {
         this.bindMessages();
         this.scheduleIframe();
         void this.createDisplays();
+        UIEventBus.on('loadingScreenDone', () => {
+            if (this.terminalClaimed) return;
+            void this.terminal().then((terminal) => terminal?.setMode('shell'));
+        });
         this.applyPointer();
     }
 
@@ -145,6 +149,15 @@ export default class Screens {
     async terminal(): Promise<TerminalDisplay | null> {
         await this.displaysReady;
         return this.screens.m3.display as TerminalDisplay | null;
+    }
+
+    // a loader that streams its log onto m3 claims it and switches it to the
+    // shell itself. unclaimed, it becomes the shell when loading is done
+    terminalClaimed = false;
+
+    async claimTerminal() {
+        this.terminalClaimed = true;
+        return this.terminal();
     }
 
     // the flipper and the pc: anything clickable with a camera pose

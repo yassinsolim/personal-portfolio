@@ -83,7 +83,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `yassinos:escape`, `yassinos:input` (key and click sounds, `room:osInput`), `yassinos:state`
   (`room:osState`). `?os=<url>` points m1 at another yassinOS on localhost.
 - The loader docks on m3: `world.screens.get('m3')` (or `'side'`, `'terminal'`) gives the CSS3D
-  container, the pose and `focusPose()`; `await world.screens.terminal()` gives the terminal
+  container, the pose and `focusPose()`; `await world.screens.claimTerminal()` gives the terminal (unclaimed, it switches to the shell when loading ends)
   (`appendLog`, `setMode('boot' | 'shell')`). `world.room.meshes()` lists the room's meshes for
   the pipeline stages. Screens exist from the start, before the room has loaded.
 - The flipper's spot (`flipper_spot`) and focus pose (`Room.flipperPose`) are reserved for the
