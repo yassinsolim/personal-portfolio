@@ -13,7 +13,7 @@ export type SectorState = {
     names: string[];
 };
 
-const STORAGE_PREFIX = 'yassinverse:raceSectors@v5:';
+const STORAGE_PREFIX = 'yassinverse:raceSectors@v6:';
 
 export default class SectorTimer {
     bounds: number[];

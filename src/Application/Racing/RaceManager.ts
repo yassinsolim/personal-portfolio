@@ -98,6 +98,8 @@ export default class RaceManager {
     leaderboardService: LeaderboardService;
     currentLapTimeMs: number;
     lapRunning: boolean;
+    // the first lap's clock is at 0, waiting for the car to move
+    lapArmed = false;
     lapProgress: number;
     pendingLapTimeMs: number;
     lapSubmitInFlight: boolean;
@@ -504,11 +506,14 @@ export default class RaceManager {
         this.sectors.reset();
         const nowMs = this.application.time.elapsed;
         const telemetry = this.vehicle.getTelemetry();
-        const lapStart = this.lapTimer.startLap(nowMs, telemetry.position);
+        // the clock starts on the first movement (LapTimer.arm), the ghost
+        // and the sectors with it
+        const lapStart = this.lapTimer.arm(nowMs, telemetry.position);
         this.currentLapTimeMs = lapStart.lapTimeMs;
         this.lapRunning = lapStart.lapRunning;
+        this.lapArmed = lapStart.armed;
         this.lapProgress = lapStart.progress;
-        this.ghostReplay.startLap(nowMs);
+        this.ghostReplay.holdAtStart();
         this.lastStartResets = this.vehicle.startResets;
     }
 
@@ -724,6 +729,7 @@ export default class RaceManager {
             rpm: telemetry.rpm,
             lapTimeMs: this.currentLapTimeMs,
             lapRunning: this.lapRunning,
+            lapArmed: this.lapArmed,
             lapProgress: this.lapProgress,
             paused: this.paused,
             pendingLapSubmission: this.pendingLapTimeMs > 0,
@@ -1272,12 +1278,15 @@ export default class RaceManager {
             const telemetry = this.vehicle.getTelemetry();
             const lapWasRunning = this.lapRunning;
             this.engineAudio.update(telemetry, delta);
+            const controls = this.vehicle.input.getState();
             const lapUpdate = this.lapTimer.update(
                 nowMs,
                 telemetry.position,
                 telemetry.speedMps,
-                telemetry.forward
+                telemetry.forward,
+                controls.throttle > 0.05 || (telemetry.gear < 0 && controls.brake > 0.05)
             );
+            this.lapArmed = Boolean(lapUpdate.armed);
 
             this.currentLapTimeMs = lapUpdate.lapTimeMs;
             this.lapRunning = lapUpdate.lapRunning;
@@ -1320,6 +1329,9 @@ export default class RaceManager {
                     Boolean(lapUpdate.validLap),
                     lapUpdate.completedLapTimeMs
                 );
+                // the next lap started on the line: record it, and the ghost
+                // races it from its start too
+                this.ghostReplay.startLap(nowMs);
             }
 
             if (lapUpdate.completedLapTimeMs && lapUpdate.validLap) {

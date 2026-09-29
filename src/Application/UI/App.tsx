@@ -64,6 +64,7 @@ type HudState = {
     rpm: number;
     lapTimeMs: number;
     lapRunning: boolean;
+    lapArmed?: boolean;
     lapProgress: number;
     ghostBestLapMs?: number;
     redlineRpm?: number;
@@ -879,6 +880,7 @@ const App = () => {
                     tachMaxRpm={hud.tachMaxRpm}
                     lapTimeMs={hud.lapTimeMs}
                     lapRunning={hud.lapRunning}
+                    lapArmed={hud.lapArmed}
                     lastLapMs={hud.lastLapMs || 0}
                     bestLapMs={hud.ghostBestLapMs || 0}
                     sectors={hud.sectors || null}

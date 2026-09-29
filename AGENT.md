@@ -132,8 +132,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The road is 16 m with 3.5 m grass verges to the barriers (`NordschleifeTrack.ts`); the barrier
   collision is in `RaceVehicle.applyBarriers` using `track.queryFrame`, which also gives each
   wheel's surface (asphalt, kerb, grass). Test benches set `vehicle.trackBound = false`.
-- New laps carry an `@v4` tag on `car_id` (v2 was the tire model on the old track, v3 the real
-  ring, v4 the real drivetrains) and the leaderboard only reads tagged rows, because older laps aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
+- New laps carry an `@v6` tag on `car_id` (v2 was the tire model on the old track, v3 the real
+  ring, v4 the real drivetrains, v5 the lidar road profile, v6 the first lap's clock waiting for
+  the car to move) and the leaderboard only reads tagged rows, because older laps aren't comparable. Bump the tag (and `PHYSICS_SEASON` in
   `MultiplayerService.ts`, and the local storage keys) whenever lap times stop being comparable.
 - Measure changes with `scripts/race-physics-check.js` (paste into the console on
   `?raceDebug=1`). Expect rest gaps within ~0.5 cm and no wheel sunk over 5 cm at 300 km/h.

@@ -7,11 +7,19 @@ const MIN_LAP_TIME_MS = 180_000;
 const START_GATE_RADIUS = 40;
 const START_TRIGGER_COOLDOWN_MS = 1_500;
 const PROGRESS_VALID_THRESHOLD = 0.92;
+// the first lap waits at 0 until the car moves. the grid sits just past the
+// line (the furthest slot is ~60 m on), so arming only happens this close to it
+export const ARM_PROGRESS = 0.012;
+// movement that starts an armed lap, besides throttle or reverse: ground speed,
+// or creeping this far from where it was armed (rolling on the start's slope)
+export const ARM_START_SPEED_MPS = 1;
+export const ARM_CREEP_METERS = 1.5;
 
 type LapUpdate = {
     progress: number;
     lapRunning: boolean;
     lapTimeMs: number;
+    armed?: boolean;
     completedLapTimeMs?: number;
     validLap?: boolean;
 };
@@ -27,6 +35,9 @@ export default class LapTimer {
     previousDistance: number;
     previousClosestIndex: number;
     lastCrossTimestampMs: number;
+    // at the start with the clock at 0, waiting for the car to move
+    armed: boolean;
+    armOrigin: THREE.Vector3;
 
     constructor(curve: THREE.CatmullRomCurve3, sampleCount = 2200) {
         this.curve = curve;
@@ -44,6 +55,8 @@ export default class LapTimer {
         this.previousDistance = 0;
         this.previousClosestIndex = 0;
         this.lastCrossTimestampMs = -Infinity;
+        this.armed = false;
+        this.armOrigin = new THREE.Vector3();
     }
 
     reset() {
@@ -53,6 +66,31 @@ export default class LapTimer {
         this.previousDistance = 0;
         this.previousClosestIndex = 0;
         this.lastCrossTimestampMs = -Infinity;
+        this.armed = false;
+    }
+
+    // a fresh first lap. at the start the clock is armed at 0 and runs from
+    // the first movement (see update). anywhere else the lap only starts at
+    // the next forward crossing of the line, so a restart mid lap can't count
+    // a part lap
+    arm(nowMs: number, position: THREE.Vector3) {
+        this.reset();
+        const closestIndex = this.getClosestSampleIndex(position);
+        const progress = closestIndex / Math.max(1, this.samplePoints.length - 1);
+        this.previousDistance = position
+            .clone()
+            .sub(this.startPoint)
+            .dot(this.startNormal);
+        this.lastCrossTimestampMs = nowMs;
+        this.maxProgress = progress;
+        this.armed = progress <= ARM_PROGRESS;
+        this.armOrigin.copy(position);
+        return {
+            progress,
+            lapRunning: false,
+            lapTimeMs: 0,
+            armed: this.armed,
+        };
     }
 
     startLap(nowMs: number, position: THREE.Vector3) {
@@ -110,14 +148,40 @@ export default class LapTimer {
         return bestIndex;
     }
 
+    // moving: throttle or reverse input this step. speed and creep are
+    // checked here
     update(
         nowMs: number,
         position: THREE.Vector3,
         speedMps: number,
-        forward: THREE.Vector3
+        forward: THREE.Vector3,
+        moving = false
     ): LapUpdate {
         const closestIndex = this.getClosestSampleIndex(position);
         const progress = closestIndex / Math.max(1, this.samplePoints.length - 1);
+
+        if (this.armed) {
+            const creep = Math.hypot(
+                position.x - this.armOrigin.x,
+                position.z - this.armOrigin.z
+            );
+            if (
+                moving ||
+                Math.abs(speedMps) > ARM_START_SPEED_MPS ||
+                creep > ARM_CREEP_METERS
+            ) {
+                this.armed = false;
+                this.lapRunning = true;
+                this.lapStartMs = nowMs;
+                this.maxProgress = progress;
+            } else {
+                this.previousDistance = position
+                    .clone()
+                    .sub(this.startPoint)
+                    .dot(this.startNormal);
+                return { progress, lapRunning: false, lapTimeMs: 0, armed: true };
+            }
+        }
 
         if (this.lapRunning) {
             this.maxProgress = Math.max(this.maxProgress, progress);

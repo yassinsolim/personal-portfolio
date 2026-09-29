@@ -128,7 +128,7 @@ const CONFIG_URL = '/config/racing.config.json';
 const DEFAULT_LOBBY_PREFIX = 'nordschleife_lobby_v2';
 // bumped with the physics or the track (last: the lidar road profile), and added to the
 // channel name so it holds even when the config sets its own prefix
-const PHYSICS_SEASON = 'p5';
+const PHYSICS_SEASON = 'p6';
 const SESSION_KEY = 'yassinverse:nordschleife:multiplayer:session:v1';
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 // realtime messages are billed (shared quota), so telemetry runs at ~11 Hz

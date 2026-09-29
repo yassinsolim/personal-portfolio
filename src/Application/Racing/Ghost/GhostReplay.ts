@@ -3,7 +3,7 @@ import { carOptionsById, defaultCarId } from '../../carOptions';
 import Application from '../../Application';
 import { legacyColor } from '../../Utils/LegacyColor';
 
-const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v5';
+const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v6';
 const SAMPLE_INTERVAL_MS = 60;
 const GHOST_OPACITY = 0.38;
 // 16 minutes, the slowest car's lap of the real ring fits
@@ -63,6 +63,8 @@ export default class GhostReplay {
     active: boolean;
     lapStartMs: number;
     playbackTimeMs: number;
+    // playback waits at the start while the lap clock is armed
+    held = false;
     playbackDurationMs: number;
     bestLapTimeMs: number;
     carId: string;
@@ -139,11 +141,24 @@ export default class GhostReplay {
         }
     }
 
+    // recording and playback both run from the lap's first instant, so the
+    // ghost always races the lap from its start
     startLap(nowMs: number) {
         this.recording = true;
         this.recordingSamples = [];
         this.lapStartMs = nowMs;
         this.lastSampleAtMs = -Infinity;
+        this.held = false;
+        this.playbackTimeMs = 0;
+    }
+
+    // the clock is armed (or waiting for the line): nothing records and the
+    // ghost waits on its start pose
+    holdAtStart() {
+        this.recording = false;
+        this.recordingSamples = [];
+        this.held = true;
+        this.playbackTimeMs = 0;
     }
 
     cancelLap() {
@@ -368,8 +383,10 @@ export default class GhostReplay {
         if (!this.active || samples.length < 2) return;
         if (!durationMs) return;
 
-        this.playbackTimeMs =
-            (this.playbackTimeMs + deltaSeconds * 1000) % durationMs;
+        if (!this.held) {
+            this.playbackTimeMs =
+                (this.playbackTimeMs + deltaSeconds * 1000) % durationMs;
+        }
 
         const sample = this.sampleAt(this.playbackTimeMs, samples);
         if (!sample) return;
