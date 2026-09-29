@@ -23,6 +23,7 @@ import SkidMarks from '../Effects/SkidMarks';
 import { useCheapMaterials } from './cheapMaterials';
 import { applyRevealTo, applySkyReveal } from './reveal';
 import RaceReveal from './RaceReveal';
+import { afterFrame, drain, slice, type Steps } from '../slicing';
 
 // everything race mode looks like: sky and light, the land around the road,
 // sparks and skid marks, and the post chain it all renders through. the room
@@ -34,6 +35,8 @@ const ENVIRONMENT_INTENSITY = 0.6;
 // the trees' shadow casters) and meshes per frame
 const UPLOAD_LAYER = 6;
 const UPLOAD_BATCH = 24;
+// materials per program compile while prewarming
+const COMPILE_BATCH = 6;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -83,11 +86,24 @@ export default class RaceVisuals {
     private away: THREE.Vector3;
     private light: THREE.Color;
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         track: NordschleifeTrack,
-        vehicle: RaceVehicle
+        vehicle: RaceVehicle,
+        defer = false
     ) {
+        this.pending = this.build(parent, track, vehicle);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(
+        parent: THREE.Object3D,
+        track: NordschleifeTrack,
+        vehicle: RaceVehicle
+    ): Steps {
         this.application = new Application();
         this.scene = this.application.scene;
         this.track = track;
@@ -105,16 +121,22 @@ export default class RaceVisuals {
         // tree count is set once at build time, from the gpu tier
         const lite = this.tier === 'low';
         this.atmosphere = new RaceAtmosphere(this.root);
-        this.terrain = new RaceTerrain(this.root, track, lite ? 'low' : 'high');
+        yield 'visuals:atmosphere';
+        this.terrain = new RaceTerrain(this.root, track, lite ? 'low' : 'high', true);
+        yield* this.terrain.pending;
         this.forest = new RaceForest(
             this.root,
             this.application.renderer.instance,
             track,
             this.terrain,
-            lite ? 'low' : 'high'
+            lite ? 'low' : 'high',
+            true
         );
-        this.trackside = new RaceTrackside(this.root, track, lite);
-        this.extras = new RaceTracksideExtras(this.root, track, this.terrain, lite);
+        yield* this.forest.pending;
+        this.trackside = new RaceTrackside(this.root, track, lite, true);
+        yield* this.trackside.pending;
+        this.extras = new RaceTracksideExtras(this.root, track, this.terrain, lite, true);
+        yield* this.extras.pending;
         this.sparks = new Sparks(this.root);
         this.skids = new SkidMarks(this.root);
         this.post = null;
@@ -134,6 +156,7 @@ export default class RaceVisuals {
             useCheapMaterials(this.trackside.root);
             useCheapMaterials(this.extras.root);
         }
+        yield 'visuals:misc';
         // the homepage transition builds the ring out from the car. one set
         // of uniforms in every race world material, so whatever else lands
         // in the race root joins in (prepareReveal catches late additions)
@@ -141,6 +164,7 @@ export default class RaceVisuals {
         this.revealBackground = new THREE.Color();
         applyRevealTo(parent, this.reveal.uniforms);
         applySkyReveal(this.atmosphere.sky.material, this.reveal.skyHaze, this.reveal.sky);
+        yield 'visuals:reveal';
 
         UIEventBus.on(
             'render:effects',
@@ -373,12 +397,12 @@ export default class RaceVisuals {
         return applyRevealTo(this.raceRoot, this.reveal.uniforms);
     }
 
-    // compiles the race world's programs for the state race mode draws with:
-    // only its own lights, its sky map and fog, its tone mapping and the post
-    // chain's kind of target bound. three keys programs on exactly these, so
-    // the race frames find them ready. the stand-in scene carries the sky and
-    // fog, the race root brings its lights (it has to be visible for that)
-    private compileRaceWorld(camera: THREE.Camera) {
+    // the state race mode draws with, for fn: only its own lights, its sky
+    // map and fog, its tone mapping and the post chain's kind of target
+    // bound. three keys programs on exactly these, so compiling in it has
+    // the race frames find them ready. the stand-in scene carries the sky
+    // and fog, the race root brings its lights (it has to be visible for that)
+    private inRaceState<T>(fn: (stage: THREE.Scene) => T): T {
         const gl = this.application.renderer.instance;
         const settings = settingsFor(this.getPreset(), this.tier);
         const stage = new THREE.Scene();
@@ -401,16 +425,7 @@ export default class RaceVisuals {
             : null;
         gl.setRenderTarget(target);
         try {
-            const pending = gl.compileAsync(this.raceRoot, camera, stage);
-            // the sun's shadow programs only build in a shadow pass: one
-            // around the car's start, with the trees there filled in
-            if (settings.shadows) {
-                this.atmosphere.follow(this.vehicle.position);
-                this.forest.update(camera, this.vehicle.position, 0);
-                this.raceRoot.updateMatrixWorld(true);
-                gl.shadowMap.render([this.atmosphere.sun], this.raceRoot as THREE.Scene, camera);
-            }
-            return pending;
+            return fn(stage);
         } finally {
             gl.setRenderTarget(saved.target);
             target?.dispose();
@@ -418,6 +433,79 @@ export default class RaceVisuals {
             gl.toneMapping = saved.toneMapping;
             gl.toneMappingExposure = saved.exposure;
             this.atmosphere.sun.castShadow = saved.castShadow;
+        }
+    }
+
+    // a few materials at a time, each batch done before the next: all of
+    // them at once queued so much in the gpu process that the room's next
+    // frame waited on it (60 ms and more). the rest have no material for
+    // the compile, which is how three skips them
+    private async compileRaceWorld(camera: THREE.Camera) {
+        const gl = this.application.renderer.instance;
+        const drawn: { material: THREE.Material | THREE.Material[] | null }[] = [];
+        const materials = new Set<THREE.Material>();
+        this.raceRoot.traverse((node) => {
+            const object = node as unknown as { material?: THREE.Material | THREE.Material[] | null };
+            if (!object.material) return;
+            drawn.push(object as { material: THREE.Material | THREE.Material[] });
+            (Array.isArray(object.material) ? object.material : [object.material]).forEach((material) =>
+                materials.add(material)
+            );
+        });
+        const list = [...materials];
+        for (let i = 0; i < list.length; i += COMPILE_BATCH) {
+            const batch = new Set(list.slice(i, i + COMPILE_BATCH));
+            const kept = drawn.map((object) => object.material);
+            drawn.forEach((object, k) => {
+                const own = kept[k]!;
+                const inBatch = Array.isArray(own) ? own.some((m) => batch.has(m)) : batch.has(own);
+                if (!inBatch) object.material = null;
+            });
+            let pending: Promise<unknown>;
+            try {
+                pending = this.inRaceState((stage) => gl.compileAsync(this.raceRoot, camera, stage));
+            } finally {
+                drawn.forEach((object, k) => (object.material = kept[k]));
+            }
+            await pending;
+            await afterFrame();
+        }
+    }
+
+    // the sun's shadow programs only build in a shadow pass, which links
+    // them on the spot (about 60 ms for all of them). so a pass per caster
+    // material, around the car's start with the trees there filled in. the
+    // lights only compile before each is what sets up the race lights for it
+    private *warmShadows(camera: THREE.Camera): Steps {
+        if (!settingsFor(this.getPreset(), this.tier).shadows) return;
+        const gl = this.application.renderer.instance;
+        this.atmosphere.follow(this.vehicle.position);
+        this.forest.update(camera, this.vehicle.position, 0);
+        this.raceRoot.updateMatrixWorld(true);
+        const casters: THREE.Mesh[] = [];
+        const groups = new Map<string, THREE.Mesh[]>();
+        this.raceRoot.traverse((node) => {
+            const mesh = node as THREE.Mesh;
+            if (!mesh.isMesh || !mesh.castShadow) return;
+            casters.push(mesh);
+            const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+            const key = materials.map((material) => material.uuid).join() + mesh.customDepthMaterial?.uuid;
+            groups.set(key, [...(groups.get(key) || []), mesh]);
+        });
+        const lightsOnly = new THREE.Scene();
+        yield 'shadows:casters';
+        for (const group of groups.values()) {
+            casters.forEach((mesh) => (mesh.castShadow = false));
+            group.forEach((mesh) => (mesh.castShadow = true));
+            try {
+                this.inRaceState(() => {
+                    gl.compile(lightsOnly, camera, this.raceRoot as THREE.Scene);
+                    gl.shadowMap.render([this.atmosphere.sun], this.raceRoot as THREE.Scene, camera);
+                });
+            } finally {
+                casters.forEach((mesh) => (mesh.castShadow = true));
+            }
+            yield 'shadows:pass';
         }
     }
 
@@ -437,16 +525,17 @@ export default class RaceVisuals {
         if (this.prewarming && this.prewarmKey === key && !added) return this.prewarming;
         this.prewarmKey = key;
         const gl = this.application.renderer.instance;
-        const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-        this.prewarming = (async () => {
+        // each step in a task of its own after a frame, not in the frame's
+        const frame = afterFrame;
+        this.prewarming = this.application.renderer.holdResolution((async () => {
+            await frame();
             this.atmosphere.buildEnvironment(gl);
             await frame();
-            const world = this.compileRaceWorld(camera);
-            await frame();
-            const post = settings.post
+            await this.compileRaceWorld(camera);
+            await (settings.post
                 ? this.ensurePost().compileAsync(camera, THREE.AgXToneMapping)
-                : this.reveal.compileOverlay(gl);
-            await Promise.all([world, post]);
+                : this.reveal.compileOverlay(gl));
+            await slice(this.warmShadows(camera));
             // the first time three draws with a program it reads back its
             // info log and uniform locations, which stalls, and forty at once
             // made the first race frame long. a few a frame now instead
@@ -469,7 +558,7 @@ export default class RaceVisuals {
                     await frame();
                 }
             })();
-        })();
+        })());
         return this.prewarming;
     }
 

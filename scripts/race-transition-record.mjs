@@ -6,9 +6,11 @@
 //                   60 fps however busy the machine is. writes frames/*.jpg,
 //                   then transition.mp4 (ffmpeg), transition.webp (img2webp,
 //                   small, for inline use) and strip.jpg
-//   --mode timing   real time. logs every frame interval from the click until
-//                   the race has run for a few seconds, and reports the max,
-//                   p95 and the frames over 33 and 50 ms
+//   --mode timing   real time. logs every frame interval and long task from
+//                   the hover (which builds the race world) until the race
+//                   has run for a few seconds, and reports the max, p95 and
+//                   the frames over 33 and 50 ms, per phase. --hover <s> is
+//                   how long the pointer rests on the car before the click
 //
 //   node scripts/race-transition-record.mjs --url http://192.168.1.166:5871/ --out .tmp-validation/rec
 //   node scripts/race-transition-record.mjs --url ... --mode timing --runs 3 [--swgl] [--tier low]
@@ -53,6 +55,8 @@ const tail = Number(opt('tail', 75));
 const maxFrames = Number(opt('max-frames', 900));
 // timing: how long to wait for the transition to finish (software gl is slow)
 const timeoutSeconds = Number(opt('timeout', 20));
+// timing: how long the pointer rests on the car before the click
+const hoverSeconds = Number(opt('hover', 3));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 fs.mkdirSync(out, { recursive: true });
 
@@ -395,14 +399,16 @@ const recordTiming = async () => {
     for (let r = 0; r < runs; r++) {
         const browser = await launch();
         const { page, errors } = await prepare(browser);
+        // from before the hover: it builds the race world and prewarms it
+        await page.evaluate(() => window.__frames.mark());
         const car = await findCar(page);
         if (!car) throw new Error('no pointer over the car');
         await page.waitForFunction(() => Boolean(window.Application.world.raceManager), null, {
             timeout: 60000,
         });
-        await sleep(2500);
+        await sleep(hoverSeconds * 1000);
         const load = execFileSync('sysctl', ['-n', 'vm.loadavg']).toString().trim();
-        await page.evaluate(() => window.__frames.mark());
+        const clickAt = await page.evaluate(() => performance.now() - window.__frames.t0);
         await page.mouse.down();
         await page.mouse.up();
         const t0 = Date.now();
@@ -441,7 +447,8 @@ const recordTiming = async () => {
         // belongs to the phase its end falls in
         const at = Object.fromEntries(log.marks.filter(([name]) => name !== 'start'));
         const edges = [
-            ['click', 0],
+            ['hover', 0],
+            ['click', clickAt],
             ['fly', at.fly],
             ['settled', at.settled],
             ['held', at.handoff],
@@ -453,10 +460,14 @@ const recordTiming = async () => {
             const to = i + 1 < edges.length ? edges[i + 1][1] : Infinity;
             const inside = log.frames.filter(([t]) => t > from && t <= to).map(([, d]) => d);
             if (!inside.length) return;
+            const long = log.long.filter(([t]) => t > from && t <= to).map(([, d]) => d);
             phases[name] = {
                 frames: inside.length,
                 maxMs: Math.round(Math.max(...inside) * 10) / 10,
                 over33: inside.filter((d) => d > 33.4).length,
+                // chromium only, webkit has no long task timing
+                longMax: long.length ? Math.max(...long) : 0,
+                longOver50: long.filter((d) => d > 50).length,
             };
         });
         const result = {

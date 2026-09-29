@@ -47,6 +47,7 @@ export default class Renderer {
     // the race preset caps auto resolution, quality mode ignores it
     sceneMaxPixelRatio: number;
     keepGrain = false;
+    private resolutionHolds = 0;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -300,6 +301,10 @@ export default class Renderer {
         const interval = this.lastFrameAt ? now - this.lastFrameAt : 0;
         this.lastFrameAt = now;
         if (this.renderMode !== 'auto' || !interval) return;
+        if (this.resolutionHolds) {
+            this.adaptive.discard(now);
+            return;
+        }
         const ratio = this.adaptive.frame(interval, now);
         if (ratio === null) return;
         this.applyPixelRatio();
@@ -309,6 +314,27 @@ export default class Renderer {
                 fps: Math.round(this.adaptive.fps * 10) / 10,
             });
         }
+    }
+
+    // work spread over frames on purpose (the race world building on hover)
+    // slows them, which isn't load the resolution should drop for. a drop
+    // resizes the canvas, and that alone stalls a frame on the gpu
+    holdResolution<T>(work: Promise<T>): Promise<T> {
+        this.resolutionHolds++;
+        const release = () => {
+            this.resolutionHolds--;
+            this.adaptive.discard(performance.now());
+        };
+        return work.then(
+            (value) => {
+                release();
+                return value;
+            },
+            (error) => {
+                release();
+                throw error;
+            }
+        );
     }
 
     getMaxPixelRatio() {
