@@ -29,6 +29,8 @@ const sources: Resource[] = [
     {
         name: 'computerSetupTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/Computer/baked_computer.jpg'),
     },
     {
@@ -39,6 +41,8 @@ const sources: Resource[] = [
     {
         name: 'environmentTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/World/baked_environment.jpg'),
     },
     {
@@ -49,17 +53,9 @@ const sources: Resource[] = [
     {
         name: 'decorTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/Decor/baked_decor_modified.jpg'),
-    },
-    {
-        name: 'monitorSmudgeTexture',
-        type: 'texture',
-        path: 'textures/monitor/layers/compressed/smudges.jpg',
-    },
-    {
-        name: 'monitorShadowTexture',
-        type: 'texture',
-        path: 'textures/monitor/layers/compressed/shadow-compressed.png',
     },
     {
         name: 'environmentMapTexture',
@@ -73,16 +69,21 @@ const sources: Resource[] = [
             'textures/environmentMap/nz.jpg',
         ],
     },
-    {
-        name: 'nordschleifeData',
-        type: 'json',
-        path: 'models/Tracks/Nordschleife/nordschleife.json',
-    },
     ...carModelSources,
     {
         name: 'flipperModel',
         type: 'gltfModel',
         path: 'models/Props/flipper_zero.glb',
+    },
+];
+
+// race mode only: fetched with the race code, on the car hover or a race
+// button, never by the homepage (World.ensureRaceManager)
+export const raceSources: Resource[] = [
+    {
+        name: 'nordschleifeData',
+        type: 'json',
+        path: 'models/Tracks/Nordschleife/nordschleife.json',
     },
 ];
 

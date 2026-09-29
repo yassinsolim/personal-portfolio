@@ -8,6 +8,7 @@ import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
+import { reportStage } from '../Utils/loadStages';
 
 // click the car in the room: it rocks on its springs and the camera swings
 // round behind it, landing exactly where the race camera will start, with its
@@ -50,8 +51,12 @@ type Flight = {
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-// phases for scripts/race-transition-record.mjs to split frame times by
-const mark = (phase: string) => performance.mark?.(`race-transition:${phase}`);
+// phases for scripts/race-transition-record.mjs to split frame times by, and
+// for a loader to follow ('load:stage' events, Utils/loadStages)
+const mark = (phase: string) => {
+    performance.mark?.(`race-transition:${phase}`);
+    reportStage('race', phase, phase === 'done' ? 1 : 0);
+};
 
 const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
 
@@ -143,7 +148,9 @@ export default class RaceTransition {
     // one step a frame: the race programs, then what the fly and the capture
     // need the first time (the room's boxes, the capture's two programs)
     async prepareOnHover() {
-        const manager = await this.application.world.ensureRaceManager();
+        // a failed download is retried by the click
+        const manager = await this.application.world.ensureRaceManager().catch(() => null);
+        if (!manager) return;
         await nextFrame();
         // software gl compiles for seconds, which the room shouldn't stall
         // on. the transition does it behind the car instead
@@ -263,7 +270,15 @@ export default class RaceTransition {
 
         // the race world builds while the car rocks, then the camera flies,
         // so the fly never stutters on the build
-        const manager = await this.application.world.ensureRaceManager();
+        let manager: RaceManager;
+        try {
+            manager = await this.application.world.ensureRaceManager();
+        } catch {
+            // the race code or track didn't download: the room stays, and the
+            // next click tries again
+            this.abort();
+            return;
+        }
         await nextFrame();
         if (!this.busy) return;
         const invite = getInviteLobbyCode();
@@ -864,6 +879,16 @@ export default class RaceTransition {
         UIEventBus.dispatch('race:transitionSkip', {});
         this.flyStep();
         this.application.world.raceManager?.visuals.reveal.finish();
+    }
+
+    // undoes start() when the race never loaded, before anything moved
+    abort() {
+        this.busy = false;
+        this.letResolutionGo();
+        window.removeEventListener('keydown', this.skipHandler, true);
+        window.removeEventListener('pointerdown', this.skipHandler, true);
+        document.body.classList.remove('race-transition');
+        UIEventBus.dispatch('race:transitionLock', { locked: false });
     }
 
     finish(manager: RaceManager) {

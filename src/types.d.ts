@@ -13,6 +13,8 @@ type TextureResource = {
     name: string;
     type: 'texture';
     path: string;
+    // set at load, so the texture can go to the gpu before its model exists
+    flipY?: boolean;
 };
 
 type CubeTextureResource = {
@@ -68,3 +70,8 @@ type LoadedAudio = AudioBuffer;
 type LoadedJson = Record<string, any>;
 
 type ResourceType = 'texture' | 'cubeTexture' | 'gltfModel' | 'audio' | 'json';
+
+// path under static/ -> content hash, and -> size in bytes, set by the
+// production build
+declare const __ASSET_VERSIONS__: Record<string, string>;
+declare const __ASSET_SIZES__: Record<string, number>;

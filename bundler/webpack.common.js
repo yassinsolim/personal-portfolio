@@ -2,6 +2,29 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const MiniCSSExtractPlugin = require('mini-css-extract-plugin');
 const path = require('path');
+const dracoWorker = require('../scripts/draco-worker.js');
+
+// emits files built in node (the draco worker) as they are: already minified
+// or emscripten output, so terser leaves them alone
+class EmitFilesPlugin {
+    constructor(files) {
+        this.files = files;
+    }
+
+    apply(compiler) {
+        const { Compilation, sources } = compiler.webpack;
+        compiler.hooks.thisCompilation.tap('EmitFilesPlugin', (compilation) => {
+            compilation.hooks.processAssets.tap(
+                { name: 'EmitFilesPlugin', stage: Compilation.PROCESS_ASSETS_STAGE_ADDITIONAL },
+                () => {
+                    for (const [name, content] of Object.entries(this.files())) {
+                        compilation.emitAsset(name, new sources.RawSource(content), { minimized: true });
+                    }
+                }
+            );
+        });
+    }
+}
 
 module.exports = {
     entry: path.resolve(__dirname, '../src/script.ts'),
@@ -15,6 +38,7 @@ module.exports = {
         path: path.resolve(__dirname, '../build'),
     },
     plugins: [
+        new EmitFilesPlugin(dracoWorker),
         new CopyWebpackPlugin({
             patterns: [
                 {

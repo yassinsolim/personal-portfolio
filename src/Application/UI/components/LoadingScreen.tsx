@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import eventBus from '../EventBus';
 import { isWebGLAvailable } from '../../Utils/webgl';
+import { currentStage, type LoadStage } from '../../Utils/loadStages';
 
 type LoadingProps = {};
 type ResourceProgress = {
@@ -90,11 +91,26 @@ const LoadingScreen: React.FC<LoadingProps> = () => {
         }
 
         setDoneLoading(true);
+        // at least a second, and not before the room has been drawn (its
+        // textures uploaded and programs compiled, World.warmUp)
+        let waited = false;
+        let drawn = currentStage('homepage')?.stage === 'ready';
+        const startWhenReady = () => {
+            if (waited && drawn) start();
+        };
+        const onStage = (stage: LoadStage) => {
+            if (stage.scope !== 'homepage' || stage.stage !== 'ready') return;
+            drawn = true;
+            startWhenReady();
+        };
+        eventBus.on('load:stage', onStage);
         const timeoutId = window.setTimeout(() => {
-            start();
+            waited = true;
+            startWhenReady();
         }, 1000);
         return () => {
             window.clearTimeout(timeoutId);
+            eventBus.remove('load:stage', onStage);
         };
     }, [loadError, progress, start, webGLError]);
 
