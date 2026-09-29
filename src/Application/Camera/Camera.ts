@@ -135,6 +135,8 @@ export default class Camera extends EventEmitter {
 
         this.currentKeyframe = undefined;
         this.targetKeyframe = key;
+        // the ui lays itself out around the view it's heading to
+        UIEventBus.dispatch('camera:view', { key });
 
         const keyframe = this.keyframes[key];
 

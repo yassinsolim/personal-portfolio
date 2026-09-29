@@ -12,6 +12,14 @@ import {
     IDLE_SCALE,
     ORBIT_FOCAL,
 } from '../World/screens/layout';
+import { roomTier } from '../Utils/roomTier';
+
+// the low tier keeps today's idle framing: in software gl the closer one
+// cost 35 to 50 ms a frame (the car and the room fill more pixels), measured
+// at the same swing pose in both builds. the high tier gets the closer view
+const LOW_TIER = roomTier() === 'low';
+const IDLE_AIM = LOW_TIER ? new THREE.Vector3(0, -1000, 0) : IDLE_FOCAL;
+const IDLE_DISTANCE = LOW_TIER ? 1 : IDLE_SCALE;
 
 export class CameraKeyframeInstance {
     position: THREE.Vector3;
@@ -44,7 +52,7 @@ const OLD_ORBIT_FOCAL = new THREE.Vector3(-100, 350, 0);
 const keys: { [key in CameraKey]: CameraKeyframe } = {
     idle: {
         position: new THREE.Vector3(-20000, 12000, 20000),
-        focalPoint: IDLE_FOCAL.clone(),
+        focalPoint: IDLE_AIM.clone(),
     },
     // set by focusOn, from the target's own framing
     focus: {
@@ -148,12 +156,13 @@ export class IdleKeyframe extends CameraKeyframeInstance {
         // henry's swing: x across the front over about 78 s, y drifting slowly
         const x = Math.sin((this.time.elapsed + 19000) * 0.00008) * -20000;
         const y = Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 + 9000;
-        const scale = IDLE_SCALE * narrowPullback(this.sizes);
+        // the low tier's idle is exactly today's, phones included
+        const scale = LOW_TIER ? IDLE_DISTANCE : IDLE_DISTANCE * narrowPullback(this.sizes);
         this.position
             .set(x, y, 20000)
             .sub(OLD_IDLE_FOCAL)
             .multiplyScalar(scale)
-            .add(IDLE_FOCAL);
+            .add(IDLE_AIM);
     }
 }
 
