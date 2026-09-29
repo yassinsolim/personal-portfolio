@@ -22,8 +22,10 @@ import {
 //   output     the film grain pass, then this is simply the live scene
 // the stage fronts sweep down the screen like a raster scan. a mesh that
 // shows up late (the car and flipper only exist once the scene is built)
-// joins at the stage the frame has reached. the camera sits on the idle
-// view from the start, so the end is the room as it always runs: no cut
+// joins at the stage the frame has reached. once the loading is done, a
+// camera move that takes the room over (the hybrid's pull-back, follow())
+// drives the stages still to come, so the room is live the frame it settles.
+// the end is the room as it always runs: no cut
 
 export const STAGES = ['input', 'vertex', 'primitive', 'raster', 'texture', 'lighting', 'output'] as const;
 export type PipelineStageName = (typeof STAGES)[number];
@@ -42,6 +44,12 @@ const DWELL_FAST_MS = 90;
 const CATCH_UP_MS = 300;
 const CATCH_UP_FAST_MS = 200;
 const MIN_WIPE_MS = 90;
+// the stand ins compile while the real materials do; the release waits at
+// most this long for them, so they never hold the room back
+const STAND_IN_WAIT_MS = 250;
+const STAND_IN_REPS = ['points', 'wire', 'flat', 'albedo'] as const;
+// the stage each stand in shows at
+const REP_STAGE = { points: S.vertex, wire: S.primitive, flat: S.raster, albedo: S.texture };
 
 type Kind = 'room' | 'car' | 'prop' | 'late';
 
@@ -159,6 +167,9 @@ export type PipelineOptions = {
     lightScreens?: string[];
 };
 
+// eased 0..1 of the camera move the last stages follow
+export type PullbackDetail = { progress: () => number };
+
 export type PipelineState = {
     stage: number;
     // 0..1 while the next stage sweeps down, else 0
@@ -193,6 +204,11 @@ export default class PipelineIntro {
     private hidden = new THREE.MeshBasicMaterial({ visible: false });
     private grain: HTMLDivElement | null = null;
     private grainOpacity = 0;
+    private styles = new Map<HTMLElement, string>();
+    private standIns: Promise<unknown> | null = null;
+    private standInsPrimed = false;
+    // the stages left when the camera move began, and the last announced
+    private pull: { progress: () => number; from: number; front: number; announced: number } | null = null;
 
     constructor(options: PipelineOptions = {}) {
         this.options = options;
@@ -207,7 +223,22 @@ export default class PipelineIntro {
         UIEventBus.on('load:stage', (stage: LoadStage) => this.onStage(stage));
         // World's build handler was added first, this one runs right after it
         this.application.resources.on('ready', () => this.onBuilt());
-        this.application.time.on('tick', () => this.update());
+        UIEventBus.on('intro:pullback', ({ progress }: PullbackDetail) => this.follow(progress));
+        // World.update() calls update(), after the camera and before the draw
+    }
+
+    // the camera move that takes the room over after the loading: the stages
+    // still to come split its progress, a sweep in flight carries on from
+    // where its front is
+    private follow(progress: () => number) {
+        if (this.finished || this.pull) return;
+        const sweeping = this.stage < this.target && this.sweepStartedAt > 0;
+        this.pull = {
+            progress,
+            from: this.stage,
+            front: sweeping ? this.front : 0,
+            announced: sweeping ? this.stage + 1 : this.stage,
+        };
     }
 
     state(): PipelineState {
@@ -260,9 +291,17 @@ export default class PipelineIntro {
         if (stage.stage === 'ready' && !this.warmed) {
             this.warmed = true;
             this.framed = true;
-            this.prime();
-            this.raise(S.texture);
-            this.checkLighting();
+            const go = () => {
+                this.prime();
+                this.primeStandIns();
+                this.raise(S.texture);
+                this.checkLighting();
+            };
+            if (!this.standIns || this.standInsPrimed) go();
+            else
+                void Promise.race([this.standIns, new Promise((r) => window.setTimeout(r, STAND_IN_WAIT_MS))]).then(
+                    go
+                );
         }
     }
 
@@ -273,22 +312,66 @@ export default class PipelineIntro {
         this.raise(S.raster);
     }
 
-    // one draw of the real materials into a single pixel: their programs'
-    // first use (uniform lookups) happens now, not in the frame they appear
-    private prime() {
+    // the stand ins' own prime, once: on its own task as soon as they're
+    // compiled (so the release doesn't pay for it), or at the release if
+    // they were late. only the ones a stage still to come shows
+    private primeStandIns() {
+        if (this.standInsPrimed || this.finished) return;
+        this.standInsPrimed = true;
+        const reps = STAND_IN_REPS.filter((rep) => REP_STAGE[rep] > this.stage);
+        if (reps.length) this.prime(reps);
+    }
+
+    // one draw of the real materials, or of each given stand in, into a
+    // single pixel: their programs' first use (uniform lookups) happens now,
+    // before the camera moves, not in the frame they appear
+    private prime(standIns: (typeof STAND_IN_REPS)[number][] = []) {
         const renderer = this.application.renderer.instance;
+        const draw = () => renderer.render(this.application.scene, this.application.camera.instance);
         const restore = this.swapReal();
         const test = renderer.getScissorTest();
         const rect = renderer.getScissor(new THREE.Vector4());
         renderer.setScissorTest(true);
         renderer.setScissor(0, 0, 1, 1);
         try {
-            renderer.render(this.application.scene, this.application.camera.instance);
+            if (!standIns.length) draw();
+            standIns.forEach((rep) => {
+                this.showAll(rep);
+                draw();
+            });
         } finally {
             renderer.setScissor(rect);
             renderer.setScissorTest(test);
             restore();
         }
+    }
+
+    // every mesh as one stand in, twins too (a twin is a plain mesh, its
+    // primary can be instanced), for compiling and priming
+    private showAll(rep: (typeof STAND_IN_REPS)[number]) {
+        this.managed.forEach((m) => {
+            if (m.kind === 'late') return;
+            m.points.visible = rep === 'points';
+            const material = rep === 'points' ? this.hidden : this.material(m, rep);
+            m.mesh.material = material;
+            m.twin.visible = true;
+            m.twin.material = material;
+        });
+    }
+
+    // World.warmUp's compile: the stand ins still to come compile alongside
+    // the real materials (compileAsync takes its materials when it's called),
+    // then the real ones go in for World's own call
+    warmUpSwap() {
+        const renderer = this.application.renderer.instance;
+        const camera = this.application.camera.instance;
+        const jobs = STAND_IN_REPS.map((rep) => {
+            this.showAll(rep);
+            return renderer.compileAsync(this.application.scene, camera);
+        });
+        this.standIns = Promise.all(jobs).catch(() => undefined);
+        void this.standIns.then(() => window.setTimeout(() => this.primeStandIns(), 0));
+        return this.swapReal();
     }
 
     private checkLighting() {
@@ -540,7 +623,63 @@ export default class PipelineIntro {
         else m.twin.material = material;
     }
 
-    private update() {
+    // inline styles written only when they change
+    private setStyle(el: HTMLElement, opacity: string) {
+        if (this.styles.get(el) === opacity) return;
+        this.styles.set(el, opacity);
+        el.style.opacity = opacity;
+    }
+
+    // the stages left, over the camera move's eased progress: each gets an
+    // equal share, the room is live the frame the camera settles
+    private followPull() {
+        const pull = this.pull as NonNullable<PipelineIntro['pull']>;
+        const e = Math.min(1, Math.max(0, pull.progress()));
+        const left = S.output - pull.from;
+        const announce = (upTo: number) => {
+            for (let n = pull.announced + 1; n <= upTo; n++) {
+                UIEventBus.dispatch('pipeline:stage', { stage: n, name: STAGES[n] });
+            }
+            pull.announced = Math.max(pull.announced, upTo);
+        };
+        const reach = (upTo: number) => {
+            while (this.stage < upTo) {
+                this.stage++;
+                UIEventBus.dispatch('pipeline:reached', { stage: this.stage, name: STAGES[this.stage] });
+            }
+        };
+        if (left <= 0 || e >= 1) {
+            announce(S.output);
+            reach(S.output);
+            this.front = 0;
+            shared.uFront.value = 0;
+            this.finish();
+            return;
+        }
+        // reduced motion: the stage holds until the cut behind the fade
+        if (this.reduced) {
+            UIEventBus.dispatch('pipeline:state', this.state());
+            return;
+        }
+        const at = e * left;
+        const segment = Math.min(left - 1, Math.floor(at));
+        const local = easeInOutSine(at - segment);
+        reach(pull.from + segment);
+        announce(pull.from + segment + 1);
+        this.front = segment === 0 ? pull.front + (1 - pull.front) * local : local;
+        shared.uFront.value = this.front;
+        const next = this.stage + 1;
+        const screens = next === S.lighting ? this.front : this.stage >= S.lighting ? 1 : 0;
+        this.screenContainers().forEach((el) => this.setStyle(el, String(screens)));
+        if (this.grain) {
+            const grain = next === S.output ? this.front : 0;
+            this.setStyle(this.grain, String(this.grainOpacity * grain));
+        }
+        this.apply();
+        UIEventBus.dispatch('pipeline:state', this.state());
+    }
+
+    update() {
         if (this.finished) return;
         // the screens that light up late are dark from the first frame (World
         // exists by the first tick, not when this is constructed)
@@ -550,6 +689,10 @@ export default class PipelineIntro {
         }
         const renderer = this.application.renderer.instance;
         renderer.getDrawingBufferSize(shared.uResolution.value);
+        if (this.pull) {
+            this.followPull();
+            return;
+        }
         if (this.reduced) {
             // no sweeps: the stages switch as they're reached
             if (this.stage < this.target) {

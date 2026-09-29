@@ -1,4 +1,4 @@
-import TWEEN from '@tweenjs/tween.js';
+import BezierEasing from 'bezier-easing';
 import Application from '../../Application';
 import { CameraKey } from '../../Camera/Camera';
 import UIEventBus from '../../UI/EventBus';
@@ -9,10 +9,17 @@ import { HYBRID } from '../../UI/loaders/hybridConfig';
 // room's terminal screen (screens.dockPose(), m3 filling the view), so the
 // log the loader writes there is what the visitor reads while the room
 // assembles around it. when loading is done it pulls back to the idle view
-// and the same screen carries on as the room's live terminal
+// and the same screen carries on as the room's live terminal. the pipeline's
+// last stages follow the pull-back's progress (intro:pullback), so the room
+// is live the frame the camera settles
 
-const PULLBACK_MS = 2400;
-const PULLBACK_FAST_MS = 1400;
+// the last stages ride the pull-back, so these also set when the room is
+// fully drawn: about when the old catch-up finished (650 and 500 ms after
+// the release), plus a frame or two
+const PULLBACK_MS = 850;
+const PULLBACK_FAST_MS = 650;
+// a soft start off the screen, most of the distance early, a long settle
+const PULLBACK_EASE = BezierEasing(0.45, 0, 0.2, 1);
 const FADE_MS = 220;
 
 export default class M3Dock {
@@ -53,6 +60,9 @@ export default class M3Dock {
             UIEventBus.dispatch('loader:showHint', {});
         };
         if (prefersReducedMotion()) {
+            // the stages hold until the cut, which happens behind the black
+            let cut = false;
+            UIEventBus.dispatch('intro:pullback', { progress: () => (cut ? 1 : 0) });
             const fade = document.createElement('div');
             Object.assign(fade.style, {
                 position: 'fixed',
@@ -68,6 +78,7 @@ export default class M3Dock {
                 fade.style.opacity = '1';
                 window.setTimeout(() => {
                     camera.transition(CameraKey.IDLE, 0);
+                    cut = true;
                     fade.style.opacity = '0';
                     window.setTimeout(() => {
                         fade.remove();
@@ -77,11 +88,12 @@ export default class M3Dock {
             });
             return;
         }
-        camera.transition(
-            CameraKey.IDLE,
-            isReturningVisitor() ? PULLBACK_FAST_MS : PULLBACK_MS,
-            TWEEN.Easing.Cubic.InOut,
-            arrive
-        );
+        // tween.js times the move with performance.now() too, from start()
+        const ms = isReturningVisitor() ? PULLBACK_FAST_MS : PULLBACK_MS;
+        const start = performance.now();
+        UIEventBus.dispatch('intro:pullback', {
+            progress: () => PULLBACK_EASE(Math.min(1, (performance.now() - start) / ms)),
+        });
+        camera.transition(CameraKey.IDLE, ms, PULLBACK_EASE, arrive);
     }
 }

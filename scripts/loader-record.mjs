@@ -55,13 +55,17 @@ const label = opt('label', '');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 fs.mkdirSync(out, { recursive: true });
 
-// --main-url: another build (main) to time as the variant 'main'
+// --main-url: another build to time, as the variant 'main' (its default
+// loader) or 'before' (its hybrid, measured like this build's)
 const mainUrl = opt('main-url', '');
+const kindOf = (variant) => (variant === 'before' ? 'hybrid' : variant);
+// the inline webp's size cap, in MB
+const webpMax = Number(opt('webp-max', 4.9));
 
 const pageUrl = (variant) => {
-    const url = new URL(variant === 'main' && mainUrl ? mainUrl : baseUrl);
+    const url = new URL((variant === 'main' || variant === 'before') && mainUrl ? mainUrl : baseUrl);
     // the hybrid is the default now: bios has to be asked for
-    if (variant && variant !== 'main') url.searchParams.set('loader', variant);
+    if (variant && variant !== 'main') url.searchParams.set('loader', kindOf(variant));
     if (tier) url.searchParams.set('raceTier', tier);
     return url.toString();
 };
@@ -228,7 +232,7 @@ const recordFrames = async (variant) => {
         await sleep(pressAfter);
         await page.keyboard.press('Space');
     }
-    const end = variant === 'hybrid' ? 'os' : variant === 'monitor' || variant === 'pipeline' ? 'handoff' : 'loadingScreenDone';
+    const end = kindOf(variant) === 'hybrid' ? 'os' : variant === 'monitor' || variant === 'pipeline' ? 'handoff' : 'loadingScreenDone';
     // a missing end mark shouldn't make a two minute recording
     const endBy = Date.now() + 25000;
     while (Date.now() < endBy && !(await mark(end).catch(() => false))) await sleep(50);
@@ -296,7 +300,7 @@ const encode = (dir, count) => {
         '-y', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(dir, '%04d.jpg'),
         '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'slow', '-movflags', '+faststart', mp4,
     ]);
-    // the inline copy: smaller and 30 fps, under about 5 MB
+    // the inline copy: smaller and 30 fps, under --webp-max
     const small = path.join(out, 'small');
     const webp = path.join(out, 'loader.webp');
     let quality = 60;
@@ -312,7 +316,7 @@ const encode = (dir, count) => {
         const frames = fs.readdirSync(small).filter((f) => f.endsWith('.jpg')).sort();
         run('img2webp', ['-loop', '0', '-lossy', '-q', String(quality), '-m', '4', '-d', String(Math.round(1000 / rate)), ...frames.map((f) => path.join(small, f)), '-o', webp]);
         const size = fs.statSync(webp).size;
-        if (size < 4.9e6) break;
+        if (size < webpMax * 1e6) break;
         if (quality > 36) quality -= 8;
         else if (rate > 20) rate = 20;
         else if (scaleWidth > 480) scaleWidth = Math.round(scaleWidth * 0.8);
@@ -367,7 +371,7 @@ const timeOnce = async (variant) => {
             v === 'monitor' || v === 'pipeline' || v === 'hybrid'
                 ? performance.getEntriesByName(v === 'hybrid' ? 'loader:os' : 'loader:handoff').length > 0
                 : window.__marks.some(([n]) => n === 'loadingScreenDone'),
-        variant,
+        kindOf(variant),
         { timeout: 60000 }
     );
     await sleep(2000);
@@ -399,6 +403,9 @@ const timeOnce = async (variant) => {
     const before = data.frames.filter(([t]) => t <= interactive).map(([, d]) => d);
     const longAfter = data.long.filter(([t]) => t > interactive).map(([, d]) => d);
     const longBefore = data.long.filter(([t]) => t <= interactive).map(([, d]) => d);
+    // the hybrid's pull-back: from the release to the camera settling
+    const pullEnd = kindOf(variant) === 'hybrid' ? at.os : undefined;
+    const pull = pullEnd ? data.frames.filter(([t]) => t > interactive && t <= pullEnd).map(([, d]) => d) : [];
     return {
         variant,
         returning,
@@ -413,6 +420,11 @@ const timeOnce = async (variant) => {
         outroP95Ms: Math.round(percentile(after, 0.95) * 10) / 10,
         outroOver33: after.filter((d) => d > 33.4).length,
         outroLongMaxMs: Math.max(0, ...longAfter),
+        pullbackMs: pullEnd ? pullEnd - interactive : null,
+        pullFrames: pull.length,
+        pullFramesMaxMs: Math.round(Math.max(0, ...pull) * 10) / 10,
+        pullP95Ms: Math.round(percentile(pull, 0.95) * 10) / 10,
+        pullOver33: pull.filter((d) => d > 33.4).length,
         errors,
     };
 };

@@ -100,7 +100,7 @@ export default class World {
             new M3Dock();
             // warmUp keeps drawing the stages, and compiles the real materials
             this.drawWhileWarming = true;
-            this.warmUpSwap = () => intro.swapReal();
+            this.warmUpSwap = () => intro.warmUpSwap();
         }
     }
 
@@ -243,6 +243,8 @@ export default class World {
     }
 
     update() {
+        // the intro's stages follow the camera, so after it and before the draw
+        if (this.intro) this.intro.update();
         this.screens.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
         if (this.flipper) this.flipper.update();
