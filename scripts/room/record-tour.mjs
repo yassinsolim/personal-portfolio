@@ -103,6 +103,12 @@ for (const id of ['m2', 'm3', 'm1']) {
     await page.keyboard.press('Escape');
     await sleep(1600);
 }
+// the flipper zero, zoomed in by its own focus
+await page.evaluate(() => window.Application.world.flipper?.focus());
+await sleep(3500);
+await shot('focus_flipper');
+await page.keyboard.press('Escape');
+await sleep(1600);
 // back to idle, then the car
 await page.keyboard.press('Escape');
 await sleep(2500);
