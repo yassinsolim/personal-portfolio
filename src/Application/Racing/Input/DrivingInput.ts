@@ -86,6 +86,9 @@ export default class DrivingInput {
     keyState: Record<string, boolean>;
     touchState: Record<TouchControlName, boolean>;
     smoothState: DrivingInputState;
+    // what the driver asks for this step before any smoothing (a held key,
+    // a pad trigger), so a lap clock can tell real input from a ramp down
+    intent = { throttle: 0, brake: 0 };
     source: InputSource;
     padButtons: boolean[];
     padIndex: number;
@@ -242,6 +245,8 @@ export default class DrivingInput {
         this.touchState.handbrake = false;
         this.smoothState.throttle = 0;
         this.smoothState.brake = 0;
+        this.intent.throttle = 0;
+        this.intent.brake = 0;
         this.smoothState.steer = 0;
         this.smoothState.handbrake = 0;
         this.pendingShift = 0;
@@ -330,6 +335,8 @@ export default class DrivingInput {
         const smooth = this.smoothState;
 
         if (pad && this.source === 'gamepad') {
+            this.intent.throttle = pad.throttle;
+            this.intent.brake = pad.brake;
             // analog: follow the pad closely, just take the edge off
             const follow = Math.min(1, dt * 30);
             smooth.throttle += (pad.throttle - smooth.throttle) * follow;
@@ -347,6 +354,8 @@ export default class DrivingInput {
             this.anyKey(THROTTLE_KEYS) || this.touchState.throttle ? 1 : 0;
         const brakeTarget =
             this.anyKey(BRAKE_KEYS) || this.touchState.brake ? 1 : 0;
+        this.intent.throttle = throttleTarget;
+        this.intent.brake = brakeTarget;
         // the touch buttons keep their old names: steerRight is the A button,
         // which steers left
         const left = this.anyKey(STEER_LEFT_KEYS) || this.touchState.steerRight;

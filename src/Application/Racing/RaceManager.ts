@@ -1278,13 +1278,15 @@ export default class RaceManager {
             const telemetry = this.vehicle.getTelemetry();
             const lapWasRunning = this.lapRunning;
             this.engineAudio.update(telemetry, delta);
-            const controls = this.vehicle.input.getState();
+            // held throttle, or reverse. not the smoothed input: it's still
+            // ramping down for a moment after a restart with the key let go
+            const intent = this.vehicle.input.intent;
             const lapUpdate = this.lapTimer.update(
                 nowMs,
                 telemetry.position,
                 telemetry.speedMps,
                 telemetry.forward,
-                controls.throttle > 0.05 || (telemetry.gear < 0 && controls.brake > 0.05)
+                intent.throttle > 0.05 || (telemetry.gear < 0 && intent.brake > 0.05)
             );
             this.lapArmed = Boolean(lapUpdate.armed);
 
