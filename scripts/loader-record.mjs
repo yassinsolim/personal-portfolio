@@ -227,8 +227,10 @@ const recordFrames = async (variant) => {
         await sleep(pressAfter);
         await page.keyboard.press('Space');
     }
-    const end = variant === 'monitor' || variant === 'pipeline' ? 'handoff' : 'loadingScreenDone';
-    while (Date.now() < deadline && !(await mark(end).catch(() => false))) await sleep(50);
+    const end = variant === 'hybrid' ? 'os' : variant === 'monitor' || variant === 'pipeline' ? 'handoff' : 'loadingScreenDone';
+    // a missing end mark shouldn't make a two minute recording
+    const endBy = Date.now() + 25000;
+    while (Date.now() < endBy && !(await mark(end).catch(() => false))) await sleep(50);
     await sleep((variant === 'bios' || variant === 'terminal' ? tail + 90 : tail) * (1000 / fps));
     const timeline = await page.evaluate(() => ({
         origin: performance.timeOrigin,
@@ -361,8 +363,8 @@ const timeOnce = async (variant) => {
     // the outro: until the room is handed over, then two seconds of it
     await page.waitForFunction(
         (v) =>
-            v === 'monitor' || v === 'pipeline'
-                ? performance.getEntriesByName('loader:handoff').length > 0
+            v === 'monitor' || v === 'pipeline' || v === 'hybrid'
+                ? performance.getEntriesByName(v === 'hybrid' ? 'loader:os' : 'loader:handoff').length > 0
                 : window.__marks.some(([n]) => n === 'loadingScreenDone'),
         variant,
         { timeout: 60000 }
