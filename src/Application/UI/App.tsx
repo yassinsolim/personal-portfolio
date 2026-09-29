@@ -1203,6 +1203,23 @@ const App = () => {
                             Track: © OpenStreetMap contributors (ODbL).
                             Elevation: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0,
                             www.lvermgeo.rlp.de [Daten bearbeitet]; Copernicus GLO-30 DEM.
+                            Desk model:{' '}
+                            <a
+                                href="https://sketchfab.com/3d-models/flipper-zero-1f246cff5f03472283f4e52fb0c84684"
+                                rel="noreferrer noopener"
+                                target="_blank"
+                            >
+                                "Flipper Zero"
+                            </a>{' '}
+                            by Pavel Zhovner,{' '}
+                            <a
+                                href="https://creativecommons.org/licenses/by/4.0/"
+                                rel="noreferrer noopener"
+                                target="_blank"
+                            >
+                                CC BY 4.0
+                            </a>
+                            .
                         </p>
 
                         <div className="race-menu-actions">
