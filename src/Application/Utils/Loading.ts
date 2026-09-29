@@ -268,7 +268,7 @@ export default class Loading extends EventEmitter {
     }
 
     afterRender() {
-        if (!this.watchFrame) return;
+        if (!this.watchFrame || this.application.renderer?.holdScene) return;
         this.watchFrame = false;
         const ms = performance.now() - this.frameStartedAt;
         const programs = (this.application.renderer?.instance?.info.programs ||

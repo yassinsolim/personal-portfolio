@@ -1,0 +1,393 @@
+/* ?loader=terminal */
+
+.term-loader {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+}
+
+.term-screen {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 24px 28px;
+    background: #07090a;
+    color: #c9d1d9;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    transform-origin: 50% 50%;
+}
+
+.term-log {
+    display: flex;
+    flex-direction: column;
+}
+
+.term-line {
+    white-space: pre-wrap;
+    word-break: break-all;
+    min-height: 1.45em;
+}
+
+.term-dim {
+    color: #6e7681;
+}
+
+.term-ok,
+.term-cmd {
+    color: #3fb950;
+}
+
+.term-file {
+    color: #79c0ff;
+}
+
+.term-num {
+    color: #d2a8ff;
+}
+
+.term-warn {
+    color: #d29922;
+}
+
+.term-err {
+    color: #f85149;
+}
+
+.term-caret {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.1em;
+    margin-left: 1px;
+    vertical-align: text-bottom;
+    background: #c9d1d9;
+    animation: term-blink 1s steps(1) infinite;
+}
+
+@keyframes term-blink {
+    50% {
+        background: transparent;
+    }
+}
+
+/* a crt switching off: the picture folds into a bright line, then a dot */
+.term-wipe .term-screen {
+    animation: term-off 0.4s cubic-bezier(0.6, 0, 0.8, 0.4) forwards;
+}
+
+@keyframes term-off {
+    0% {
+        transform: scale(1, 1);
+        filter: brightness(1);
+        opacity: 1;
+    }
+    55% {
+        transform: scale(1, 0.004);
+        filter: brightness(4);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(0, 0.004);
+        filter: brightness(4);
+        opacity: 0;
+    }
+}
+
+.term-reduced.term-wipe .term-screen {
+    animation: term-fade 0.2s linear forwards;
+}
+
+@keyframes term-fade {
+    to {
+        opacity: 0;
+    }
+}
+
+@media (max-width: 768px) {
+    .term-screen {
+        font-size: 11px;
+        padding: 14px 12px;
+    }
+}
+
+/* ?loader=monitor: the boot screen on the monitor's glass */
+
+.boot-monitor {
+    position: relative;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #000;
+    color: #cfd3d6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.boot-safe {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.42;
+}
+
+.boot-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1em;
+    margin-bottom: 1.3em;
+    white-space: nowrap;
+}
+
+.boot-head b {
+    color: #fff;
+}
+
+.boot-columns {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1em;
+    overflow: hidden;
+}
+
+.boot-two .boot-columns {
+    flex-direction: row;
+    gap: 2.6em;
+}
+
+.boot-two .boot-block {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.boot-block h3 {
+    margin: 0 0 0.55em;
+    color: #fff;
+    font-family: inherit;
+    font-size: 1em;
+    font-weight: 700;
+}
+
+.boot-hw {
+    display: flex;
+    gap: 1em;
+    margin-bottom: 0.4em;
+}
+
+.boot-hw-label {
+    flex: none;
+    width: 5.2em;
+    color: #8b949e;
+}
+
+.boot-hw-value {
+    flex: 1;
+    min-width: 0;
+}
+
+.boot-hw-note {
+    display: block;
+    color: #8b949e;
+}
+
+.boot-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    white-space: nowrap;
+}
+
+.boot-row-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.boot-row-dots {
+    flex: 1 1 1em;
+    min-width: 1em;
+    border-bottom: 0.12em dotted #3a3f44;
+    transform: translateY(-0.28em);
+}
+
+.boot-row-note {
+    flex: none;
+    color: #d29922;
+}
+
+.boot-row-state {
+    flex: none;
+    width: 2.4em;
+    text-align: right;
+    color: #8b949e;
+}
+
+.boot-ok .boot-row-state {
+    color: #3fb950;
+}
+
+.boot-fail,
+.boot-fail .boot-row-state,
+.boot-fail-text {
+    color: #f85149;
+}
+
+.boot-sum,
+.boot-dim {
+    color: #8b949e;
+}
+
+.boot-sum {
+    margin-top: 0.4em;
+}
+
+.boot-gap {
+    height: 0.9em;
+}
+
+.boot-foot {
+    margin-top: 1.1em;
+}
+
+.boot-prompt {
+    color: #fff;
+}
+
+.boot-caret {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.05em;
+    margin-left: 0.25em;
+    vertical-align: text-bottom;
+    background: currentColor;
+    animation: term-blink 1s steps(1) infinite;
+}
+
+.boot-fade {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: #000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .boot-caret,
+    .term-caret {
+        animation: none;
+    }
+}
+
+/* ?loader=pipeline: stage labels and the sweeping front over the room */
+
+.pipe-hud {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.pipe-scan {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    margin-top: -1px;
+    opacity: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(143, 227, 255, 0),
+        rgba(143, 227, 255, 0.9) 12%,
+        rgba(255, 255, 255, 1) 50%,
+        rgba(143, 227, 255, 0.9) 88%,
+        rgba(143, 227, 255, 0)
+    );
+    box-shadow: 0 0 14px 2px rgba(110, 205, 255, 0.5);
+    will-change: transform;
+}
+
+.pipe-panel {
+    position: absolute;
+    left: 24px;
+    bottom: 24px;
+    max-width: min(620px, calc(100vw - 48px));
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(4, 8, 12, 0.6);
+    color: #cfe8f5;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    transition: opacity 0.8s ease 0.4s;
+}
+
+.pipe-title {
+    margin-bottom: 4px;
+    color: #7d8b96;
+}
+
+.pipe-row {
+    display: flex;
+    gap: 10px;
+    white-space: nowrap;
+    color: #6c7a86;
+}
+
+.pipe-row-active {
+    color: #e8f6ff;
+}
+
+.pipe-row-done {
+    color: #9fb3c2;
+}
+
+.pipe-row-done .pipe-mark {
+    color: #3fb950;
+}
+
+.pipe-mark {
+    flex: none;
+    width: 1.6em;
+}
+
+.pipe-name {
+    flex: none;
+    width: 6.6em;
+    font-weight: 700;
+}
+
+.pipe-detail {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pipe-done .pipe-panel {
+    opacity: 0;
+}
+
+@media (max-width: 768px) {
+    .pipe-panel {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        font-size: 10px;
+    }
+
+    .pipe-name {
+        width: 6em;
+    }
+}
+
+.boot-stages {
+    margin-top: 0.9em;
+}

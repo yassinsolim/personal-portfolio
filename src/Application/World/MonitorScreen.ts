@@ -25,6 +25,11 @@ const MONITOR_EDGE_LEEWAY_PX = 28;
 const MONITOR_LEAVE_DEBOUNCE_MS = 180;
 
 export default class MonitorScreen extends EventEmitter {
+    // set before the build by a loading screen that shows on the monitor
+    // (?loader=monitor): yassinOS loads when it's asked for, not at once,
+    // so it can't take keyboard focus away from "press any key"
+    static deferLoad = false;
+
     application: Application;
     scene: THREE.Scene;
     cssScene: THREE.Scene;
@@ -48,6 +53,8 @@ export default class MonitorScreen extends EventEmitter {
     raceModeActive: boolean;
     // the race transition is running: the iframe mustn't take clicks or focus
     inputLocked: boolean;
+    // under 1 while a loading screen still shows on the monitor (?loader=monitor)
+    screenOpacity = 1;
     leaveMonitorTimeoutId: number | null;
     messageHandler: ((event: MessageEvent) => void) | null;
 
@@ -115,6 +122,12 @@ export default class MonitorScreen extends EventEmitter {
         );
     }
 
+    // starts yassinOS when deferLoad held it back
+    loadIframe() {
+        const iframe = this.monitorIframe;
+        if (iframe && !iframe.src && iframe.dataset.src) iframe.src = iframe.dataset.src;
+    }
+
     // hand keyboard focus back to the page if the iframe has it
     releaseFocus() {
         const iframe = this.monitorIframe;
@@ -125,7 +138,7 @@ export default class MonitorScreen extends EventEmitter {
     }
 
     iframeTakesPointer(visible: boolean) {
-        return visible && !this.inputLocked ? 'auto' : 'none';
+        return visible && !this.inputLocked && this.screenOpacity >= 1 ? 'auto' : 'none';
     }
 
     setMonitorVisualVisibility(visible: boolean) {
@@ -308,7 +321,8 @@ export default class MonitorScreen extends EventEmitter {
         );
         const iframeSrc =
             isLocalhost && urlParams.has('dev') ? localDevSrc : productionSrc;
-        iframe.src = iframeSrc;
+        if (MonitorScreen.deferLoad) iframe.dataset.src = iframeSrc;
+        else iframe.src = iframeSrc;
         iframe.setAttribute(
             'sandbox',
             [
@@ -611,7 +625,7 @@ export default class MonitorScreen extends EventEmitter {
 
         this.monitorContainer.style.clipPath = 'none';
         this.monitorContainer.style.visibility = 'visible';
-        this.monitorContainer.style.opacity = '1';
+        this.monitorContainer.style.opacity = String(this.screenOpacity);
         const pointer = this.iframeTakesPointer(Boolean(this.monitorCssObject?.visible));
         this.monitorContainer.style.pointerEvents = pointer;
         this.monitorIframe.style.pointerEvents = pointer;

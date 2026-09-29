@@ -13,6 +13,9 @@ import RaceTransition from './RaceTransition';
 import Flipper from './Flipper';
 import UIEventBus from '../UI/EventBus';
 import type RaceManager from '../Racing/RaceManager';
+import MonitorIntro from './intro/MonitorIntro';
+import PipelineIntro from './intro/PipelineIntro';
+import { loaderVariant } from '../UI/loaders/variant';
 
 type RaceAction = {
     event: string;
@@ -37,6 +40,8 @@ export default class World {
     raceManager: RaceManager | null;
     raceManagerLoading: Promise<RaceManager> | null;
     pendingRaceAction: RaceAction | null;
+    // the loading screen's part in the room, for the prototypes that have one
+    intro: MonitorIntro | PipelineIntro | null = null;
 
     constructor() {
         this.application = new Application();
@@ -67,6 +72,10 @@ export default class World {
             });
             loading.stageDone('build', meshes);
         });
+        // after the build handler above, so the intro's own 'ready' runs second
+        const variant = loaderVariant();
+        if (variant === 'monitor') this.intro = new MonitorIntro();
+        if (variant === 'pipeline') this.intro = new PipelineIntro();
     }
 
     bindRaceManagerLoader() {

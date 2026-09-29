@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
+import TerminalLoader from './components/loaders/TerminalLoader';
+import MonitorLoader from './components/loaders/MonitorLoader';
+import PipelineLoader from './components/loaders/PipelineLoader';
+import { loaderVariant } from './loaders/variant';
+import { isWebGLAvailable } from '../Utils/webgl';
 import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
@@ -239,6 +244,16 @@ const formatLapTime = (valueMs: number) => {
     )}.${String(milliseconds).padStart(3, '0')}`;
 };
 
+// ?loader= picks a prototype; without webgl it's always the bios screen,
+// which carries the no-webgl message
+const Loader = () => {
+    const [variant] = useState(() => (isWebGLAvailable() ? loaderVariant() : 'bios'));
+    if (variant === 'terminal') return <TerminalLoader />;
+    if (variant === 'monitor') return <MonitorLoader />;
+    if (variant === 'pipeline') return <PipelineLoader />;
+    return <LoadingScreen />;
+};
+
 const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
@@ -304,8 +319,10 @@ const App = () => {
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
 
     useEffect(() => {
-        eventBus.on('loadingScreenDone', () => {
-            setShowHint(true);
+        // hintAfter: the loading screen is still flying the camera
+        eventBus.on('loadingScreenDone', (data?: { hintAfter?: number }) => {
+            if (data?.hintAfter) window.setTimeout(() => setShowHint(true), data.hintAfter);
+            else setShowHint(true);
         });
 
         eventBus.on(
@@ -690,7 +707,7 @@ const App = () => {
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
-            <LoadingScreen />
+            <Loader />
             {showHint && (
                 <div className="look-hint">
                     <div>

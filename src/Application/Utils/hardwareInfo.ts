@@ -182,10 +182,10 @@ export const readHardware = (
 
 const COMMON_RATES = [24, 30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 180, 240, 360];
 
-// the median animation frame interval over about 40 frames. busy frames
+// the median animation frame interval over about 30 frames. busy frames
 // during loading run long, the median ignores them. null when the page is
 // hidden or frames never come
-export const measureRefreshRate = (frames = 40, timeoutMs = 3000) =>
+export const measureRefreshRate = (frames = 30, timeoutMs = 4000) =>
     new Promise<number | null>((resolve) => {
         const intervals: number[] = [];
         let last = 0;

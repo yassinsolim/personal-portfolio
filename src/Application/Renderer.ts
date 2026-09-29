@@ -53,6 +53,9 @@ export default class Renderer {
     // the race preset caps auto resolution, quality mode ignores it
     sceneMaxPixelRatio: number;
     keepGrain = false;
+    // a loading screen compiling and uploading the room (Utils/warmup.ts)
+    // keeps it off screen until nothing is left to block a frame
+    holdScene = false;
     private resolutionHolds = 0;
     // what the race decided, for the graphics info panel
     raceGraphics: {
@@ -446,7 +449,7 @@ export default class Renderer {
         this.frameStats.beginGpu();
         if (this.sceneRender) {
             this.sceneRender(this.time.delta / 1000);
-        } else {
+        } else if (!this.holdScene) {
             this.instance.render(this.scene, this.camera.instance);
         }
         this.frameStats.endGpu();
