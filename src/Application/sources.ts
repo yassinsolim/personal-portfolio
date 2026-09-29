@@ -29,6 +29,8 @@ const sources: Resource[] = [
     {
         name: 'computerSetupTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/Computer/baked_computer.jpg'),
     },
     {
@@ -39,6 +41,8 @@ const sources: Resource[] = [
     {
         name: 'environmentTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/World/baked_environment.jpg'),
     },
     {
@@ -49,6 +53,8 @@ const sources: Resource[] = [
     {
         name: 'decorTexture',
         type: 'texture',
+        // baked for the model's uvs (BakedModel)
+        flipY: false,
         path: roomTexture('models/Decor/baked_decor_modified.jpg'),
     },
     {

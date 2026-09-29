@@ -37,7 +37,13 @@ const pickRun = (report) => {
     const breakdown = audit('mainthread-work-breakdown')?.details?.items || [];
     const bootup = audit('bootup-time')?.details?.items || [];
     const weight = audit('total-byte-weight')?.details?.items || [];
+    // what the page really did on this machine, next to lantern's estimate
+    const observed = audit('metrics')?.details?.items?.[0] || {};
+    const lcpElement = audit('largest-contentful-paint-element')?.details?.items?.[0]?.items?.[0]?.node;
     return {
+        observedFcp: observed.observedFirstContentfulPaint ?? null,
+        observedLcp: observed.observedLargestContentfulPaint ?? null,
+        lcpElement: lcpElement ? `${lcpElement.nodeLabel || ''} (${lcpElement.selector || ''})`.slice(0, 120) : null,
         score: Math.round((report.categories.performance.score || 0) * 100),
         fcp: numeric('first-contentful-paint'),
         lcp: numeric('largest-contentful-paint'),
@@ -69,6 +75,9 @@ for (let run = 0; run < runs; run++) {
         '--max-wait-for-load=60000',
     ];
     if (form === 'desktop') cli.push('--preset=desktop');
+    // devtools: applied throttling and real timings, instead of lantern's
+    // simulation, which drops timers like the loading screen's
+    if (arg('throttling', '') === 'devtools') cli.push('--throttling-method=devtools');
     try {
         execFileSync(lighthouse, cli, { env: { ...process.env, CHROME_PATH: chrome }, stdio: ['ignore', 'ignore', 'inherit'], timeout: 240000 });
         const report = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -77,7 +86,8 @@ for (let run = 0; run < runs; run++) {
         console.log(
             `[${label} ${form} ${run + 1}/${runs}] score ${result.score} fcp ${Math.round(result.fcp)} lcp ${Math.round(result.lcp)}` +
                 ` tbt ${Math.round(result.tbt)} cls ${result.cls?.toFixed(3)} si ${Math.round(result.si)} tti ${Math.round(result.tti)}` +
-                ` bytes ${Math.round(result.bytes / 1024)} KiB`
+                ` bytes ${Math.round(result.bytes / 1024)} KiB | observed fcp ${Math.round(result.observedFcp)} lcp ${Math.round(result.observedLcp)}` +
+                ` | lcp element ${result.lcpElement}`
         );
     } catch (error) {
         console.log(`[${label} ${form} ${run + 1}/${runs}] failed: ${String(error.message || error).slice(0, 200)}`);
@@ -91,7 +101,7 @@ const median = (key) => {
     return list.length % 2 ? list[mid] : (list[mid - 1] + list[mid]) / 2;
 };
 const summary = { label, url, form, runs: results.length };
-for (const key of ['score', 'fcp', 'lcp', 'tbt', 'cls', 'si', 'tti', 'bytes', 'mainThreadMs', 'bootupMs']) summary[key] = median(key);
+for (const key of ['score', 'fcp', 'lcp', 'tbt', 'cls', 'si', 'tti', 'bytes', 'mainThreadMs', 'bootupMs', 'observedFcp', 'observedLcp']) summary[key] = median(key);
 console.log(JSON.stringify(summary));
 if (out) {
     fs.mkdirSync(path.dirname(out), { recursive: true });

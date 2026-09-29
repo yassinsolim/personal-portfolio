@@ -6,6 +6,7 @@ import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
 import Minimap from './components/Minimap';
 import Garage, { GarageState } from './components/Garage';
+import GraphicsInfo from './components/GraphicsInfo';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -268,6 +269,10 @@ const App = () => {
         defaultMultiplayerState
     );
     const [lobbyCodeCopyState, setLobbyCodeCopyState] = useState('');
+    const [graphicsInfoOpen, setGraphicsInfoOpen] = useState(false);
+    const raceDebugView = new URLSearchParams(window.location.search).has(
+        'raceDebug'
+    );
     const [touchRaceDevice, setTouchRaceDevice] = useState(() =>
         isTouchRaceDevice()
     );
@@ -727,8 +732,16 @@ const App = () => {
                                     {renderScale.toFixed(2)}x
                                 </span>
                             ) : null}
+                            <button
+                                type="button"
+                                className={graphicsInfoOpen ? 'active' : ''}
+                                onClick={() => setGraphicsInfoOpen((v) => !v)}
+                            >
+                                Info
+                            </button>
                         </div>
                     )}
+                    {!raceModeActive && graphicsInfoOpen && <GraphicsInfo />}
                     {!raceModeActive && (
                         <div className="view-toggle" data-prevent-click>
                             <button
@@ -1007,6 +1020,9 @@ const App = () => {
                     </div>
                 </div>
             )}
+            {raceDebugView && raceModeActive && !racePaused && (
+                <GraphicsInfo floating />
+            )}
             {graphicsContextLost && (
                 <div className="graphics-context-lost" data-prevent-click>
                     Graphics context lost. Reload game.
@@ -1115,6 +1131,18 @@ const App = () => {
                                 />
                             </div>
                         </div>
+
+                        <div className="race-menu-row">
+                            <button
+                                type="button"
+                                onClick={() => setGraphicsInfoOpen((v) => !v)}
+                            >
+                                {graphicsInfoOpen
+                                    ? 'Hide graphics info'
+                                    : 'Graphics info'}
+                            </button>
+                        </div>
+                        {graphicsInfoOpen && <GraphicsInfo />}
 
                         <div className="race-menu-row">
                             <span>Assists</span>
