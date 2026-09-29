@@ -15,6 +15,7 @@ import {
     type AssistPreset,
 } from '../Racing/Vehicle/assists';
 import './style.css';
+import ModelCredits from './components/ModelCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
@@ -1204,6 +1205,7 @@ const App = () => {
                             Elevation: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0,
                             www.lvermgeo.rlp.de [Daten bearbeitet]; Copernicus GLO-30 DEM.
                         </p>
+                        <ModelCredits />
 
                         <div className="race-menu-actions">
                             <button type="button" onClick={handleResumeRace}>

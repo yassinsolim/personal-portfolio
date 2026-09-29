@@ -2,14 +2,135 @@
 
 ## Existing Project Credits
 
-- Outer portfolio baseline inspiration: Henry Heffernan
+- Outer portfolio baseline and room assets: Henry Heffernan
   - Repo: https://github.com/henryjeff/portfolio-website
-  - License/attribution: per upstream repository
+  - License: MIT, Copyright 2024 Henry Heffernan (notice below)
+  - Files from that repo, byte for byte: the room models (`static/models/Computer/computer_setup.glb`,
+    `static/models/Decor/decor.glb`, `static/models/World/environment.glb`), the environment map
+    (`static/textures/environmentMap/`) and everything in `static/audio/`. The baked room
+    textures next to the models are re-encoded or edited versions of upstream's
+  - Upstream doesn't say where the environment map, the room sounds or the three radio tracks
+    (`static/audio/radio/`) came from. The site hasn't loaded any `static/audio/` file since
+    `b35f2d4`
 
 - Inner OS inspiration: Dustin Brett (daedalOS)
   - Repo: https://github.com/DustinBrett/daedalOS
   - License/attribution: per upstream repository
 
+### MIT License (henryjeff/portfolio-website)
+
+Copyright 2024 Henry Heffernan
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+## 3D Models
+
+Checked against each model's Sketchfab listing through its public API (September 29, 2026).
+The same list is in the race menu under "3D models" (`src/Application/modelCredits.ts`). The
+original downloads, unmodified, are in `models-src/`.
+
+- Mercedes-AMG One (`static/models/Cars/mercedes_amg_project_one/`)
+  - Title: "Mercedes AMG Project ONE"
+  - Author: hashikemu (https://sketchfab.com/hashikemu)
+  - Source: https://sketchfab.com/3d-models/mercedes-amg-project-one-287716b5aeb24b0b934452526827eb52
+  - License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+- BMW E92 M3 (`static/models/Cars/bmw_m3_e92_stance/`)
+  - Title: "BMW M3 e92 [stance]"
+  - Author: Black Snow (https://sketchfab.com/BlackSnow02)
+  - Source: https://sketchfab.com/3d-models/bmw-m3-e92-stance-c35a14d811b042d792a6da69381f7f80
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+- Mercedes-AMG C63 507 (`static/models/Cars/2014_mercedes-benz_c63_amg_edition_507/`)
+  - Title: "2014 Mercedes-Benz C63 AMG Edition 507"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2014-mercedes-benz-c63-amg-edition-507-f3b3da1832294845be7b05a21b5ad8fd
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Mercedes-AMG C63s Coupe (`static/models/Cars/2019_mercedes-benz_c63_s_amg_coupe/`)
+  - Title: "2019 Mercedes-Benz C63 S AMG Coupe"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2019-mercedes-benz-c63-s-amg-coupe-07f1e84892384aa08891b1f4cf266dd0
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- BMW F82 M4 (`static/models/Cars/bmw_m4_f82/`)
+  - Title: "BMW M4 f82"
+  - Author: Black Snow (https://sketchfab.com/BlackSnow02)
+  - Source: https://sketchfab.com/3d-models/bmw-m4-f82-8e87379f40fd40dcac0a751e22c1a188
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+- BMW F90 M5 Competition (`static/models/Cars/bmw_f90_m5_competition/`)
+  - Title: "2021 BMW M5 Competition"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2021-bmw-m5-competition-29a4c13761cb40e6a050871bd40a0963
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- BMW M8 Competition Coupe (`static/models/Cars/bmw_m8_competition_coupe/`)
+  - Title: "2020 BMW M8 Competition Coupé"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2020-bmw-m8-competition-coupe-f68a25584899494391c8f2ae28c03b2f
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
+    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
+    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
+    KTX2 (BasisU) textures and meshes merged by gltfpack (`scripts/build-ktx2-cars.mjs`). The
+    garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Toyota Crown Platinum (`static/models/Cars/toyota_crown_2025/`)
+  - Title: "toyota crown 2025"
+  - Author: sultan (https://sketchfab.com/s122)
+  - Source: https://sketchfab.com/3d-models/toyota-crown-2025-9f48fc0a66e44a69a09fda2f864e5944
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: The model has no textures. Geometry welded and Draco compressed; a low detail `.lite.glb`
+    with simplified geometry. The garage recolours the paint and can fit another car's wheels
+- Mercedes-AMG GT63s Edition One (`static/models/Cars/mercedes_benz_gt63s_edition_one/`)
+  - Title in the file: "Mercedes-Benz AMG GT63 S" (a Blender re-export with no author, source or
+    license metadata, added in `00b5fe1`)
+  - Author, source and license: unknown. Not found on Sketchfab by name or triangle count (1.73M)
+  - Changes: brake discs simplified, plus the same web, lite and KTX2 steps as the other cars
+
+The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has
+no ads, sales or sponsorship.
 ## Flipper Zero on the desk
 
 - Firmware: the official Flipper Zero firmware 1.4.3 by Flipper Devices Inc. and contributors,
