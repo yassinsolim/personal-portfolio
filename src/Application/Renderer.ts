@@ -12,11 +12,13 @@ import { calibrate, classifyGpu, readRenderer } from './Utils/gpuClass';
 
 // the room's film grain: one tile of colour noise, drawn once
 const GRAIN_TILE = 256;
-const GRAIN_OPACITY = 0.22;
+const GRAIN_OPACITY = 0.28;
 // noise around a light grey: soft light over it lifts the room a touch and
 // adds the grain, which is what the old shader's layer measured as
-const GRAIN_MEAN = 200;
+const GRAIN_MEAN = 182;
 const GRAIN_RANGE = 55;
+// getRandomValues fills at most this many bytes per call
+const RANDOM_CHUNK = 65536;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -196,8 +198,10 @@ export default class Renderer {
     }
 
     // colour noise under a soft light blend, measured to match the shader
-    // it replaces (a lift of about 4 levels, grain of about 4). css steps the tile between offsets so it still flickers;
-    // off on light gpus, where every full screen blend counts
+    // it replaces (a lift of about 3 to 5 levels, grain of about 2 to 4).
+    // css moves the tile to a new offset every frame, so it flickers like
+    // the per frame shader noise did; off on light gpus, where every full
+    // screen blend counts
     createGrain() {
         const canvas = document.createElement('canvas');
         canvas.width = GRAIN_TILE;
@@ -208,10 +212,14 @@ export default class Renderer {
         grain.style.opacity = String(GRAIN_OPACITY);
         if (ctx) {
             const image = ctx.createImageData(GRAIN_TILE, GRAIN_TILE);
-            for (let i = 0; i < image.data.length; i += 4) {
+            const noise = new Uint8Array(GRAIN_TILE * GRAIN_TILE * 3);
+            for (let at = 0; at < noise.length; at += RANDOM_CHUNK) {
+                crypto.getRandomValues(noise.subarray(at, at + RANDOM_CHUNK));
+            }
+            for (let i = 0, n = 0; i < image.data.length; i += 4) {
                 for (let c = 0; c < 3; c++) {
                     image.data[i + c] =
-                        GRAIN_MEAN + (Math.random() * 2 - 1) * GRAIN_RANGE;
+                        GRAIN_MEAN + ((noise[n++] / 255) * 2 - 1) * GRAIN_RANGE;
                 }
                 image.data[i + 3] = 255;
             }
