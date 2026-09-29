@@ -164,6 +164,11 @@ export default class Screens {
         return this.terminal();
     }
 
+    // the loader's boot pose: the camera square to m3, filling the viewport
+    dockPose(aspect?: number) {
+        return this.focusPose('m3', aspect);
+    }
+
     // the flipper and the pc: anything clickable with a camera pose
     addTarget(id: FocusTarget, object: THREE.Object3D, pose: () => Pose) {
         object.traverse((child) => (child.userData.focusTarget = id));
@@ -253,7 +258,11 @@ export default class Screens {
         const screen = this.screens[id];
         screen.display = display;
         screen.container.appendChild(display.root);
+        // hidden until the next visibility pass says otherwise (it compares
+        // against shown, so the two have to agree from the start)
+        screen.shown = false;
         display.setVisible(false);
+        this.updateVisibility(true);
     }
 
     displayContext(): DisplayContext {
