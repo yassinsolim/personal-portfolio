@@ -74,14 +74,10 @@ const decode = (context: BaseAudioContext, data: ArrayBuffer) =>
             settled = true;
             reject(error);
         };
-        // old webkit returns nothing and only calls back
-        let result: Promise<AudioBuffer> | undefined;
-        try {
-            result = context.decodeAudioData(data, done, fail);
-        } catch (error) {
-            fail(error);
-            return;
-        }
+        // old webkit returns nothing and only calls back. a synchronous throw
+        // here rejects this promise, the executor catches it
+        const result: Promise<AudioBuffer> | undefined =
+            context.decodeAudioData(data, done, fail);
         result?.then(done, fail);
     });
 
@@ -98,7 +94,7 @@ export default class AudioBank {
 
     load(context: BaseAudioContext, id: string): Promise<AudioBankData | null> {
         const cached = this.cache.get(id);
-        if (cached) return cached;
+        if (cached !== undefined) return cached;
         const promise = this.fetchBank(context, id).catch((error) => {
             console.warn(`[race audio] could not load ${id}`, error);
             this.cache.delete(id);
