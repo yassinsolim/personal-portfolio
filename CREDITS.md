@@ -10,6 +10,15 @@
   - Repo: https://github.com/DustinBrett/daedalOS
   - License/attribution: per upstream repository
 
+## Room Models
+
+- Flipper Zero on the desk (`static/models/Props/flipper_zero.glb`)
+  - Title: "Flipper Zero"
+  - Author: Pavel Zhovner (https://sketchfab.com/zhovner)
+  - Source: https://sketchfab.com/3d-models/flipper-zero-1f246cff5f03472283f4e52fb0c84684
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: optimized for the web (Draco-compressed geometry)
+
 ## Racing Mini-game Additions (This Branch)
 
 - Nordschleife track data (`static/models/Tracks/Nordschleife/nordschleife.json`)
