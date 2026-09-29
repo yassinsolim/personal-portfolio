@@ -730,7 +730,7 @@ export default class RaceTerrain {
                     side,
                     previousSide
                 );
-                const vergeHalf = track.getVergeHalfWidth(t);
+                const vergeHalf = track.getVergeHalfWidth(t, sign);
                 edge.copy(point)
                     .addScaledVector(side, sign * vergeHalf)
                     .addScaledVector(normal, -VERGE_DROP);

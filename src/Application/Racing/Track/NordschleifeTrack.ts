@@ -15,6 +15,22 @@ const GROUND_PROBE_HEIGHT = 5000;
 // 9.5 m on most of the lap, grass out to the barriers
 const DEFAULT_ROAD_WIDTH = 9.5;
 const VERGE_WIDTH = 3;
+// the armco comes from osm per side, but never closer than this to the
+// asphalt (room for the kerbs) or further than VERGE_MAX
+const VERGE_MIN = 1.3;
+const VERGE_MAX = 16;
+// where another stretch of the lap passes within reach (the karussell's way
+// in and out, adenauer forst), each verge stops short of halfway to it, so
+// the two corridors never overlap. stretches this far apart along the lap
+// count as other
+const VERGE_APART = 150;
+const VERGE_GAP = 1.5;
+// on the inside of a corner a verge wider than about the radius folds the
+// ribbons over themselves, so it's kept to this share of it
+const VERGE_RADIUS_SHARE = 0.6;
+// meters a verge may widen per meter along the lap, so its edge never bulges
+// between the skirt's rings
+const VERGE_SLOPE = 0.15;
 const BARRIER_INSET = 0.15;
 const EDGE_LINE_WIDTH = 0.18;
 const EDGE_LINE_INSET = 0.3;
@@ -102,7 +118,10 @@ export type TrackFrame = {
     distance: number;
     lateral: number;
     roadHalfWidth: number;
+    // armco line on the side the point is on, and on each side
     barrierOffset: number;
+    barrierLeft: number;
+    barrierRight: number;
     tangentX: number;
     tangentZ: number;
     leftX: number;
@@ -167,6 +186,8 @@ type TrackAssetData = {
     // meters between points along the raw polyline
     spacing: number;
     concrete: [number, boolean][];
+    // the osm armco per side, meters from the centerline, null where unmapped
+    barriers?: [number, number | null, number | null][];
     bridges: TrackBridge[];
     // catch fence runs near the lap (osm), x, z every 6 m
     fences?: [number, number][][];
@@ -219,6 +240,9 @@ export default class NordschleifeTrack {
     frameTangents: Float32Array;
     frameCurvature: Float32Array;
     frameWidth: Float32Array;
+    // road and verge half width out to the armco, left and right
+    frameVergeLeft: Float32Array;
+    frameVergeRight: Float32Array;
     frameBank: Float32Array;
     // vertical curvature of the road profile, 1/m, negative over crests
     frameCrest: Float32Array;
@@ -290,6 +314,8 @@ export default class NordschleifeTrack {
         this.frameTangents = new Float32Array(frameCount * 2);
         this.frameCurvature = new Float32Array(frameCount);
         this.frameWidth = new Float32Array(frameCount);
+        this.frameVergeLeft = new Float32Array(frameCount);
+        this.frameVergeRight = new Float32Array(frameCount);
         this.frameBank = new Float32Array(frameCount);
         this.frameCrest = new Float32Array(frameCount);
         this.frameConcrete = new Uint8Array(frameCount);
@@ -429,6 +455,126 @@ export default class NordschleifeTrack {
                 : -Math.sign(curvature) * bank;
             this.frameConcrete[i] = sample(concrete, distance) > 0.5 ? 1 : 0;
         }
+        this.buildVerges(data, scale);
+    }
+
+    // the armco line from osm, linear between its keyframes and kept between
+    // VERGE_MIN and VERGE_MAX off the asphalt. unmapped stretches keep the
+    // old rule of a VERGE_WIDTH verge
+    buildVerges(data: TrackAssetData, scale: number) {
+        const count = FRAME_SAMPLES;
+        const spacing = this.length / count;
+        const keys = data.barriers || [];
+        let k = 0;
+        for (let i = 0; i < count; i++) {
+            const distance = (i * spacing) / scale;
+            while (k + 1 < keys.length && keys[k + 1][0] <= distance) k++;
+            const half = this.frameWidth[i] * 0.5;
+            [1, 2].forEach((side) => {
+                let barrier: number | null = null;
+                if (keys.length) {
+                    const a = keys[k];
+                    const b = keys[(k + 1) % keys.length];
+                    const end = k + 1 < keys.length ? b[0] : data.length + b[0];
+                    const va = a[side];
+                    const vb = b[side];
+                    if (va !== null && vb !== null) {
+                        const f = THREE.MathUtils.clamp(
+                            (distance - a[0]) / Math.max(1e-6, end - a[0]),
+                            0,
+                            1
+                        );
+                        barrier = va + (vb - va) * f;
+                    } else barrier = va ?? vb;
+                }
+                const verge =
+                    barrier === null
+                        ? half + VERGE_WIDTH
+                        : THREE.MathUtils.clamp(
+                              barrier + BARRIER_INSET,
+                              half + VERGE_MIN,
+                              half + VERGE_MAX
+                          );
+                (side === 1 ? this.frameVergeLeft : this.frameVergeRight)[i] =
+                    verge;
+            });
+        }
+        this.limitVergesNearOtherStretches();
+        // only ever narrows, so every limit above still holds
+        const step = VERGE_SLOPE * (this.length / count);
+        [this.frameVergeLeft, this.frameVergeRight].forEach((verges) => {
+            for (let pass = 0; pass < 2; pass++) {
+                for (let i = 1; i <= count * 2; i++) {
+                    const a = (i - 1) % count;
+                    const b = i % count;
+                    verges[b] = Math.min(verges[b], verges[a] + step);
+                }
+                for (let i = count * 2; i >= 1; i--) {
+                    const a = i % count;
+                    const b = (i - 1) % count;
+                    verges[b] = Math.min(verges[b], verges[a] + step);
+                }
+            }
+        });
+    }
+
+    limitVergesNearOtherStretches() {
+        const count = FRAME_SAMPLES;
+        const points = this.framePoints;
+        const cell = 20;
+        const grid = new Map<string, number[]>();
+        const key = (x: number, z: number) =>
+            `${Math.floor(x / cell)}:${Math.floor(z / cell)}`;
+        for (let i = 0; i < count; i++) {
+            const k = key(points[i * 3], points[i * 3 + 2]);
+            const list = grid.get(k);
+            if (list) list.push(i);
+            else grid.set(k, [i]);
+        }
+        const apart = Math.round((VERGE_APART / this.length) * count);
+        const reach = Math.ceil((VERGE_MAX * 2 + 20) / cell);
+        for (let i = 0; i < count; i++) {
+            const x = points[i * 3];
+            const z = points[i * 3 + 2];
+            const cx = Math.floor(x / cell);
+            const cz = Math.floor(z / cell);
+            let nearest = Infinity;
+            for (let dx = -reach; dx <= reach; dx++) {
+                for (let dz = -reach; dz <= reach; dz++) {
+                    const list = grid.get(`${cx + dx}:${cz + dz}`);
+                    if (!list) continue;
+                    for (const j of list) {
+                        const along = Math.abs(i - j);
+                        if (Math.min(along, count - along) < apart) continue;
+                        const d = Math.hypot(
+                            points[j * 3] - x,
+                            points[j * 3 + 2] - z
+                        );
+                        if (d < nearest) nearest = d;
+                    }
+                }
+            }
+            const half = this.frameWidth[i] * 0.5;
+            // inside of the corner: left when it turns left
+            let curvature = 0;
+            const window = Math.max(1, Math.round((10 / this.length) * count));
+            for (let k = -window; k <= window; k++)
+                curvature += this.frameCurvature[(i + k + count) % count];
+            curvature /= window * 2 + 1;
+            if (Math.abs(curvature) > 1e-4) {
+                const inside = Math.max(
+                    half + VERGE_MIN,
+                    VERGE_RADIUS_SHARE / Math.abs(curvature)
+                );
+                const verges =
+                    curvature > 0 ? this.frameVergeLeft : this.frameVergeRight;
+                verges[i] = Math.min(verges[i], inside);
+            }
+            if (nearest === Infinity) continue;
+            const limit = Math.max(half + VERGE_MIN, nearest / 2 - VERGE_GAP);
+            this.frameVergeLeft[i] = Math.min(this.frameVergeLeft[i], limit);
+            this.frameVergeRight[i] = Math.min(this.frameVergeRight[i], limit);
+        }
     }
 
     frameValue(values: Float32Array, t: number) {
@@ -443,8 +589,15 @@ export default class NordschleifeTrack {
         return this.frameValue(this.frameWidth, t) * 0.5;
     }
 
-    getVergeHalfWidth(t: number) {
-        return this.getRoadHalfWidth(t) + VERGE_WIDTH;
+    // out to the armco on the left (side > 0) or right (side < 0), or the
+    // wider of the two
+    getVergeHalfWidth(t: number, side = 0) {
+        if (side > 0) return this.frameValue(this.frameVergeLeft, t);
+        if (side < 0) return this.frameValue(this.frameVergeRight, t);
+        return Math.max(
+            this.frameValue(this.frameVergeLeft, t),
+            this.frameValue(this.frameVergeRight, t)
+        );
     }
 
     getSectionAt(distance: number) {
@@ -604,7 +757,10 @@ export default class NordschleifeTrack {
         target.distance = (best / count) * this.length + along;
         target.lateral = (x - px) * leftX + (z - pz) * leftZ;
         target.roadHalfWidth = roadHalf;
-        target.barrierOffset = roadHalf + VERGE_WIDTH - BARRIER_INSET;
+        target.barrierLeft = this.frameVergeLeft[best] - BARRIER_INSET;
+        target.barrierRight = this.frameVergeRight[best] - BARRIER_INSET;
+        target.barrierOffset =
+            target.lateral >= 0 ? target.barrierLeft : target.barrierRight;
         target.tangentX = tx;
         target.tangentZ = tz;
         target.leftX = leftX;
@@ -622,6 +778,9 @@ export default class NordschleifeTrack {
             lateral: 0,
             roadHalfWidth: DEFAULT_ROAD_WIDTH * 0.5,
             barrierOffset:
+                DEFAULT_ROAD_WIDTH * 0.5 + VERGE_WIDTH - BARRIER_INSET,
+            barrierLeft: DEFAULT_ROAD_WIDTH * 0.5 + VERGE_WIDTH - BARRIER_INSET,
+            barrierRight:
                 DEFAULT_ROAD_WIDTH * 0.5 + VERGE_WIDTH - BARRIER_INSET,
             tangentX: 0,
             tangentZ: 1,
@@ -642,7 +801,8 @@ export default class NordschleifeTrack {
                 (lateral > 0 ? frame.kerbLeft : frame.kerbRight);
             return onKerb ? 'kerb' : 'asphalt';
         }
-        if (side <= frame.roadHalfWidth + VERGE_WIDTH) return 'grass';
+        const barrier = lateral > 0 ? frame.barrierLeft : frame.barrierRight;
+        if (side <= barrier + BARRIER_INSET) return 'grass';
         return 'off';
     }
 
@@ -806,14 +966,14 @@ export default class NordschleifeTrack {
         const left = this.createRibbonGeometry(
             this.visualCurve,
             samples,
-            (t) => [this.getVergeHalfWidth(t), this.getRoadHalfWidth(t)],
+            (t) => [this.getVergeHalfWidth(t, 1), this.getRoadHalfWidth(t)],
             [-VERGE_DROP, 0],
             1 / 7
         );
         const right = this.createRibbonGeometry(
             this.visualCurve,
             samples,
-            (t) => [-this.getRoadHalfWidth(t), -this.getVergeHalfWidth(t)],
+            (t) => [-this.getRoadHalfWidth(t), -this.getVergeHalfWidth(t, -1)],
             [0, -VERGE_DROP],
             1 / 7
         );
@@ -1014,7 +1174,10 @@ export default class NordschleifeTrack {
             const geometry = this.createRibbonGeometry(
                 this.colliderCurve,
                 samples,
-                (t) => [this.getVergeHalfWidth(t), -this.getVergeHalfWidth(t)],
+                (t) => [
+                    this.getVergeHalfWidth(t, 1),
+                    -this.getVergeHalfWidth(t, -1),
+                ],
                 0,
                 0,
                 range

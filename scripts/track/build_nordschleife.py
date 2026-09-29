@@ -400,6 +400,79 @@ LANDMARKS = {
 }
 
 
+# where the armco actually is: the nearest osm guard rail on each side of
+# every lap point (within ALONG of it along the lap), as meters from the
+# centerline. short gaps in the mapping are bridged, longer ones stay null so
+# the game falls back to its own rule there, then it's smoothed and kept as
+# keyframes every BARRIER_KEY_EVERY points
+BARRIER_ALONG = 2.5
+BARRIER_REACH = 25.0
+BARRIER_GAP = 15
+BARRIER_KEY_EVERY = 4
+
+
+def barrier_offsets(cache, X, Z, dist, project, bbox):
+    s, w, n, e = bbox
+    data = overpass(cache, 'ts-barriers.json', f'[out:json][timeout:120];way["barrier"~"guard_rail|fence|wall|retaining_wall|jersey_barrier"]({s},{w},{n},{e});out body;>;out skel qt;')
+    nodes = {el['id']: project((el['lat'], el['lon'])) for el in data['elements'] if el['type'] == 'node'}
+    rail = []
+    for el in data['elements']:
+        if el['type'] != 'way' or el.get('tags', {}).get('barrier') != 'guard_rail':
+            continue
+        pts = np.array([nodes[nid] for nid in el['nodes'] if nid in nodes])
+        for a, b in zip(pts[:-1], pts[1:]):
+            m = max(1, int(np.linalg.norm(b - a) / 1.5))
+            for t in np.linspace(0, 1, m + 1):
+                rail.append(a + (b - a) * t)
+    rail = np.array(rail)
+    P = np.stack([X, Z], 1)
+    T = np.roll(P, -1, 0) - np.roll(P, 1, 0)
+    T /= np.linalg.norm(T, axis=1)[:, None]
+    L = np.stack([T[:, 1], -T[:, 0]], 1)
+    count = len(P)
+    sides = np.full((2, count), np.nan)
+    for i in range(count):
+        d = rail - P[i]
+        near = (np.abs(d @ T[i]) < BARRIER_ALONG) & (np.abs(d @ L[i]) < BARRIER_REACH)
+        lat = d[near] @ L[i]
+        if (lat > 1.5).any():
+            sides[0, i] = lat[lat > 1.5].min()
+        if (lat < -1.5).any():
+            sides[1, i] = -lat[lat < -1.5].max()
+    keys = []
+    for side in sides:
+        # bridge short gaps
+        ok = np.isfinite(side)
+        filled = side.copy()
+        i = 0
+        while i < count:
+            if ok[i]:
+                i += 1
+                continue
+            j = i
+            while j < count and not ok[j]:
+                j += 1
+            if j - i <= BARRIER_GAP and i > 0 and j < count:
+                filled[i:j] = np.interp(np.arange(i, j), [i - 1, j], [side[i - 1], side[j]])
+            i = j
+        # median then mean over the neighbors that have a value
+        def rolling(values, half, fn):
+            out = np.full(count, np.nan)
+            for k in range(count):
+                win = values[[(k + o) % count for o in range(-half, half + 1)]]
+                win = win[np.isfinite(win)]
+                if np.isfinite(values[k]) and len(win):
+                    out[k] = fn(win)
+            return out
+        keys.append(rolling(rolling(filled, 3, np.median), 2, np.mean))
+    out = []
+    for i in range(0, count, BARRIER_KEY_EVERY):
+        out.append([round(float(dist[i]), 1)] + [None if not np.isfinite(k[i]) else round(float(k[i]), 2) for k in keys])
+    found = np.isfinite(keys[0]).mean(), np.isfinite(keys[1]).mean()
+    print('armco from osm: left %.0f%%, right %.0f%% of the lap' % (found[0] * 100, found[1] * 100))
+    return out
+
+
 def trackside_osm(cache, X, Z, project, bbox):
     s, w, n, e = bbox
     barriers = overpass(cache, 'ts-barriers.json', f'[out:json][timeout:120];way["barrier"~"guard_rail|fence|wall|retaining_wall|jersey_barrier"]({s},{w},{n},{e});out body;>;out skel qt;')
@@ -708,7 +781,7 @@ def main():
         **dict(zip(('fences', 'landmarks'), trackside_osm(args.cache, X, Z, project, BBOX))),
         'spans': spans,
         **({} if args.no_dgm1 else {'underpasses': underpass_roads(args.cache, spans, X, Z, dist, spacing, project, unproject, Dgm1(args.cache))}),
-        **({} if args.no_dgm1 else {'underpasses': underpass_roads(args.cache, spans, X, Z, dist, spacing, project, unproject, Dgm1(args.cache))}),
+        'barriers': barrier_offsets(args.cache, X, Z, dist, project, BBOX),
         'terrain': {
             'x': round(float(x_min), 2), 'z': round(float(z_min), 2), 'cell': TERRAIN_CELL,
             'cols': cols, 'rows': rows,

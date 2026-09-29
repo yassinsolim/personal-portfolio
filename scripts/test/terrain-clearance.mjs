@@ -208,13 +208,11 @@ export function checkClearance(track, road, levels, options = {}) {
             previousSide
         );
         const roadHalf = track.getRoadHalfWidth(t);
-        const reach = track.getVergeHalfWidth(t) - BARRIER_LINE;
-        const laterals = [
-            reach,
-            roadHalf - EDGE_INSIDE,
-            EDGE_INSIDE - roadHalf,
-        ];
-        for (let l = -reach; l < reach; l += lateralStep) {
+        // out to the armco on each side, which osm puts at its own distance
+        const left = track.getVergeHalfWidth(t, 1) - BARRIER_LINE;
+        const right = track.getVergeHalfWidth(t, -1) - BARRIER_LINE;
+        const laterals = [left, roadHalf - EDGE_INSIDE, EDGE_INSIDE - roadHalf];
+        for (let l = -right; l < left; l += lateralStep) {
             if (Math.abs(Math.abs(l) - roadHalf) > EDGE_INSIDE)
                 laterals.push(l);
         }

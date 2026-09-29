@@ -4398,8 +4398,8 @@ export default class RaceVehicle {
                         frame.lateral + x * forwardAcross + y * leftAcross;
                     const depth =
                         side > 0
-                            ? lateral - frame.barrierOffset
-                            : -frame.barrierOffset - lateral;
+                            ? lateral - frame.barrierLeft
+                            : -frame.barrierRight - lateral;
                     if (depth > deepest) {
                         deepest = depth;
                         pointX = x;
