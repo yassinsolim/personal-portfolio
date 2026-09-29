@@ -8,6 +8,7 @@ import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
+import { reportStage } from '../Utils/loadStages';
 
 // click the car in the room: it rocks on its springs and the camera swings
 // round behind it, landing exactly where the race camera will start, with its
@@ -50,8 +51,12 @@ type Flight = {
 
 const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
-// phases for scripts/race-transition-record.mjs to split frame times by
-const mark = (phase: string) => performance.mark?.(`race-transition:${phase}`);
+// phases for scripts/race-transition-record.mjs to split frame times by, and
+// for a loader to follow ('load:stage' events, Utils/loadStages)
+const mark = (phase: string) => {
+    performance.mark?.(`race-transition:${phase}`);
+    reportStage('race', phase, phase === 'done' ? 1 : 0);
+};
 
 const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
 

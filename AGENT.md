@@ -31,10 +31,13 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 ## Model Pipeline
 - Original Sketchfab exports live in `models-src/` (not deployed). Web-ready copies are
   written to the same relative path under `static/` by `npm run optimize:models [carId ...]`
-  (Draco geometry, WebP textures capped at 1024px). `GLTFLoader` has a Draco decoder and needs
-  `'wasm-unsafe-eval'` in the CSP for the wasm path; it falls back to the JS decoder otherwise.
-  The decoder files come from `three/examples/jsm/libs/draco` (webpack emits them from
-  `DRACOLoader`'s `import.meta.url` references), so there's no vendored copy to keep in sync.
+  (Draco geometry, WebP textures capped at 1024px). `GLTFLoader`'s Draco decoder runs in same
+  origin worker files that webpack emits in dev and production builds (`scripts/draco-worker.js`:
+  the decoder from `three/examples/jsm/libs/draco` plus `DRACOLoader`'s own worker body;
+  `Utils/draco.ts`), so there's no vendored copy to keep in sync and no blob worker: the page's
+  policy has `worker-src 'self'` only. The wasm path needs `'wasm-unsafe-eval'` (the `draco/` files
+  get their own narrow policy in `vercel.json`); where a browser's CSP support blocks wasm it uses
+  the asm.js worker.
 - three is r186 with color management on. Colors tuned on r137 go through `Utils/LegacyColor.ts`
   (`legacyColor`, `setLegacyHex`) so they keep their look, and the room scene's lights are scaled
   by `LEGACY_LIGHT_SCALE` (pi) for the same reason. New work should use plain sRGB hex colors
@@ -122,6 +125,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - No service worker, on purpose: a repeat visit is already one 304 for the HTML (plus the yassinOS
   iframe's own requests). A worker would only save that round trip, and could serve a stale shell
   after a deploy.
+- Loading progress for a loader: `Utils/loadStages.ts` reports each step as a `load:stage` event on
+  the UI bus (`{ scope, stage, progress, done, loaded, total, bytesLoaded, bytesTotal }`) and a
+  `load:<scope>:<stage>` performance mark; `currentStage(scope)` serves a loader that mounts late.
+  Homepage: `download` (by bytes, from the build's `__ASSET_SIZES__`; models and json stream,
+  images count when they finish, dev counts sources), `upload`, `compile`, `ready`. Race:
+  `download`, `build`, then the transition's phases (`start`, `fly`, `settled`, `handoff`,
+  `reveal`, `done`). The BIOS screen still counts sources; a new loader should use these.
+- The room isn't drawn until its textures are on the gpu (one a frame) and its programs have
+  compiled in parallel (`World.warmUp`, `compileAsync`, capped at 4 s), and the loading screen waits
+  for `ready`. The first frame used to hold the main thread for about a second (synchronous
+  program links and 4k uploads).
 - Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
   (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
   `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149
@@ -812,6 +826,10 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `vercel.json` allows
   `'unsafe-eval'` for the emscripten transcoder; the page policy is unchanged and no blob
   worker is used for it (`Utils/ktx2.ts`).
-- Never hangs: a 451 byte probe must decode within 5 s before any car picks ktx2, a worker error
-  flips everything to webp, and a downloaded ktx2 car gets 15 s to parse before the webp one is
-  loaded. `?ktx2=0` forces webp; `?raceDebug=1&ktx2fail=worker|hang|probe` forces each failure.
+- Never hangs: a 451 byte probe must decode within 5 s of the transcoder arriving before any car
+  picks ktx2 (the clock starts after the 250 KB wasm download, so a slow connection isn't read as a
+  broken decoder: it used to fall back to webp on every first visit over a phone connection, then
+  fetch the ktx2 car again on the next one), a worker error flips everything to webp, and a ktx2
+  car gets 15 s to parse before the webp one is loaded. The ktx2 file downloads alongside the probe
+  and is parsed once both are in; a failure aborts it. 90 s covers a download that never finishes.
+  `?ktx2=0` forces webp; `?raceDebug=1&ktx2fail=worker|hang|probe` forces each failure.

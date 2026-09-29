@@ -22,18 +22,21 @@ const walk = (dir) =>
           })
         : [];
 
-module.exports = (staticDir) => {
+// extra: files the build emits itself ({ 'draco/x.js': Buffer }). sizes are
+// the files' own sizes, for loading progress by bytes (Utils/Resources.ts)
+module.exports = (staticDir, extra = {}) => {
     const versions = {};
+    const sizes = {};
+    const add = (key, content) => {
+        versions[key] = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+        sizes[key] = content.length;
+    };
+    for (const [key, content] of Object.entries(extra)) add(key, content);
     for (const dir of DIRS) {
         for (const file of walk(path.join(staticDir, dir))) {
             if (!EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
-            const key = path.relative(staticDir, file).split(path.sep).join('/');
-            versions[key] = crypto
-                .createHash('sha256')
-                .update(fs.readFileSync(file))
-                .digest('hex')
-                .slice(0, 8);
+            add(path.relative(staticDir, file).split(path.sep).join('/'), fs.readFileSync(file));
         }
     }
-    return versions;
+    return { versions, sizes };
 };

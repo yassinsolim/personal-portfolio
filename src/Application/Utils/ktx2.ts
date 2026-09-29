@@ -98,6 +98,7 @@ export class SameOriginKTX2Loader extends KTX2Loader {
                 : PROBE_URL;
         return new Promise<boolean>((resolve) => {
             let settled = false;
+            let timer = 0;
             const finish = (ok: boolean) => {
                 if (settled) return;
                 settled = true;
@@ -106,11 +107,15 @@ export class SameOriginKTX2Loader extends KTX2Loader {
                 if (!ok) this.fail();
                 resolve(ok);
             };
-            const timer = window.setTimeout(
-                () => finish(false),
-                PROBE_TIMEOUT_MS
-            );
             const stop = this.onFailure(() => finish(false));
+            // the timeout is for a decoder that hangs, not a slow connection,
+            // so it starts once the transcoder has downloaded
+            (this.init() as Promise<void>).then(
+                () => {
+                    if (!settled) timer = window.setTimeout(() => finish(false), PROBE_TIMEOUT_MS);
+                },
+                () => finish(false)
+            );
             this.loadAsync(url).then(
                 (texture) => {
                     texture.dispose();
