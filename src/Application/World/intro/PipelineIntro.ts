@@ -34,8 +34,17 @@ const S = { input: 0, vertex: 1, primitive: 2, raster: 3, texture: 4, lighting: 
 const ROOM_MODELS = ['computerSetupModel', 'environmentModel', 'decorModel'];
 // BakedModel's scale for the room models
 const BAKED_SCALE = 900;
-const WIPE_MS = 420;
-const WIPE_FAST_MS = 160;
+// a sweep, and how long a reached stage stays on screen before the next one
+// may start (returning visitors get shorter ones). once the loading is done
+// whatever is left has to finish inside CATCH_UP_MS, so the pictures never
+// hold the room back by more than that
+const WIPE_MS = 360;
+const WIPE_FAST_MS = 180;
+const DWELL_MS = 220;
+const DWELL_FAST_MS = 90;
+const CATCH_UP_MS = 300;
+const CATCH_UP_FAST_MS = 200;
+const MIN_WIPE_MS = 90;
 const GRAIN_OPACITY = 0.12;
 
 type Kind = 'room' | 'car' | 'prop' | 'late';
@@ -145,6 +154,14 @@ const firstMaterial = (material: THREE.Material | THREE.Material[]) =>
 
 const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
 
+export type PipelineOptions = {
+    // the loading screen that owns the moment the room goes live (the hybrid
+    // types its command first); default: this dispatches loadingScreenDone
+    onRelease?: (catchUpMs: number) => void;
+    // false when something else shows on the monitor (the hybrid's terminal)
+    ownsMonitor?: boolean;
+};
+
 export type PipelineState = {
     stage: number;
     // 0..1 while the next stage sweeps down, else 0
@@ -169,10 +186,16 @@ export default class PipelineIntro {
     private framed = false;
     private reduced = prefersReducedMotion();
     private wipeMs = isReturningVisitor() ? WIPE_FAST_MS : WIPE_MS;
+    private dwellMs = isReturningVisitor() ? DWELL_FAST_MS : DWELL_MS;
+    private catchUpMs = isReturningVisitor() ? CATCH_UP_FAST_MS : CATCH_UP_MS;
+    private stageReachedAt = 0;
+    private releasedAt = 0;
+    private options: PipelineOptions;
     private hidden = new THREE.MeshBasicMaterial({ visible: false });
     private grain: HTMLCanvasElement | null = null;
 
-    constructor() {
+    constructor(options: PipelineOptions = {}) {
+        this.options = options;
         this.application = new Application();
         const camera = this.application.camera;
         // the idle view from the first frame: the loading happens in the room
@@ -248,17 +271,22 @@ export default class PipelineIntro {
         // the work is done: the room takes input now, the last stages finish
         // their sweep over the live scene
         this.released = true;
+        this.releasedAt = performance.now();
         mark('ready');
-        mark('done');
         const camera = this.application.camera;
         camera.introLock = false;
+        const catchUp = this.reduced ? 0 : this.catchUpMs;
+        if (this.options.onRelease) {
+            this.options.onRelease(catchUp);
+            return;
+        }
+        mark('done');
         // the room takes clicks now; the site's own ui waits for the sweeps
-        const left = S.output - this.stage;
         UIEventBus.dispatch('loadingScreenDone', {
             variant: 'pipeline',
             camera: 'intro',
             keepClock: true,
-            hintAfter: this.reduced ? 0 : Math.round(left * this.sweepFor(left)),
+            hintAfter: catchUp,
         });
         const ui = document.getElementById('ui');
         if (ui) ui.style.pointerEvents = 'none';
@@ -269,10 +297,12 @@ export default class PipelineIntro {
         this.target = Math.max(this.target, stage);
     }
 
-    // stages the loading has already passed sweep faster, so the picture is
-    // never far behind what has really happened
-    private sweepFor(queued: number) {
-        return this.wipeMs / Math.min(3, Math.max(1, queued));
+    // while loading, a full sweep; after it, whatever is left shares the
+    // catch up time, so the picture is never far behind what has happened
+    private sweepFor(queued: number, now: number) {
+        if (!this.released) return this.wipeMs;
+        const left = this.releasedAt + this.catchUpMs - now;
+        return Math.min(this.wipeMs, Math.max(MIN_WIPE_MS, left / Math.max(1, queued)));
     }
 
     // the build replaced the room meshes' materials with the baked ones and
@@ -290,7 +320,7 @@ export default class PipelineIntro {
             m.mesh.add(m.points, m.twin);
         });
         const monitor = world.monitorScreen;
-        if (monitor) monitor.screenOpacity = 0;
+        if (monitor && this.options.ownsMonitor !== false) monitor.screenOpacity = 0;
         const found: [THREE.Mesh, Kind][] = [];
         this.application.scene.traverse((object) => {
             const mesh = object as THREE.Mesh;
@@ -487,19 +517,30 @@ export default class PipelineIntro {
         if (this.reduced) {
             // no sweeps: the stages switch as they're reached
             if (this.stage < this.target) {
+                for (let next = this.stage + 1; next <= this.target; next++) {
+                    UIEventBus.dispatch('pipeline:stage', { stage: next, name: STAGES[next] });
+                    UIEventBus.dispatch('pipeline:reached', { stage: next, name: STAGES[next] });
+                }
                 this.stage = this.target;
                 this.apply();
             }
         } else if (this.stage < this.target) {
             const now = performance.now();
             if (!this.sweepStartedAt) {
+                // a reached stage gets its moment, unless the loading is done
+                const dwell = this.released || this.stage === S.input ? 0 : this.dwellMs;
+                if (now - this.stageReachedAt < dwell) {
+                    UIEventBus.dispatch('pipeline:state', this.state());
+                    return;
+                }
                 this.sweepStartedAt = now;
-                this.sweepMs = this.sweepFor(this.target - this.stage);
+                this.sweepMs = this.sweepFor(this.target - this.stage, now);
+                UIEventBus.dispatch('pipeline:stage', { stage: this.stage + 1, name: STAGES[this.stage + 1] });
             }
             const t = Math.min(1, (now - this.sweepStartedAt) / this.sweepMs);
             this.front = easeInOutSine(t);
             shared.uFront.value = this.front;
-            if (this.stage + 1 === S.lighting) {
+            if (this.stage + 1 === S.lighting && this.options.ownsMonitor !== false) {
                 const monitor = this.application.world.monitorScreen;
                 if (monitor) monitor.screenOpacity = this.front;
             }
@@ -508,6 +549,8 @@ export default class PipelineIntro {
             }
             if (t >= 1) {
                 this.stage++;
+                this.stageReachedAt = now;
+                UIEventBus.dispatch('pipeline:reached', { stage: this.stage, name: STAGES[this.stage] });
                 this.sweepStartedAt = 0;
                 this.front = 0;
                 shared.uFront.value = 0;
@@ -535,7 +578,7 @@ export default class PipelineIntro {
         });
         this.managed.clear();
         const monitor = this.application.world.monitorScreen;
-        if (monitor) monitor.screenOpacity = 1;
+        if (monitor && this.options.ownsMonitor !== false) monitor.screenOpacity = 1;
         if (this.grain) this.grain.style.opacity = String(GRAIN_OPACITY);
         this.hidden.dispose();
         mark('handoff');
