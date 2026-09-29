@@ -46,6 +46,8 @@ export default class Renderer {
     sceneResize: (() => void) | null;
     // the race preset caps auto resolution, quality mode ignores it
     sceneMaxPixelRatio: number;
+    keepGrain = false;
+    private resolutionHolds = 0;
     uniforms: {
         [uniform: string]: THREE.IUniform<any>;
     };
@@ -199,8 +201,12 @@ export default class Renderer {
 
     applyPixelRatio() {
         const ratio = this.getPixelRatio();
-        this.instance.setPixelRatio(ratio);
-        this.overlayInstance.setPixelRatio(ratio);
+        // resizing the canvas clears it, even to the same size, and between
+        // frames that shows as a blank frame
+        if (ratio !== this.instance.getPixelRatio()) {
+            this.instance.setPixelRatio(ratio);
+            this.overlayInstance.setPixelRatio(ratio);
+        }
         this.sceneResize?.();
         this.applyEffects();
         UIEventBus.dispatch('render:resolution', {
@@ -214,9 +220,10 @@ export default class Renderer {
             this.renderMode === 'performance' ||
             (this.renderMode === 'auto' &&
                 this.adaptive.ratio < EFFECTS_MIN_PIXEL_RATIO - 1e-6);
-        // race mode grades its own image, the room grain would double up
+        // race mode grades its own image, the room grain would double up.
+        // the homepage transition keeps it while the room fades out
         this.overlayInstance.domElement.style.display =
-            low || this.sceneRender ? 'none' : '';
+            low || (this.sceneRender && !this.keepGrain) ? 'none' : '';
         if (low === this.effectsLow) return;
         this.effectsLow = low;
         UIEventBus.dispatch('render:effects', { low });
@@ -235,6 +242,18 @@ export default class Renderer {
         // back in the room, start from full resolution again like on load
         if (!render) this.adaptive.ratio = this.adaptive.max;
         this.adaptive.reset();
+        this.applyPixelRatio();
+    }
+
+    // the resolution a scene renderer with this cap would start at, now. the
+    // homepage transition calls it inside a frame before drawing, so the
+    // canvas resize (which clears it) is never seen, and setSceneRenderer
+    // then finds nothing to change
+    matchScenePixelRatio(maxPixelRatio: number) {
+        this.adaptive.setBounds(
+            MIN_PIXEL_RATIO,
+            Math.min(this.sizes.pixelRatio, maxPixelRatio)
+        );
         this.applyPixelRatio();
     }
 
@@ -282,6 +301,10 @@ export default class Renderer {
         const interval = this.lastFrameAt ? now - this.lastFrameAt : 0;
         this.lastFrameAt = now;
         if (this.renderMode !== 'auto' || !interval) return;
+        if (this.resolutionHolds) {
+            this.adaptive.discard(now);
+            return;
+        }
         const ratio = this.adaptive.frame(interval, now);
         if (ratio === null) return;
         this.applyPixelRatio();
@@ -291,6 +314,27 @@ export default class Renderer {
                 fps: Math.round(this.adaptive.fps * 10) / 10,
             });
         }
+    }
+
+    // work spread over frames on purpose (the race world building on hover)
+    // slows them, which isn't load the resolution should drop for. a drop
+    // resizes the canvas, and that alone stalls a frame on the gpu
+    holdResolution<T>(work: Promise<T>): Promise<T> {
+        this.resolutionHolds++;
+        const release = () => {
+            this.resolutionHolds--;
+            this.adaptive.discard(performance.now());
+        };
+        return work.then(
+            (value) => {
+                release();
+                return value;
+            },
+            (error) => {
+                release();
+                throw error;
+            }
+        );
     }
 
     getMaxPixelRatio() {

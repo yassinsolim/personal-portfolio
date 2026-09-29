@@ -5,6 +5,7 @@ import type { TrackNearest } from './TrackField';
 import { getFoliageAtlas, SPECIES, type Species } from './foliageTextures';
 import { TREE_BUILDERS, TREE_HALF_WIDTH } from './treeGeometry';
 import type { PresetSettings } from './qualityPresets';
+import { drain, type Steps } from '../slicing';
 
 // the eifel woods along the ring: norway spruce first, then beech, some scots
 // pine and birch. near trees are real geometry (instanced per chunk of the
@@ -81,6 +82,72 @@ const UNFLIP = /* glsl */ `
 #endif
 `;
 
+// where the trees go, in chunks along the lap. a step every so often, so
+// the hover build can spread it over frames
+function* placing(
+    track: NordschleifeTrack,
+    terrain: RaceTerrain,
+    target: number
+): Generator<string | void, Tree[][], void> {
+    const chunks: Tree[][] = [];
+    for (let i = 0; i < CHUNKS; i++) chunks.push([]);
+    const random = rng(4242);
+    const samples = track.getSampleCount();
+    const points = track.framePoints;
+    const tangents = track.frameTangents;
+    const nearest: TrackNearest = { distance: 0, roadY: 0, index: -1 };
+    const field = terrain.field;
+    const perSide = Math.max(
+        2,
+        Math.round(target / (samples / 2) / 2 / 0.55)
+    );
+    let placed = 0;
+    for (let i = 0; i < samples && placed < target; i += 2) {
+        if (i % 512 === 0) yield 'forest:place';
+        const px = points[i * 3];
+        const pz = points[i * 3 + 2];
+        const tx = tangents[i * 2];
+        const tz = tangents[i * 2 + 1];
+        const barrier = track.getVergeHalfWidth(i / samples);
+        for (const sign of [1, -1]) {
+            for (let k = 0; k < perSide; k++) {
+                const depth = Math.pow(random(), 1.6) * FOREST_DEPTH;
+                const lateral = sign * (barrier + TREE_CLEARANCE + depth);
+                const along = (random() - 0.5) * 8;
+                const x = px + tz * lateral + tx * along;
+                const z = pz - tx * lateral + tz * along;
+                // where the real map has woods, plus the odd lone tree
+                const density = terrain.forestDensity(x, z);
+                if (random() > Math.max(density * 0.95, 0.025)) continue;
+                field.nearest(x, z, nearest, 1);
+                if (nearest.distance < barrier + TREE_CLEARANCE - 0.5)
+                    continue;
+                let pick = random();
+                let kind = 0;
+                for (let m = 0; m < MIX.length; m++) {
+                    if (pick < MIX[m].share || m === MIX.length - 1) {
+                        kind = m;
+                        break;
+                    }
+                    pick -= MIX[m].share;
+                }
+                const [lo, hi] = MIX[kind].height;
+                chunks[Math.floor((i / samples) * CHUNKS) % CHUNKS].push({
+                    x,
+                    y: terrain.groundAt(x, z) - 0.4,
+                    z,
+                    s: lo + random() * (hi - lo),
+                    r: random() * Math.PI * 2,
+                    tint: random(),
+                    kind: kind * VARIANTS + Math.floor(random() * VARIANTS),
+                });
+                placed++;
+            }
+        }
+    }
+    return chunks;
+}
+
 export default class RaceForest {
     root: THREE.Group;
     nearSets: THREE.InstancedMesh[][];
@@ -106,13 +173,28 @@ export default class RaceForest {
     count: number;
     shadowRange: number;
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         renderer: THREE.WebGLRenderer,
         track: NordschleifeTrack,
         terrain: RaceTerrain,
-        quality: ForestQuality
+        quality: ForestQuality,
+        defer = false
     ) {
+        this.pending = this.build(parent, renderer, track, terrain, quality);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(
+        parent: THREE.Object3D,
+        renderer: THREE.WebGLRenderer,
+        track: NordschleifeTrack,
+        terrain: RaceTerrain,
+        quality: ForestQuality
+    ): Steps {
         this.root = new THREE.Group();
         this.root.name = 'race-forest';
         parent.add(this.root);
@@ -133,6 +215,7 @@ export default class RaceForest {
         };
 
         const atlas = getFoliageAtlas();
+        yield 'forest:atlas';
         this.nearMaterial = this.createNearMaterial(atlas);
         const kinds: { species: Species; geometry: THREE.BufferGeometry }[] =
             [];
@@ -144,85 +227,35 @@ export default class RaceForest {
                 });
             }
         });
+        yield 'forest:kinds';
         this.impostorTarget = this.bakeImpostors(renderer, kinds, atlas);
         this.impostorMaterial = this.createImpostorMaterial(
             this.impostorTarget.texture
         );
+        yield 'forest:bake';
 
         // the real lap is 20.8 km, so this is about the density of the woods
         // along it
-        const trees = this.placeTrees(
+        const trees = yield* placing(
             track,
             terrain,
             quality === 'high' ? 32000 : 8000
         );
+        yield 'forest:place';
         this.count = trees.reduce((sum, chunk) => sum + chunk.length, 0);
-        trees.forEach((chunk, index) =>
-            this.buildImpostorChunk(chunk, kinds, index)
-        );
+        for (let index = 0; index < trees.length; index++) {
+            this.buildImpostorChunk(trees[index], kinds, index);
+            yield 'forest:chunk';
+        }
         this.trees = trees.flat();
         this.matrices = new Float32Array(this.trees.length * 16);
         this.colors = new Float32Array(this.trees.length * 3);
         this.buildNearSets(kinds);
+        yield 'forest:near';
     }
 
     placeTrees(track: NordschleifeTrack, terrain: RaceTerrain, target: number) {
-        const chunks: Tree[][] = [];
-        for (let i = 0; i < CHUNKS; i++) chunks.push([]);
-        const random = rng(4242);
-        const samples = track.getSampleCount();
-        const points = track.framePoints;
-        const tangents = track.frameTangents;
-        const nearest: TrackNearest = { distance: 0, roadY: 0, index: -1 };
-        const field = terrain.field;
-        const perSide = Math.max(
-            2,
-            Math.round(target / (samples / 2) / 2 / 0.55)
-        );
-        let placed = 0;
-        for (let i = 0; i < samples && placed < target; i += 2) {
-            const px = points[i * 3];
-            const pz = points[i * 3 + 2];
-            const tx = tangents[i * 2];
-            const tz = tangents[i * 2 + 1];
-            const barrier = track.getVergeHalfWidth(i / samples);
-            for (const sign of [1, -1]) {
-                for (let k = 0; k < perSide; k++) {
-                    const depth = Math.pow(random(), 1.6) * FOREST_DEPTH;
-                    const lateral = sign * (barrier + TREE_CLEARANCE + depth);
-                    const along = (random() - 0.5) * 8;
-                    const x = px + tz * lateral + tx * along;
-                    const z = pz - tx * lateral + tz * along;
-                    // where the real map has woods, plus the odd lone tree
-                    const density = terrain.forestDensity(x, z);
-                    if (random() > Math.max(density * 0.95, 0.025)) continue;
-                    field.nearest(x, z, nearest, 1);
-                    if (nearest.distance < barrier + TREE_CLEARANCE - 0.5)
-                        continue;
-                    let pick = random();
-                    let kind = 0;
-                    for (let m = 0; m < MIX.length; m++) {
-                        if (pick < MIX[m].share || m === MIX.length - 1) {
-                            kind = m;
-                            break;
-                        }
-                        pick -= MIX[m].share;
-                    }
-                    const [lo, hi] = MIX[kind].height;
-                    chunks[Math.floor((i / samples) * CHUNKS) % CHUNKS].push({
-                        x,
-                        y: terrain.groundAt(x, z) - 0.4,
-                        z,
-                        s: lo + random() * (hi - lo),
-                        r: random() * Math.PI * 2,
-                        tint: random(),
-                        kind: kind * VARIANTS + Math.floor(random() * VARIANTS),
-                    });
-                    placed++;
-                }
-            }
-        }
-        return chunks;
+        return drain(placing(track, terrain, target));
     }
 
     tint(tree: Tree, color: THREE.Color) {

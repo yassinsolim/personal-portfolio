@@ -1593,3 +1593,15 @@ body.race-mode-touch .race-minimap {
 .garage-open > *:not(.garage) {
     visibility: hidden;
 }
+
+/* the homepage to race transition: the page's panels step aside while the
+   camera flies and the ring builds, then the race's panels fade in */
+body.race-transition #ui-app > *,
+body.race-transition-out #ui-app > * {
+    transition: opacity 0.5s ease;
+}
+
+body.race-transition #ui-app > :not(.race-lobby-choice) {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}

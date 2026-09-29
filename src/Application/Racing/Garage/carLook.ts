@@ -593,6 +593,24 @@ const setWheels = (
     });
 };
 
+// the paint materials of any clone of this car's model (the homepage's own
+// car too, which has no wheel rig), and the metalness and roughness a finish
+// paints them with (null keeps the factory values)
+export const paintMaterialsOf = (model: THREE.Object3D, carId: string) => {
+    const found = new Set<THREE.MeshStandardMaterial>();
+    model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        const material = mesh.material as THREE.MeshStandardMaterial;
+        if (material.isMeshStandardMaterial && isPaint(carId, material.name || ''))
+            found.add(material);
+    });
+    return [...found];
+};
+
+export const finishOf = (finish: PaintFinish) =>
+    finish === 'stock' ? null : { metalness: FINISHES[finish].metalness, roughness: FINISHES[finish].roughness };
+
 export type LookOptions = {
     // a prepared model of the car whose rims look.wheels asks for
     donor?: THREE.Object3D | null;

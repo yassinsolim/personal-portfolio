@@ -113,6 +113,19 @@ export type GpuTier = 'high' | 'low';
 const WEAK_GPU =
     /swiftshader|llvmpipe|softpipe|software|microsoft basic|mali-[t4]|adreno \(tm\) [3-5]\d\d|powervr|intel\(r\) (?:hd|uhd) graphics [1-6]?\d{2,3}\b|(?:intel.*hd graphics$)/i;
 
+// a cpu rasterizer: every shader compile takes seconds there
+export const isSoftwareGl = (gl: WebGLRenderingContext | WebGL2RenderingContext) => {
+    try {
+        const info = gl.getExtension('WEBGL_debug_renderer_info');
+        const renderer = String(
+            info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)
+        );
+        return /swiftshader|llvmpipe|softpipe|software/i.test(renderer);
+    } catch {
+        return false;
+    }
+};
+
 export const detectGpuTier = (
     gl: WebGLRenderingContext | WebGL2RenderingContext
 ): GpuTier => {

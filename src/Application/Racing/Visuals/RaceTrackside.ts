@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type NordschleifeTrack from '../Track/NordschleifeTrack';
+import { drain, type Steps } from '../slicing';
 import {
     createCheckerTexture,
     createGantryTexture,
@@ -38,11 +39,20 @@ export default class RaceTrackside {
     // a ring (and post) every this many meters along the armco
     ringSpacing: number;
 
+    // built when constructed, or with defer by running pending
+    pending: Steps;
+
     constructor(
         parent: THREE.Object3D,
         track: NordschleifeTrack,
-        lite = false
+        lite = false,
+        defer = false
     ) {
+        this.pending = this.build(parent, track, lite);
+        if (!defer) drain(this.pending);
+    }
+
+    private *build(parent: THREE.Object3D, track: NordschleifeTrack, lite: boolean): Steps {
         this.track = track;
         this.ringSpacing = lite ? 8 : 4;
         this.root = new THREE.Group();
@@ -62,12 +72,14 @@ export default class RaceTrackside {
             metalness: 0.6,
             roughness: 0.5,
         });
-        this.buildArmco();
+        yield* this.buildArmco();
         this.buildStart();
         this.buildBridges();
         this.buildTrackBridges();
+        yield 'trackside:bridges';
         this.buildUnderpasses();
         this.buildBoards();
+        yield 'trackside:boards';
     }
 
     // frame at a distance along the lap in the track data's meters
@@ -465,7 +477,7 @@ export default class RaceTrackside {
     }
 
     // in segments along the lap, so all but the few in view get culled
-    buildArmco() {
+    *buildArmco(): Steps {
         const track = this.track;
         const curve = track.visualCurve;
         const segments = ARMCO_SEGMENTS;
@@ -486,9 +498,10 @@ export default class RaceTrackside {
         const rails: Record<number, number[]> = { 1: [], [-1]: [] };
         // per ring: the post foot, the way out from the road, and along it
         const posts: Record<number, number[]> = { 1: [], [-1]: [] };
-        [1, -1].forEach((sign) => {
+        for (const sign of [1, -1]) {
             previousSide.set(1, 0, 0);
             for (let i = 0; i <= samples; i++) {
+                if (i % 256 === 0) yield 'armco:rails';
                 const t = i / samples;
                 track.getRibbonFrame(
                     curve,
@@ -519,7 +532,8 @@ export default class RaceTrackside {
                     rails[sign].push(vertex.x, vertex.y, vertex.z);
                 });
             }
-        });
+        }
+        yield 'armco:rails';
         for (let segment = 0; segment < segments; segment++) {
             const first = segment * perSegment;
             const rings = perSegment + 1;
@@ -620,6 +634,7 @@ export default class RaceTrackside {
             mesh.name = `race-armco-${segment}`;
             mesh.receiveShadow = true;
             this.root.add(mesh);
+            yield 'armco:segment';
         }
     }
 

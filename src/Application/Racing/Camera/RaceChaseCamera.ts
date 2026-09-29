@@ -427,6 +427,13 @@ export default class RaceChaseCamera {
         if (active) {
             this.time = 0;
             this.initialized = false;
+            // springs start at rest, so the first frame is restPose()
+            this.headingVelocity = 0;
+            this.distanceVelocity = 0;
+            this.heightVelocity = 0;
+            this.fovVelocity = 0;
+            this.lookYVelocity = 0;
+            this.impactShake = 0;
             camera.near = RACE_CAMERA_NEAR;
             camera.far = this.farOverride || RACE_CAMERA_FAR;
             camera.fov = this.getView().fov;
@@ -591,6 +598,54 @@ export default class RaceChaseCamera {
         camera.position.copy(position);
         camera.lookAt(look);
         this.applyRoll(camera, telemetry);
+    }
+
+    // where the first update() after setActive(true) puts the camera, from the
+    // car as it is now. the homepage transition flies there, so the handoff
+    // to the race camera doesn't move a pixel. up is the camera's up vector
+    restPose(position: THREE.Vector3, look: THREE.Vector3, up: THREE.Vector3) {
+        const vehicle = this.vehicle;
+        const view = this.getView();
+        const telemetry = vehicle.getTelemetry();
+        const anchor = vehicle.position;
+        if (view.mounted) {
+            up.set(0, 1, 0).applyQuaternion(vehicle.carPivot.quaternion);
+            const forward = new THREE.Vector3(0, 0, 1)
+                .applyQuaternion(vehicle.carPivot.quaternion)
+                .normalize();
+            position
+                .copy(anchor)
+                .addScaledVector(forward, vehicle.bodySize.z * 0.5 + view.distance)
+                .addScaledVector(up, view.height - vehicle.rideHeight);
+            look.copy(position)
+                .addScaledVector(forward, view.lookAhead)
+                .addScaledVector(up, view.lookHeight - view.height);
+            return view.fov;
+        }
+        const speed = Math.hypot(vehicle.speedMps, vehicle.lateralSpeed);
+        const size = vehicle.bodySize.z / REFERENCE_CAR_LENGTH;
+        const heading = vehicle.yaw + this.yawOffset;
+        const distance =
+            view.distance * size +
+            vehicle.getCameraFollowDistanceOffset() * 0.25 -
+            telemetry.longitudinalG * 0.55 +
+            Math.min(1.2, speed * 0.012);
+        const height = view.height * (0.85 + size * 0.15) + speed * 0.002;
+        const pitch = this.pitchOffset;
+        const forward = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+        position
+            .copy(anchor)
+            .addScaledVector(forward, -distance * Math.cos(pitch))
+            .setY(anchor.y + height + distance * Math.sin(pitch));
+        look.copy(anchor)
+            .addScaledVector(forward, view.lookAhead * size)
+            .setY(anchor.y + view.lookHeight);
+        const ground = vehicle.track.sampleGround(position.x, position.z);
+        if (ground !== null && position.y < ground + 0.55) {
+            position.y = ground + 0.55;
+        }
+        up.set(0, 1, 0);
+        return view.fov + Math.max(0, telemetry.longitudinalG) * 3.5;
     }
 
     // bumper cam: fixed to the nose, only the shake and fov move

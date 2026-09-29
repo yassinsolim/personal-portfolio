@@ -158,16 +158,52 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   Höhe, the other rolled into it. Expect shared momentum, not one car stopping dead.
 
 ## Transition Notes (2026-09-28)
-- `World/RaceTransition.ts` (main bundle): click the room car (hover shows a pointer and starts
-  building the race world, which blocks the main thread for most of a second). The car rocks,
-  the camera flies behind it, the room's last frame is kept as an overlay while the race starts
-  and compiles its shaders, then a circle opens from the car with a glowing rim.
-- The race world reveal is `Visuals/reveal.ts`: every track, terrain, trackside and forest
-  material gets a distance cut and an edge glow (`uRevealRadius`, huge when idle), and trees grow
-  up out of the ground as the wave passes. Events: `race:transitionReveal`, `race:transitionSkip`.
-- Any key or click skips. Focus is taken back from the monitor's iframe on start, or keys would
-  never reach the page. Only drawn objects count for the car click; the hidden race world is in
-  the scene too.
+- `World/RaceTransition.ts` (main bundle): click the room car (hover shows a pointer, builds the
+  race world, then prewarms it). The car rocks and the camera swings round it, landing exactly on
+  the race chase camera's first pose (`RaceChaseCamera.restPose`) with its lens: the room car and
+  the race car are clones of one model, so `roomCar.matrixWorld * inverse(raceCar.matrixWorld)`
+  maps the race camera into the room. The fly and the race start run inside the camera's update
+  (`Camera.externalControl`), before the frame draws, so a canvas resize never shows blank.
+- At the handoff the room's last frame is copied off the drawing buffer (the plate), plus a pass
+  that writes where each pixel lands on the ring (ground offset, height, a flag for both cars'
+  outlines). The race starts under it with the car parked (`RaceManager.transitionHold`), so the
+  switch frame is pixel identical.
+- The reveal is `Visuals/RaceReveal.ts` (timeline, plate) and `Visuals/reveal.ts`: one uniform set
+  patched into every material under the race root (cars and `userData.revealSkip` excepted), so
+  what other code adds there joins in; `prepareReveal` catches late additions. Past a noise broken
+  front the world is flat (2 m under the road) and hazed in the room's greys; across the band the
+  ground rises, instanced meshes and billboards grow from their base a little later each, colors
+  come out of the haze. The plate melts with the same front and noise (walls from the floor up),
+  the car cross-fades in one piece. Then the haze turns into the eifel fog, the sky clears (its own
+  patch) and sun shadows fade in. About 1.9 s of fly and 4.8 s of reveal.
+- With the post chain the haze is solved backwards through the grade (warm push, AgX) so it shows
+  as the room's grey; drawing straight to the screen (performance preset) it's the grey itself and
+  the plate is a full screen quad over the frame.
+- Hitches: hover prewarms (sky map, post chain, `compileAsync` of the race world in the exact race
+  state in batches of 6 materials, a shadow pass per caster material, each program's first use a
+  few a frame, then the textures one a frame); the fly streams the first frames' buffer uploads a
+  batch a frame (`streamStep`, layer 6) and switches to the race resolution at its end. Software
+  GL skips the hover prewarm and compiles behind the car, where the picture is still.
+- The race world builds a slice a frame (`Racing/slicing.ts`): the heavy constructors take a
+  `defer` flag and keep their work in a `pending` generator that yields between pieces (`drain`
+  runs it at once, which is what tests and plain `new` get). `World.ensureRaceManager` runs it
+  with `slice`, about 8 ms per task right after a frame, so hovering the car has no long task.
+  Keep new build work behind a `yield`, and keep GPU work in small pieces too: a big batch of
+  compiles or a canvas resize stalls the next frame on the GPU process. Adaptive resolution is
+  held while the build and prewarm run, while the pointer is on the car and through the
+  transition (`Renderer.holdResolution`): the build's slower frames would drop it, the room's
+  climb back to full resolution can land mid hover or mid fly, and each resize is itself a 50 to
+  75 ms stall. `window.__raceBuildSteps = {}` before the hover collects the longest run of each
+  named step.
+- Garage looks: the room car is resprayed toward the saved paint and finish during the fly
+  (uniforms only); rims and body kits cross-fade with the car.
+- Any key or click skips straight to the race. prefers-reduced-motion: no rock or fly, a 0.45 s
+  cross-fade. Focus is taken back from the monitor's iframe on start, or keys would never reach
+  the page. Only drawn objects count for the car click; the hidden race world is in the scene too.
+- `scripts/race-transition-record.mjs` records it at a clean 60 fps (virtual clock) to mp4, webp
+  and a frame strip, or times real frames split by the transition's phase marks (`--mode timing`,
+  `--swgl`, `--tier low`, `--browser webkit`, `--reduced-motion`). `scripts/race-transition-check.mjs`
+  checks skip and focus.
 
 ## Drift Notes (2026-09-28)
 - Sport assists include the drift assist (`VehiclePhysics.updateDrift`): once the rear is out
