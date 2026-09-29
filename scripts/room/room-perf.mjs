@@ -3,7 +3,7 @@
 //
 //   node scripts/room/room-perf.mjs --build v2=http://192.168.1.166:8531/ --build main=http://192.168.1.166:8532/ --runs 3
 //   ... --weak   (raceTier=low, 4x cpu throttle, 1536x864 at 1.25)
-//   ... --swgl   (software gl, the worst case)
+//   ... --swgl   (software gl, the worst case)   --throttle <n> (cpu throttle, default 4 with --weak)
 //
 // real time, headed, on the real gpu. prints a table and writes json to --out
 import { chromium } from 'playwright';
@@ -27,6 +27,7 @@ args.forEach((arg, i) => {
 const runs = Number(opt('runs', 2));
 const weak = Boolean(opt('weak', false));
 const swgl = Boolean(opt('swgl', false));
+const throttle = Number(opt('throttle', weak ? 4 : 1));
 const measureMs = Number(opt('ms', 4000));
 const out = path.resolve(opt('out', '.tmp-validation/room-perf.json'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -116,9 +117,9 @@ for (let run = 0; run < runs; run++) {
         const viewport = weak ? { width: 1536, height: 864 } : { width: 1512, height: 900 };
         const context = await browser.newContext({ viewport, deviceScaleFactor: weak ? 1.25 : 2 });
         const page = await context.newPage();
-        if (weak) {
+        if (throttle > 1) {
             const cdp = await context.newCDPSession(page);
-            await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+            await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
         }
         const url = new URL(build.url);
         url.searchParams.set('raceDebug', '1');
