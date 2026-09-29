@@ -92,10 +92,20 @@ export default class Resources extends EventEmitter {
 
     // a gltf model, a car as ktx2 when the decoder works. a failed, blocked
     // or stuck ktx2 load (probe, worker error, parse timeout) falls back to
-    // the webp file, so a decoder problem never holds the page
-    loadModel(path: string, onLoad: (gltf: GLTF) => void, onError: (error: unknown) => void) {
+    // the webp file, so a decoder problem never holds the page. onUrl hears
+    // which file is being fetched, for the loading screens
+    loadModel(
+        path: string,
+        onLoad: (gltf: GLTF) => void,
+        onError: (error: unknown) => void,
+        onProgress?: (event: ProgressEvent) => void,
+        onUrl?: (url: string) => void
+    ) {
         const loader = this.loaders.gltfLoader;
-        const webp = () => loader.load(path, onLoad, undefined, onError);
+        const webp = () => {
+            onUrl?.(path);
+            loader.load(path, onLoad, onProgress, onError);
+        };
         const ktx2Loader = this.ktx2Loader;
         if (!ktx2Loader || !hasKtx2Twin(path)) {
             webp();
@@ -122,8 +132,10 @@ export default class Resources extends EventEmitter {
             };
             const totalTimer = window.setTimeout(fallback, KTX2_TOTAL_TIMEOUT_MS);
             const stop = ktx2Loader.onFailure(fallback);
+            const ktx2Path = path.replace(/\.glb$/, '.ktx2.glb');
+            onUrl?.(ktx2Path);
             loader.load(
-                path.replace(/\.glb$/, '.ktx2.glb'),
+                ktx2Path,
                 (gltf) => {
                     if (done) return;
                     done = true;
@@ -133,6 +145,7 @@ export default class Resources extends EventEmitter {
                     onLoad(gltf);
                 },
                 (event) => {
+                    if (!done) onProgress?.(event);
                     if (!parseTimer && event.lengthComputable && event.loaded >= event.total) {
                         parseTimer = window.setTimeout(fallback, KTX2_PARSE_TIMEOUT_MS);
                     }
@@ -182,6 +195,13 @@ export default class Resources extends EventEmitter {
         // is checked once the renderer exists (setRenderer)
         if (ktx2Enabled()) {
             this.ktx2Loader = new SameOriginKTX2Loader();
+            this.ktx2Loader.onTranscode = (report) =>
+                this.loading.item(
+                    'transcode',
+                    report.probe ? 'decoder probe' : 'car texture',
+                    report.ms,
+                    `${report.width}x${report.height} ${report.format}`
+                );
             gltfLoader.setKTX2Loader(this.ktx2Loader);
             this.ktx2Ready = new Promise<boolean>((resolve) => {
                 this.resolveKtx2 = resolve;
@@ -208,11 +228,17 @@ export default class Resources extends EventEmitter {
 
         // Load each source
         for (const source of this.sources) {
+            const paths = Array.isArray(source.path) ? source.path : [source.path];
+            this.loading.sourceStart(source, paths);
+            const progress = (event: ProgressEvent) =>
+                this.loading.sourceProgress(source, event);
             if (source.type === 'gltfModel') {
                 this.loadModel(
                     source.path,
                     (file) => this.sourceLoaded(source, file),
-                    (error) => this.sourceFailed(source, error)
+                    (error) => this.sourceFailed(source, error),
+                    progress,
+                    (url) => this.loading.sourceUrls(source, [url])
                 );
             } else if (source.type === 'texture') {
                 this.loaders.textureLoader.load(
@@ -243,7 +269,7 @@ export default class Resources extends EventEmitter {
                     (buffer) => {
                         this.sourceLoaded(source, buffer);
                     },
-                    undefined,
+                    progress,
                     (error) => {
                         this.sourceFailed(source, error);
                     }
@@ -259,7 +285,7 @@ export default class Resources extends EventEmitter {
                             this.sourceFailed(source, error);
                         }
                     },
-                    undefined,
+                    progress,
                     (error) => {
                         this.sourceFailed(source, error);
                     }
@@ -285,6 +311,7 @@ export default class Resources extends EventEmitter {
 
         this.items[source.type][source.name] = file;
         this.loaded++;
+        this.loading.sourceDone(source, true);
 
         this.loading.trigger('loadedSource', [
             source.name,
@@ -308,6 +335,7 @@ export default class Resources extends EventEmitter {
 
         this.failed++;
         this.loaded++;
+        this.loading.sourceDone(source, false);
         this.loading.trigger('failedSource', [
             source.name,
             this.loaded,

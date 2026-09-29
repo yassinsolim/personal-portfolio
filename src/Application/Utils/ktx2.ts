@@ -30,9 +30,48 @@ type LoaderInternals = {
     manager: THREE.LoadingManager;
 };
 
+const FORMAT_NAMES: Record<number, string> = {
+    [THREE.RGBA_ASTC_4x4_Format]: 'ASTC 4x4',
+    [THREE.RGBA_BPTC_Format]: 'BC7',
+    [THREE.RGBA_S3TC_DXT5_Format]: 'BC3',
+    [THREE.RGB_S3TC_DXT1_Format]: 'BC1',
+    [THREE.RGBA_ETC2_EAC_Format]: 'ETC2 RGBA',
+    [THREE.RGB_ETC2_Format]: 'ETC2 RGB',
+    [THREE.RGB_ETC1_Format]: 'ETC1',
+    [THREE.RGBA_PVRTC_4BPPV1_Format]: 'PVRTC',
+    [THREE.RGBAFormat]: 'RGBA8',
+};
+
+export type TranscodeReport = {
+    ms: number;
+    width: number;
+    height: number;
+    format: string;
+    probe: boolean;
+};
+
 export class SameOriginKTX2Loader extends KTX2Loader {
     failed = false;
     private failureListeners = new Set<() => void>();
+    private probing = false;
+    // each texture the worker transcodes, for the loading screens
+    onTranscode: ((report: TranscodeReport) => void) | null = null;
+
+    async _createTexture(buffer: ArrayBuffer, config = {}) {
+        const startedAt = performance.now();
+        const probe = this.probing;
+        // @ts-ignore three's types don't list the transcode step
+        const texture: THREE.Texture = await super._createTexture(buffer, config);
+        const image = texture.image as { width?: number; height?: number } | undefined;
+        this.onTranscode?.({
+            ms: performance.now() - startedAt,
+            width: image?.width || 0,
+            height: image?.height || 0,
+            format: FORMAT_NAMES[texture.format as number] || String(texture.format),
+            probe,
+        });
+        return texture;
+    }
 
     init() {
         const self = this as unknown as LoaderInternals;
@@ -95,11 +134,13 @@ export class SameOriginKTX2Loader extends KTX2Loader {
             forcedFailure() === 'probe'
                 ? 'textures/missing-probe.ktx2'
                 : PROBE_URL;
+        this.probing = true;
         return new Promise<boolean>((resolve) => {
             let settled = false;
             const finish = (ok: boolean) => {
                 if (settled) return;
                 settled = true;
+                this.probing = false;
                 window.clearTimeout(timer);
                 stop();
                 if (!ok) this.fail();

@@ -103,7 +103,9 @@ export default class Application {
         this.renderer.frameStats.beginTick();
         this.camera.update();
         this.world.update();
+        this.loading.beforeRender();
         this.renderer.update();
+        this.loading.afterRender();
         this.renderer.frameStats.endTick();
         if (this.stats) this.stats.end();
     }

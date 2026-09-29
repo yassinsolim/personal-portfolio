@@ -48,6 +48,8 @@ export default class World {
         this.bindRaceManagerLoader();
         // Wait for resources
         this.resources.on('ready', () => {
+            const loading = this.application.loading;
+            loading.stageStart('build');
             // Setup
             this.environment = new Environment();
             this.decor = new Decor();
@@ -59,6 +61,11 @@ export default class World {
             this.flipper = new Flipper();
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
+            let meshes = 0;
+            this.scene.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh) meshes++;
+            });
+            loading.stageDone('build', meshes);
         });
     }
 
