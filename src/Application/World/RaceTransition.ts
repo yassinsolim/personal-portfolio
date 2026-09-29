@@ -60,6 +60,9 @@ export default class RaceTransition {
     busy: boolean;
     skipped: boolean;
     raycaster: THREE.Raycaster;
+    carBox = new THREE.Box3();
+    boxHit = new THREE.Vector3();
+    boxSize = new THREE.Vector3();
     pointer: THREE.Vector2;
     lastHover: number;
     hovering: boolean;
@@ -216,16 +219,29 @@ export default class RaceTransition {
             this.pointer,
             this.application.camera.instance
         );
+        // most moves miss the car's box, and that's one box test
+        this.carBox.setFromObject(car);
+        const far = this.raycaster.ray.intersectBox(this.carBox, this.boxHit);
+        if (!far) return false;
         const shown = (object: THREE.Object3D | null) => {
             for (let node = object; node; node = node.parent) {
                 if (!node.visible) return false;
             }
             return true;
         };
-        // the hidden race world is in the scene too, only what's drawn counts
+        // over the box: the room between the camera and the car's far side,
+        // without the race world (prebuilt and hidden, but raycasts don't
+        // skip hidden objects)
+        this.raycaster.far =
+            far.distanceTo(this.raycaster.ray.origin) +
+            this.carBox.getSize(this.boxSize).length();
+        const room = this.application.scene.children.filter(
+            (child) => !child.userData.raceRoot
+        );
         const hit = this.raycaster
-            .intersectObjects(this.application.scene.children, true)
+            .intersectObjects(room, true)
             .find((h) => (h.object as THREE.Mesh).isMesh && shown(h.object));
+        this.raycaster.far = Infinity;
         if (!hit) return false;
         let node: THREE.Object3D | null = hit.object;
         while (node) {
