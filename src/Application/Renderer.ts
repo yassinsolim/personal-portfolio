@@ -4,15 +4,21 @@ import Application from './Application';
 import Sizes from './Utils/Sizes';
 import Camera from './Camera/Camera';
 import UIEventBus from './UI/EventBus';
-// @ts-ignore
-import screenVert from './Shaders/screen/vertex.glsl';
-// @ts-ignore
-import screenFrag from './Shaders/screen/fragment.glsl';
 import Time from './Utils/Time';
 import AdaptiveResolution from './Utils/AdaptiveResolution';
 import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
 import FrameStats from './Utils/FrameStats';
 import { calibrate, classifyGpu, readRenderer } from './Utils/gpuClass';
+
+// the room's film grain: one tile of colour noise, drawn once
+const GRAIN_TILE = 256;
+const GRAIN_OPACITY = 0.28;
+// noise around a light grey: soft light over it lifts the room a touch and
+// adds the grain, which is what the old shader's layer measured as
+const GRAIN_MEAN = 182;
+const GRAIN_RANGE = 55;
+// getRandomValues fills at most this many bytes per call
+const RANDOM_CHUNK = 65536;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
@@ -30,10 +36,11 @@ export default class Renderer {
     scene: THREE.Scene;
     cssScene: THREE.Scene;
     time: Time;
-    overlay: THREE.Mesh;
-    overlayScene: THREE.Scene;
+    // film grain over the room, a css layer (no second webgl context)
+    grain: HTMLDivElement;
+    grainAllowed: boolean;
+    grainOpacity = GRAIN_OPACITY;
     camera: Camera;
-    overlayInstance: THREE.WebGLRenderer;
     instance: THREE.WebGLRenderer;
     cssInstance: CSS3DRenderer;
     raiseExposure: boolean;
@@ -62,9 +69,6 @@ export default class Renderer {
         preset: string;
         autoStep: number;
     } | null;
-    uniforms: {
-        [uniform: string]: THREE.IUniform<any>;
-    };
 
     constructor() {
         this.application = new Application();
@@ -72,7 +76,6 @@ export default class Renderer {
         this.sizes = this.application.sizes;
         this.scene = this.application.scene;
         this.cssScene = this.application.cssScene;
-        this.overlayScene = this.application.overlayScene;
         this.camera = this.application.camera;
         this.mobileDevice = isMobileDevice();
         this.lowPowerDevice = isLowPowerDevice();
@@ -179,25 +182,7 @@ export default class Renderer {
         document.querySelector('#webgl')?.appendChild(this.instance.domElement);
         this.setupContextLossHandlers(this.instance.domElement);
 
-        this.overlayInstance = new THREE.WebGLRenderer({
-            antialias: false,
-            alpha: true,
-            preserveDrawingBuffer: false,
-        });
-        this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
-        this.overlayInstance.setPixelRatio(this.getPixelRatio());
-        this.overlayInstance.domElement.style.position = 'absolute';
-        this.overlayInstance.domElement.style.top = '0px';
-        this.overlayInstance.domElement.style.mixBlendMode = 'soft-light';
-        this.overlayInstance.domElement.style.opacity = '0.12';
-        // this.overlayInstance.domElement.style.mixBlendMode = 'luminosity';
-        // this.overlayInstance.domElement.style.opacity = '1';
-        this.overlayInstance.domElement.style.pointerEvents = 'none';
-        this.overlayInstance.domElement.style.zIndex = '3';
-
-        document
-            .querySelector('#overlay')
-            ?.appendChild(this.overlayInstance.domElement);
+        this.grain = this.createGrain();
 
         this.cssInstance = new CSS3DRenderer();
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
@@ -209,23 +194,57 @@ export default class Renderer {
             .querySelector('#css')
             ?.appendChild(this.cssInstance.domElement);
 
-        this.uniforms = {
-            u_time: { value: 1 },
-        };
-
-        this.overlay = new THREE.Mesh(
-            new THREE.PlaneGeometry(10000, 10000),
-            new THREE.ShaderMaterial({
-                vertexShader: screenVert,
-                fragmentShader: screenFrag,
-                uniforms: this.uniforms,
-                depthTest: false,
-                depthWrite: false,
-            })
-        );
-
-        this.overlayScene.add(this.overlay);
         this.applyEffects();
+    }
+
+    // colour noise under a soft light blend, measured to match the shader
+    // it replaces (a lift of about 3 to 5 levels, grain of about 2 to 4).
+    // css moves the tile to a new offset every frame, so it flickers like
+    // the per frame shader noise did; off on light gpus, where every full
+    // screen blend counts
+    createGrain() {
+        const canvas = document.createElement('canvas');
+        canvas.width = GRAIN_TILE;
+        canvas.height = GRAIN_TILE;
+        const ctx = canvas.getContext('2d');
+        const grain = document.createElement('div');
+        grain.className = 'film-grain';
+        grain.style.opacity = String(GRAIN_OPACITY);
+        if (ctx) {
+            const image = ctx.createImageData(GRAIN_TILE, GRAIN_TILE);
+            const noise = new Uint8Array(GRAIN_TILE * GRAIN_TILE * 3);
+            for (let at = 0; at < noise.length; at += RANDOM_CHUNK) {
+                crypto.getRandomValues(noise.subarray(at, at + RANDOM_CHUNK));
+            }
+            for (let i = 0, n = 0; i < image.data.length; i += 4) {
+                for (let c = 0; c < 3; c++) {
+                    image.data[i + c] =
+                        GRAIN_MEAN + ((noise[n++] / 255) * 2 - 1) * GRAIN_RANGE;
+                }
+                image.data[i + 3] = 255;
+            }
+            ctx.putImageData(image, 0, 0);
+            grain.style.backgroundImage = `url(${canvas.toDataURL()})`;
+        }
+        this.sizeGrain(grain);
+        const { renderer, vendor } = readRenderer(this.instance.getContext());
+        const nav = navigator as Navigator & { deviceMemory?: number };
+        this.grainAllowed =
+            classifyGpu({
+                renderer,
+                vendor,
+                cores: nav.hardwareConcurrency,
+                memoryGb: nav.deviceMemory,
+                mobile: this.mobileDevice,
+            }).tier !== 'low';
+        document.querySelector('#overlay')?.appendChild(grain);
+        return grain;
+    }
+
+    // one noise texel per device pixel, like the shader had
+    sizeGrain(grain = this.grain) {
+        const size = GRAIN_TILE / Math.max(1, this.sizes.pixelRatio);
+        grain.style.backgroundSize = `${size}px ${size}px`;
     }
 
     setupQualityListeners() {
@@ -288,7 +307,6 @@ export default class Renderer {
         // frames that shows as a blank frame
         if (ratio !== this.instance.getPixelRatio()) {
             this.instance.setPixelRatio(ratio);
-            this.overlayInstance.setPixelRatio(ratio);
         }
         this.sceneResize?.();
         this.applyEffects();
@@ -305,8 +323,10 @@ export default class Renderer {
                 this.adaptive.ratio < EFFECTS_MIN_PIXEL_RATIO - 1e-6);
         // race mode grades its own image, the room grain would double up.
         // the homepage transition keeps it while the room fades out
-        this.overlayInstance.domElement.style.display =
-            low || (this.sceneRender && !this.keepGrain) ? 'none' : '';
+        this.grain.style.display =
+            low || !this.grainAllowed || (this.sceneRender && !this.keepGrain)
+                ? 'none'
+                : '';
         if (low === this.effectsLow) return;
         this.effectsLow = low;
         UIEventBus.dispatch('render:effects', { low });
@@ -431,7 +451,7 @@ export default class Renderer {
         this.adaptive.reset();
         this.instance.setSize(this.sizes.width, this.sizes.height);
         this.cssInstance.setSize(this.sizes.width, this.sizes.height);
-        this.overlayInstance.setSize(this.sizes.width, this.sizes.height);
+        this.sizeGrain();
         this.applyPixelRatio();
     }
 
@@ -439,9 +459,6 @@ export default class Renderer {
         if (this.contextLost) return;
         this.updateResolution();
         this.application.camera.instance.updateProjectionMatrix();
-        if (this.uniforms) {
-            this.uniforms.u_time.value = Math.sin(this.time.current * 0.01);
-        }
 
         this.frameStats.beginGpu();
         if (this.sceneRender) {
@@ -454,13 +471,6 @@ export default class Renderer {
         if (!this.sceneRender) {
             this.cssInstance.render(this.cssScene, this.camera.instance);
         }
-        if (!this.effectsLow && !this.sceneRender) {
-            this.overlayInstance.render(
-                this.overlayScene,
-                this.camera.instance
-            );
-        }
-        this.overlay.position.copy(this.camera.instance.position);
 
         if (this.debugEnabled && this.time.elapsed % 1000 < this.time.delta) {
             const fps = Math.round(1000 / Math.max(1, this.time.delta));

@@ -1650,3 +1650,100 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     max-width: min(460px, calc(100vw - 28px));
     font-size: 10px;
 }
+
+/* the room's film grain: a noise tile under soft light, moved to a new
+   offset every 1/120 s so each frame shows fresh noise, like the per frame
+   shader did. transform only, so it stays on the compositor */
+.film-grain {
+    position: absolute;
+    top: -256px;
+    left: -256px;
+    width: calc(100% + 512px);
+    height: calc(100% + 512px);
+    mix-blend-mode: soft-light;
+    pointer-events: none;
+    z-index: 3;
+    will-change: transform;
+    animation: film-grain 0.2s steps(1) infinite;
+}
+
+@keyframes film-grain {
+    0% {
+        transform: translate(0px, 0px);
+    }
+    4.167% {
+        transform: translate(-214px, -91px);
+    }
+    8.333% {
+        transform: translate(-28px, 222px);
+    }
+    12.5% {
+        transform: translate(-124px, 152px);
+    }
+    16.667% {
+        transform: translate(-22px, -100px);
+    }
+    20.833% {
+        transform: translate(-119px, 250px);
+    }
+    25% {
+        transform: translate(191px, 151px);
+    }
+    29.167% {
+        transform: translate(36px, -202px);
+    }
+    33.333% {
+        transform: translate(131px, 193px);
+    }
+    37.5% {
+        transform: translate(224px, 181px);
+    }
+    41.667% {
+        transform: translate(3px, -156px);
+    }
+    45.833% {
+        transform: translate(-11px, 17px);
+    }
+    50% {
+        transform: translate(-185px, 219px);
+    }
+    54.167% {
+        transform: translate(151px, 116px);
+    }
+    58.333% {
+        transform: translate(-215px, 115px);
+    }
+    62.5% {
+        transform: translate(-64px, 122px);
+    }
+    66.667% {
+        transform: translate(-165px, -42px);
+    }
+    70.833% {
+        transform: translate(122px, 110px);
+    }
+    75% {
+        transform: translate(-16px, 77px);
+    }
+    79.167% {
+        transform: translate(8px, -235px);
+    }
+    83.333% {
+        transform: translate(181px, -54px);
+    }
+    87.5% {
+        transform: translate(-181px, -61px);
+    }
+    91.667% {
+        transform: translate(-238px, 200px);
+    }
+    95.833% {
+        transform: translate(-145px, 106px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .film-grain {
+        animation: none;
+    }
+}
