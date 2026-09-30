@@ -182,6 +182,9 @@ const NON_WHEEL_NAME_HINT_REGEX =
     /(trim|decal|dirt|dust|mud|grime|glass|window|windshield|body|door|hood|trunk|mirror|bumper|panel|steering|brake|disc|disk|rotor|caliper|hub|suspension)/i;
 const BRAKE_WHEEL_PART_HINT_REGEX = /(brake|disc|disk|rotor|caliper|hub)/i;
 const FIXED_BRAKE_PART_HINT_REGEX = /(brake|caliper|disc|disk|rotor)/i;
+// what the per wheel hub groups take, by material, and which of it is tyre
+const HUB_PART_REGEX = /tire|tyre|tread|rubber|brake|disc|disk|calip|rotor/i;
+const HUB_TYRE_REGEX = /tire|tyre|tread|rubber/i;
 const WHEEL_LINKED_ATTACHMENT_HINT_REGEX = /(rim|spoke)/i;
 const FRONT_HINTS = ['front', '_fl', '_fr', 'head', 'hood', 'grille'];
 const REAR_HINTS = ['rear', '_rl', '_rr', 'tail', 'trunk', 'exhaust'];
@@ -297,6 +300,8 @@ export default class RaceVehicle {
     root: THREE.Group;
     carPivot: THREE.Group;
     carModel: THREE.Group | null;
+    // the garage's stand while the car is shown there, else the pivot
+    modelHolder: THREE.Object3D | null = null;
     currentCarId: string;
     currentTuning: CarRaceConfig;
     cachedModels: Map<string, THREE.Group>;
@@ -3148,10 +3153,142 @@ export default class RaceVehicle {
             wheel.linkedVisuals.length = 0;
         });
         const roots = new Set<THREE.Object3D>();
+        this.groupHubParts(model, wheelRig).forEach((hub) => roots.add(hub));
         wheelRig.forEach((wheel) => roots.add(wheel.object));
         model.updateMatrixWorld(true);
         this.mergeUnder(model, roots);
         roots.forEach((root) => this.mergeUnder(root, roots));
+    }
+
+    // cuts the triangles inside each wheel box out of a mesh, one new mesh
+    // per wheel (same parent and material), the rest stays in the original
+    splitByWheel(mesh: THREE.Mesh, boxes: Array<THREE.Box3 | null>) {
+        const geometry = mesh.geometry;
+        const position = geometry.getAttribute('position');
+        const index = geometry.index;
+        const count = index ? index.count : position.count;
+        const lists: number[][] = boxes.map(() => []);
+        const rest: number[] = [];
+        const a = new THREE.Vector3();
+        const b = new THREE.Vector3();
+        const c = new THREE.Vector3();
+        for (let i = 0; i + 2 < count; i += 3) {
+            const tri = [0, 1, 2].map((k) => (index ? index.getX(i + k) : i + k));
+            a.fromBufferAttribute(position, tri[0]);
+            b.fromBufferAttribute(position, tri[1]);
+            c.fromBufferAttribute(position, tri[2]);
+            a.add(b).add(c).divideScalar(3).applyMatrix4(mesh.matrixWorld);
+            const at = boxes.findIndex((box) => box && box.containsPoint(a));
+            (at >= 0 ? lists[at] : rest).push(...tri);
+        }
+        const cut = (kept: number[]) => {
+            const part = new THREE.BufferGeometry();
+            Object.entries(geometry.attributes).forEach(([name, attribute]) =>
+                part.setAttribute(name, attribute)
+            );
+            part.setIndex(kept);
+            return part.toNonIndexed();
+        };
+        if (lists.every((list) => !list.length)) return [];
+        const pieces = lists.map((list, i) => {
+            if (!list.length) return null;
+            const piece = new THREE.Mesh(cut(list), mesh.material);
+            piece.name = `${mesh.name}-wheel${i}`;
+            piece.castShadow = mesh.castShadow;
+            piece.receiveShadow = mesh.receiveShadow;
+            mesh.parent?.add(piece);
+            piece.position.copy(mesh.position);
+            piece.quaternion.copy(mesh.quaternion);
+            piece.scale.copy(mesh.scale);
+            piece.updateMatrixWorld(true);
+            return piece;
+        });
+        if (rest.length) mesh.geometry = cut(rest);
+        else mesh.removeFromParent();
+        return pieces;
+    }
+
+    // brake discs, calipers and any tyre a model keeps outside its wheel
+    // nodes: they don't spin, but they belong with the wheel, not the body.
+    // one static group per wheel, merged apart from the body and left in
+    // place when the garage lowers or raises the body
+    groupHubParts(model: THREE.Object3D, wheelRig: WheelRig[]) {
+        const wheels = new Set(wheelRig.map((wheel) => wheel.object));
+        const underWheel = (object: THREE.Object3D) => {
+            for (let node: THREE.Object3D | null = object; node && node !== model; node = node.parent) {
+                if (wheels.has(node)) return true;
+            }
+            return false;
+        };
+        const hubs: THREE.Group[] = [];
+        const boxes = wheelRig.map((wheel) => {
+            const box = new THREE.Box3().setFromObject(wheel.object);
+            // discs and calipers sit a little inboard of the rim
+            return box.isEmpty() ? null : box.expandByScalar(0.08);
+        });
+        const candidates: THREE.Mesh[] = [];
+        model.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.isMesh && !underWheel(mesh)) candidates.push(mesh);
+        });
+        const box = new THREE.Box3();
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        const wheelSize = new THREE.Vector3();
+        const hubFor = (index: number) => {
+            if (!hubs[index]) {
+                const hub = new THREE.Group();
+                hub.name = `race-hub-${index}`;
+                hub.userData.raceHub = true;
+                model.add(hub);
+                hubs[index] = hub;
+            }
+            return hubs[index];
+        };
+        // a whole tyre goes on the wheel itself so it steers and spins with
+        // it, brakes and small rubber bits stay still
+        const partBox = new THREE.Box3();
+        const home = (index: number, mesh: THREE.Mesh) => {
+            const name = (mesh.material as THREE.Material).name || '';
+            mesh.updateMatrixWorld(true);
+            if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+            partBox.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld);
+            const tyre =
+                HUB_TYRE_REGEX.test(name) &&
+                !FIXED_BRAKE_PART_HINT_REGEX.test(name) &&
+                partBox.getSize(size).y >
+                    boxes[index]!.getSize(wheelSize).y * 0.6;
+            return tyre ? wheelRig[index].object : hubFor(index);
+        };
+        candidates.forEach((mesh) => {
+            if (Array.isArray(mesh.material)) return;
+            if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+            box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld);
+            box.getCenter(center);
+            box.getSize(size);
+            const index = boxes.findIndex((wheelBox) => {
+                if (!wheelBox || !wheelBox.containsPoint(center)) return false;
+                wheelBox.getSize(wheelSize);
+                return (
+                    size.x <= wheelSize.x &&
+                    size.y <= wheelSize.y &&
+                    size.z <= wheelSize.z
+                );
+            });
+            if (index >= 0) {
+                home(index, mesh).attach(mesh);
+                return;
+            }
+            // one tyre or brake mesh for the whole car (the crown's): the
+            // triangles in each wheel's space go with that wheel
+            if (!HUB_PART_REGEX.test(mesh.material.name || '')) return;
+            if (!boxes.some((wheelBox) => wheelBox && wheelBox.intersectsBox(box))) return;
+            this.splitByWheel(mesh, boxes).forEach((piece, i) => {
+                if (piece) home(i, piece).attach(piece);
+            });
+        });
+        model.updateMatrixWorld(true);
+        return hubs.filter(Boolean);
     }
 
     // weak gpus: cabin and engine bay parts can't be seen from the chase
@@ -3632,11 +3769,12 @@ export default class RaceVehicle {
     }
 
     swapModel(model: THREE.Group) {
+        const holder = this.modelHolder || this.carPivot;
         if (this.carModel && this.carModel !== model) {
-            this.carPivot.remove(this.carModel);
+            this.carModel.removeFromParent();
         }
         this.carModel = model;
-        this.carPivot.add(model);
+        holder.add(model);
         this.applyModelMetadata(model);
     }
 

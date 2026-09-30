@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import type { CarLook, PaintFinish } from './garage';
 import { rideOffsetMeters, STOCK_LOOK } from './garage';
+import { buildKitParts, kitPaint } from './bodyKit';
 
 // body paint material names per car, lowercase substrings
 const PAINT: Record<string, string[]> = {
@@ -315,137 +316,247 @@ const pivotBox = (model: THREE.Object3D, roots: Set<THREE.Object3D>) => {
     return box;
 };
 
-let kitMaterial: THREE.MeshStandardMaterial | null = null;
-const getKitMaterial = () => {
-    if (!kitMaterial) {
-        kitMaterial = new THREE.MeshStandardMaterial({
-            color: 0x15171a,
-            roughness: 0.35,
-            metalness: 0.4,
-        });
-    }
-    return kitMaterial;
+// the body's top surface over the back of the car, looked at from above:
+// the highest point in each 1 cm cell, in the parent frame. one pass over
+// the triangles, where a ray per sample took seconds on the big merged
+// meshes. glass, shadows, wheels and the kit itself don't count
+const topField = (
+    model: THREE.Object3D,
+    roots: Set<THREE.Object3D>,
+    width: number,
+    length: number
+) => {
+    const cell = 0.01;
+    const x0 = -width / 2;
+    const z0 = -length / 2 - 0.5;
+    const nx = Math.ceil(width / cell) + 1;
+    const nz = Math.ceil(2.1 / cell) + 1;
+    const top = new Float32Array(nx * nz).fill(-Infinity);
+    model.updateMatrixWorld(true);
+    const toParent = new THREE.Matrix4();
+    const inverseParent = model.parent
+        ? new THREE.Matrix4().copy(model.parent.matrixWorld).invert()
+        : new THREE.Matrix4();
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.visible || Array.isArray(mesh.material)) return;
+        if (child.userData.garageKit || /shadow/i.test(mesh.name)) return;
+        if ((mesh.material as THREE.Material).transparent) return;
+        if (underAny(mesh, roots, model)) return;
+        const position = mesh.geometry.getAttribute('position');
+        if (!position) return;
+        toParent.multiplyMatrices(inverseParent, mesh.matrixWorld);
+        const index = mesh.geometry.index;
+        const count = index ? index.count : position.count;
+        for (let i = 0; i + 2 < count; i += 3) {
+            a.fromBufferAttribute(position, index ? index.getX(i) : i).applyMatrix4(toParent);
+            b.fromBufferAttribute(position, index ? index.getX(i + 1) : i + 1).applyMatrix4(toParent);
+            c.fromBufferAttribute(position, index ? index.getX(i + 2) : i + 2).applyMatrix4(toParent);
+            const minX = Math.max(0, Math.floor((Math.min(a.x, b.x, c.x) - x0) / cell));
+            const maxX = Math.min(nx - 1, Math.ceil((Math.max(a.x, b.x, c.x) - x0) / cell));
+            const minZ = Math.max(0, Math.floor((Math.min(a.z, b.z, c.z) - z0) / cell));
+            const maxZ = Math.min(nz - 1, Math.ceil((Math.max(a.z, b.z, c.z) - z0) / cell));
+            if (minX > maxX || minZ > maxZ) continue;
+            const d = (b.z - c.z) * (a.x - c.x) + (c.x - b.x) * (a.z - c.z);
+            if (Math.abs(d) < 1e-12) continue;
+            for (let iz = minZ; iz <= maxZ; iz++) {
+                const z = z0 + iz * cell;
+                for (let ix = minX; ix <= maxX; ix++) {
+                    const x = x0 + ix * cell;
+                    const u = ((b.z - c.z) * (x - c.x) + (c.x - b.x) * (z - c.z)) / d;
+                    const v = ((c.z - a.z) * (x - c.x) + (a.x - c.x) * (z - c.z)) / d;
+                    const w = 1 - u - v;
+                    if (u < -1e-4 || v < -1e-4 || w < -1e-4) continue;
+                    const y = u * a.y + v * b.y + w * c.y;
+                    const k = iz * nx + ix;
+                    if (y > top[k]) top[k] = y;
+                }
+            }
+        }
+    });
+    return (x: number, z: number) => {
+        const ix = Math.round((x - x0) / cell);
+        const iz = Math.round((z - z0) / cell);
+        if (ix < 0 || iz < 0 || ix >= nx || iz >= nz) return null;
+        const y = top[iz * nx + ix];
+        return Number.isFinite(y) ? y : null;
+    };
 };
 
-// a ducktail lip or a gt wing on the boot, sized from the car's box. built in
-// the parent frame (forward is +z) and moved into the model's
+// a ducktail or a gt wing shaped on the boot (bodyKit.ts). the boot is found
+// with rays straight down on the body, in the parent frame, and the kit is
+// moved into the model's frame
 const buildKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler']
+    kind: CarLook['spoiler'],
+    paint: THREE.Material | null
 ) => {
     // mesh boxes blow up under the models' rotations, so width and length
-    // come from the measured body size and the boot from rays on the mesh
+    // come from the measured body size
     const body = model.userData.raceBodySize as number[] | undefined;
     const fallback = pivotBox(model, roots).getSize(new THREE.Vector3());
-    const size = new THREE.Vector3(
-        body ? body[0] : fallback.x,
-        body ? body[1] : fallback.y,
-        body ? body[2] : fallback.z
-    );
-    model.updateMatrixWorld(true);
-    const parentMatrix = model.parent
-        ? model.parent.matrixWorld
-        : new THREE.Matrix4();
-    const inverseParent = new THREE.Matrix4().copy(parentMatrix).invert();
-    const raycaster = new THREE.Raycaster();
-    const down = new THREE.Vector3(0, -1, 0).transformDirection(parentMatrix);
-    // highest body point straight down at (0, z) in the parent frame
-    const heightAt = (z: number) => {
-        raycaster.set(
-            new THREE.Vector3(0, 20, z).applyMatrix4(parentMatrix),
-            down
-        );
-        const hit = raycaster
-            .intersectObject(model, true)
-            .find(
-                (h) =>
-                    !h.object.userData.garageKit &&
-                    !/shadow/i.test(h.object.name) &&
-                    !((h.object as THREE.Mesh).material as THREE.Material)
-                        .transparent &&
-                    !underAny(h.object, roots, model)
-            );
-        return hit ? hit.point.clone().applyMatrix4(inverseParent).y : null;
-    };
-    // step forward from behind the car to its rear edge
-    let rear = -size.z / 2;
-    for (let z = -size.z / 2 - 0.4; z < 0; z += 0.04) {
-        if (heightAt(z) !== null) {
-            rear = z;
-            break;
-        }
-    }
-    let boot = -Infinity;
-    for (let z = rear; z < rear + 0.45; z += 0.05) {
-        const y = heightAt(z);
-        if (y !== null) boot = Math.max(boot, y);
-    }
-    if (!Number.isFinite(boot)) boot = size.y * 0.6;
-    const group = new THREE.Group();
-    const material = getKitMaterial();
-    const span = size.x * (kind === 'wing' ? 0.86 : 0.78);
-    if (kind === 'ducktail') {
-        const lip = new THREE.Mesh(
-            new THREE.BoxGeometry(span, 0.012, 0.11),
-            material
-        );
-        lip.position.set(0, boot + 0.02, rear + size.z * 0.05);
-        lip.rotation.x = -0.35;
-        group.add(lip);
-    } else {
-        const height = 0.3;
-        const z = rear + size.z * 0.07;
-        const blade = new THREE.Mesh(
-            new THREE.BoxGeometry(span, 0.018, 0.27),
-            material
-        );
-        blade.position.set(0, boot + height, z - 0.03);
-        blade.rotation.x = -0.14;
-        group.add(blade);
-        [-1, 1].forEach((side) => {
-            const upright = new THREE.Mesh(
-                new THREE.BoxGeometry(0.025, height, 0.1),
-                material
-            );
-            upright.position.set(side * span * 0.32, boot + height / 2, z);
-            group.add(upright);
-            const plate = new THREE.Mesh(
-                new THREE.BoxGeometry(0.012, 0.12, 0.32),
-                material
-            );
-            plate.position.set(
-                side * span * 0.5,
-                boot + height - 0.01,
-                z - 0.03
-            );
-            group.add(plate);
-        });
-    }
+    const width = body ? body[0] : fallback.x;
+    const length = body ? body[2] : fallback.z;
+    const surface = topField(model, roots, width, length);
+    const group = buildKitParts(kind, surface, width, length, paint);
     group.traverse((child) => {
         child.userData.garageKit = true;
-        (child as THREE.Mesh).castShadow = true;
     });
     group.applyMatrix4(new THREE.Matrix4().copy(model.matrix).invert());
     group.name = 'garage-kit';
     return group;
 };
 
+// the body's paint material as it is now (the garage swaps in copies)
+const bodyPaint = (
+    model: THREE.Object3D,
+    carId: string,
+    roots: Set<THREE.Object3D>
+) => {
+    let found: THREE.Material | null = null;
+    model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (found || !mesh.isMesh || Array.isArray(mesh.material)) return;
+        if (child.userData.garageKit || underAny(mesh, roots, model)) return;
+        if (isPaint(carId, (mesh.material as THREE.Material).name || ''))
+            found = mesh.material as THREE.Material;
+    });
+    return found;
+};
+
 const setKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler']
+    kind: CarLook['spoiler'],
+    carId: string
 ) => {
+    const paint = bodyPaint(model, carId, roots);
     const old = model.getObjectByName('garage-kit');
-    if (old && old.userData.kind === kind) return;
+    if (old && old.userData.kind === kind) {
+        // a repaint swaps the body's material, the ducktail follows it
+        const tail = old.getObjectByName('garage-ducktail') as THREE.Mesh | undefined;
+        if (tail && paint) kitPaint(paint, tail.material as THREE.Material);
+        return;
+    }
     if (old) {
         old.removeFromParent();
         old.traverse((child) => (child as THREE.Mesh).geometry?.dispose());
     }
     if (kind === 'none') return;
-    const kit = buildKit(model, roots, kind);
+    const kit = buildKit(model, roots, kind, paint);
     kit.userData.kind = kind;
     model.add(kit);
+};
+
+type Part = {
+    geometry: THREE.BufferGeometry;
+    material: THREE.Material | THREE.Material[];
+    castShadow: boolean;
+    // mesh to its model's frame
+    matrix: THREE.Matrix4;
+};
+
+// a wheel node's meshes in its model's frame
+const wheelParts = (model: THREE.Object3D, root: THREE.Object3D) => {
+    const toModel = new THREE.Matrix4().copy(model.matrixWorld).invert();
+    const parts: Part[] = [];
+    root.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || child.userData.garageRim) return;
+        parts.push({
+            geometry: mesh.geometry,
+            material: mesh.material,
+            castShadow: mesh.castShadow,
+            matrix: new THREE.Matrix4().multiplyMatrices(toModel, mesh.matrixWorld),
+        });
+    });
+    return parts;
+};
+
+const partsBox = (parts: Part[]) => {
+    const box = new THREE.Box3();
+    parts.forEach((part) => {
+        if (!part.geometry.boundingBox) part.geometry.computeBoundingBox();
+        box.union(part.geometry.boundingBox!.clone().applyMatrix4(part.matrix));
+    });
+    return box;
+};
+
+// the triangles on one side of the car, for a donor node holding both
+// wheels of an axle. kept per geometry and side, clones share them
+const halves = new WeakMap<THREE.BufferGeometry, Map<string, THREE.BufferGeometry | null>>();
+const sideGeometry = (
+    geometry: THREE.BufferGeometry,
+    toParent: THREE.Matrix4,
+    side: number
+) => {
+    const key = `${side}:${toParent.elements.map((e) => e.toFixed(4)).join(',')}`;
+    let cache = halves.get(geometry);
+    if (!cache) {
+        cache = new Map();
+        halves.set(geometry, cache);
+    }
+    if (cache.has(key)) return cache.get(key)!;
+    const position = geometry.getAttribute('position');
+    const index = geometry.index;
+    const count = index ? index.count : position.count;
+    const kept: number[] = [];
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    for (let i = 0; i + 2 < count; i += 3) {
+        const i0 = index ? index.getX(i) : i;
+        const i1 = index ? index.getX(i + 1) : i + 1;
+        const i2 = index ? index.getX(i + 2) : i + 2;
+        a.fromBufferAttribute(position, i0);
+        b.fromBufferAttribute(position, i1);
+        c.fromBufferAttribute(position, i2);
+        const x = a.add(b).add(c).divideScalar(3).applyMatrix4(toParent).x;
+        if (Math.sign(x) === side) kept.push(i0, i1, i2);
+    }
+    let half: THREE.BufferGeometry | null = null;
+    if (kept.length) {
+        const cut = new THREE.BufferGeometry();
+        Object.entries(geometry.attributes).forEach(([name, attribute]) =>
+            cut.setAttribute(name, attribute)
+        );
+        cut.setIndex(kept);
+        // only the kept vertices, so its bounds are the one wheel's
+        half = cut.toNonIndexed();
+        half.computeBoundingBox();
+        half.computeBoundingSphere();
+    }
+    cache.set(key, half);
+    return half;
+};
+
+// a donor wheel's parts for one side: as they are for a single wheel, cut
+// down when the node spans the axle
+const sidePart = (donor: THREE.Object3D, parts: Part[], side: number) => {
+    const toParent = new THREE.Matrix4().compose(
+        new THREE.Vector3(),
+        donor.quaternion,
+        donor.scale
+    );
+    const box = partsBox(parts);
+    if (box.isEmpty()) return [];
+    const size = box.getSize(new THREE.Vector3()).applyMatrix4(toParent);
+    const center = box.getCenter(new THREE.Vector3()).applyMatrix4(toParent);
+    if (Math.abs(size.x) < 0.9) return Math.sign(center.x) === side ? parts : [];
+    return parts
+        .map((part) => {
+            const geometry = sideGeometry(
+                part.geometry,
+                toParent.clone().multiply(part.matrix),
+                side
+            );
+            return geometry ? { ...part, geometry } : null;
+        })
+        .filter((part): part is Part => part !== null);
 };
 
 // rims from another car: its wheel meshes, scaled to this car's wheel size
@@ -481,70 +592,52 @@ const setWheels = (
     if (!donorRoots.length) return;
     model.updateMatrixWorld(true);
     donor.updateMatrixWorld(true);
-    // centers and radii in each model's own frame
-    const measure = (m: THREE.Object3D, root: THREE.Object3D) => {
-        const box = new THREE.Box3();
-        const toModel = new THREE.Matrix4().copy(m.matrixWorld).invert();
-        root.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (!mesh.isMesh || child.userData.garageRim) return;
-            if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-            box.union(
-                mesh.geometry
-                    .boundingBox!.clone()
-                    .applyMatrix4(
-                        new THREE.Matrix4().multiplyMatrices(
-                            toModel,
-                            mesh.matrixWorld
-                        )
-                    )
-            );
-        });
-        return box;
-    };
-    const side = (m: THREE.Object3D, root: THREE.Object3D) => {
-        const center = measure(m, root).getCenter(new THREE.Vector3());
-        return Math.sign(center.clone().applyQuaternion(m.quaternion).x) || 1;
-    };
+    const toParent = (m: THREE.Object3D) =>
+        new THREE.Matrix4().compose(new THREE.Vector3(), m.quaternion, m.scale);
     roots.forEach((root) => {
         if (root.userData.garageDonor === donorId) return;
-        const mySide = side(model, root);
-        const source =
-            donorRoots.find((candidate) => side(donor, candidate) === mySide) ||
-            donorRoots[0];
-        const myBox = measure(model, root);
-        const theirBox = measure(donor, source);
-        const mySize = myBox
-            .getSize(new THREE.Vector3())
-            .applyQuaternion(model.quaternion);
+        const myParts = wheelParts(model, root);
+        const myBox = partsBox(myParts);
+        if (myBox.isEmpty()) return;
+        const mySide =
+            Math.sign(
+                myBox.getCenter(new THREE.Vector3()).applyMatrix4(toParent(model)).x
+            ) || 1;
+        // the donor wheel on the same side, cut to that side when the donor
+        // keeps a whole axle in one node (the amg one)
+        let theirParts: Part[] = [];
+        for (const candidate of donorRoots) {
+            theirParts = sidePart(donor, wheelParts(donor, candidate), mySide);
+            if (theirParts.length) break;
+        }
+        const theirBox = partsBox(theirParts);
+        if (theirBox.isEmpty()) return;
+        const mySize = myBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model));
         const theirSize = theirBox
             .getSize(new THREE.Vector3())
-            .applyQuaternion(donor.quaternion);
-        // diameter is the larger of the height and length in the parent frame
-        const myDiameter =
-            Math.max(Math.abs(mySize.y), Math.abs(mySize.z)) * model.scale.x;
-        const theirDiameter =
-            Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z)) *
-            donor.scale.x;
+            .applyMatrix4(toParent(donor));
+        // diameter is the larger of the height and length in the parent
+        // frame, width is across the car
+        const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
+        const theirDiameter = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
         if (!(myDiameter > 0 && theirDiameter > 0)) return;
-        // donor wheel frame -> donor model frame -> parent frame, rescaled
-        // about the wheel center -> this model -> this wheel root
+        const k = myDiameter / theirDiameter;
+        // the new rim and tyre take this car's tyre width, so they sit in the
+        // arch like the factory ones instead of poking out or sinking in
+        const kx = THREE.MathUtils.clamp(
+            Math.abs(mySize.x) / Math.max(1e-6, Math.abs(theirSize.x) * k),
+            0.7,
+            1.5
+        ) * k;
+        // donor model frame -> parent frame, rescaled about the wheel center
+        // -> this model -> this wheel root
         const theirCenter = theirBox.getCenter(new THREE.Vector3());
         const myCenter = myBox.getCenter(new THREE.Vector3());
-        const donorToParent = new THREE.Matrix4().compose(
-            new THREE.Vector3(),
-            donor.quaternion,
-            donor.scale
-        );
-        const parentToModel = new THREE.Matrix4()
-            .compose(new THREE.Vector3(), model.quaternion, model.scale)
-            .invert();
-        const k = myDiameter / theirDiameter;
         const transform = new THREE.Matrix4()
             .makeTranslation(myCenter.x, myCenter.y, myCenter.z)
-            .multiply(parentToModel)
-            .multiply(new THREE.Matrix4().makeScale(k, k, k))
-            .multiply(donorToParent)
+            .multiply(toParent(model).invert())
+            .multiply(new THREE.Matrix4().makeScale(kx, k, k))
+            .multiply(toParent(donor))
             .multiply(
                 new THREE.Matrix4().makeTranslation(
                     -theirCenter.x,
@@ -556,22 +649,15 @@ const setWheels = (
             .copy(root.matrixWorld)
             .invert()
             .multiply(model.matrixWorld);
-        const donorToModelSpace = new THREE.Matrix4()
-            .copy(donor.matrixWorld)
-            .invert();
-        source.traverse((child) => {
-            const mesh = child as THREE.Mesh;
-            if (!mesh.isMesh || child.userData.garageRim) return;
-            const copy = new THREE.Mesh(mesh.geometry, mesh.material);
-            const inDonor = new THREE.Matrix4().multiplyMatrices(
-                donorToModelSpace,
-                mesh.matrixWorld
-            );
-            const matrix = new THREE.Matrix4()
+        theirParts.forEach((part) => {
+            const copy = new THREE.Mesh(part.geometry, part.material);
+            // a width change isn't a plain scale in the wheel's frame, so the
+            // matrix is set as it is
+            copy.matrixAutoUpdate = false;
+            copy.matrix
                 .multiplyMatrices(toRoot, transform)
-                .multiply(inDonor);
-            matrix.decompose(copy.position, copy.quaternion, copy.scale);
-            copy.castShadow = mesh.castShadow;
+                .multiply(part.matrix);
+            copy.castShadow = part.castShadow;
             copy.userData.garageRim = true;
             root.add(copy);
         });
@@ -623,7 +709,10 @@ export const applyCarLook = (
     options: LookOptions = {}
 ) => {
     const rootList = wheelRoots(model);
-    const roots = new Set(rootList);
+    // brakes and the like grouped per wheel stay with the wheels too
+    const hubs = model.children.filter((child) => child.userData.raceHub);
+    const roots = new Set([...rootList, ...hubs]);
+    const spinning = new Set(rootList);
     setWheels(
         model,
         rootList,
@@ -640,7 +729,7 @@ export const applyCarLook = (
             return;
         const name = (mesh.material as THREE.Material).name || '';
         const lower = name.toLowerCase();
-        const wheel = underAny(mesh, roots, model);
+        const wheel = underAny(mesh, spinning, model);
         if (!wheel && isPaint(carId, name)) {
             const touched =
                 (mesh.material as THREE.Material).userData.garageOwner ===
@@ -691,6 +780,54 @@ export const applyCarLook = (
     });
     // the kit is sized on the car at stock height, then moves with the body
     applyRide(model, roots, 0);
-    setKit(model, roots, look.spoiler);
+    setKit(model, roots, look.spoiler, carId);
     applyRide(model, roots, rideOffsetMeters(look));
+};
+
+// the homepage's car takes the look off the race's prepared model of the same
+// car: its wheel node names, then paint and ride height done here, and the
+// rims and body kit copied over. both are clones of one gltf scene, so a
+// part's transform under the root, or under a wheel node, means the same
+// thing in both. without every wheel node (the crown's split wheels are made
+// by the race) it gets the paint only
+export const copyCarLook = (
+    source: THREE.Object3D,
+    target: THREE.Object3D,
+    carId: string,
+    look: CarLook
+) => {
+    const meta = (source.userData.raceWheelMeta || []) as Array<{ objectName: string }>;
+    const names = meta.map((entry) => entry.objectName);
+    const complete = names.length > 0 && names.every((name) => target.getObjectByName(name));
+    target.userData.raceWheelMeta = complete ? meta : [];
+    applyCarLook(target, carId, {
+        ...look,
+        wheels: 'stock',
+        spoiler: 'none',
+        ride: complete ? look.ride : 0,
+    });
+    if (!complete) return;
+    names.forEach((name) => {
+        const from = source.getObjectByName(name)!;
+        const to = target.getObjectByName(name)!;
+        const rims = from.children.filter((child) => child.userData.garageRim);
+        if (!rims.length) return;
+        rims.forEach((rim) => to.add(rim.clone()));
+        to.children.forEach((child) => {
+            if (child.userData.garageRim) return;
+            if (child.userData.garageVisible === undefined)
+                child.userData.garageVisible = child.visible;
+            child.visible = false;
+        });
+        const toMesh = to as THREE.Mesh;
+        if (toMesh.isMesh && !to.userData.garageOwnMaterial) {
+            to.userData.garageOwnMaterial = toMesh.material;
+            const hidden = (toMesh.material as THREE.Material).clone();
+            hidden.visible = false;
+            toMesh.material = hidden;
+        }
+        to.userData.garageDonor = look.wheels;
+    });
+    const kit = source.getObjectByName('garage-kit');
+    if (kit) target.add(kit.clone());
 };
