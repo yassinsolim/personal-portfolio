@@ -56,6 +56,9 @@ const AUTO_DOWN_AFTER_MS = 4000;
 const AUTO_DOWN_GAP_MS = 8000;
 const AUTO_UP_AFTER_MS = 20000;
 const AUTO_UP_GAP_MS = 30000;
+// a barrier hit (m/s taken out at the contact) that bursts sparks and flashes
+const HIT_MIN_IMPACT = 1.5;
+const HIT_GAP_MS = 150;
 
 const freezeStatic = (root: THREE.Object3D) => {
     root.traverse((object) => {
@@ -123,6 +126,12 @@ export default class RaceVisuals {
     private wheelUp: THREE.Vector3;
     private away: THREE.Vector3;
     private light: THREE.Color;
+    // barrier sparks: fractional sparks owed, and the last frame's contact
+    private sparkDebt = 0;
+    private scraping = false;
+    private lastImpact = 0;
+    private lastHitAt = 0;
+    private hitPoint = new THREE.Vector3();
 
     // built when constructed, or with defer by running pending
     pending: Steps;
@@ -816,23 +825,50 @@ export default class RaceVisuals {
         const streak = Math.min(1, Math.max(0, (speedKph - 120) / 200));
         this.post?.setSpeed(Math.pow(streak, 1.25));
 
-        // sparks where the body scrapes a barrier
-        if (vehicle.barrierContact !== 0 && speedKph > 25) {
+        // sparks where the body grinds a barrier: a stream by the second while
+        // it scrapes, and a burst with a flash when it hits
+        if (vehicle.barrierContact !== 0 && speedKph > 20) {
             const frame = vehicle.trackFrame;
             this.away
                 .set(frame.leftX, 0, frame.leftZ)
                 .multiplyScalar(-vehicle.barrierContact);
-            const count = Math.min(
-                10,
-                2 + Math.round(speedKph / 40 + vehicle.impact * 2)
-            );
-            this.sparks.emit(
-                vehicle.barrierPoint,
-                vehicle.velocity,
-                this.away,
-                count
-            );
+            const ground = vehicle.position.y - vehicle.rideHeight;
+            const point = vehicle.barrierPoint;
+            const impact = vehicle.impact;
+            const now = this.application.time.elapsed;
+            // a scrape keeps touching and letting go: only a real hit flashes
+            if (
+                impact > HIT_MIN_IMPACT &&
+                (!this.scraping || impact > this.lastImpact * 1.5 + 0.5) &&
+                now - this.lastHitAt > HIT_GAP_MS
+            ) {
+                this.lastHitAt = now;
+                const strength = Math.min(1, impact / 12 + speedKph / 400);
+                this.sparks.burst(point, vehicle.velocity, this.away, strength, ground);
+                if (strength > 0.3) {
+                    this.hitPoint.set(point.x, ground, point.z);
+                    vehicle.smoke.emit(this.hitPoint, strength * 0.8, speedKph / 3.6);
+                    vehicle.smoke.emit(this.hitPoint, strength * 0.6, speedKph / 3.6);
+                }
+            }
+            this.sparkDebt += deltaSeconds * Math.min(150, 20 + speedKph * 0.7);
+            const count = Math.floor(this.sparkDebt);
+            this.sparkDebt -= count;
+            if (count > 0)
+                this.sparks.emit(
+                    point,
+                    vehicle.velocity,
+                    this.away,
+                    count,
+                    ground,
+                    Math.min(1, speedKph / 250)
+                );
+            this.scraping = true;
+        } else {
+            this.scraping = false;
+            this.sparkDebt = 0;
         }
+        this.lastImpact = vehicle.impact;
 
         // skid marks under sliding tires on the road
         const up = this.wheelUp
