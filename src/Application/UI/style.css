@@ -1801,3 +1801,51 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     letter-spacing: 0.02em;
     opacity: 0.85;
 }
+
+/* small screens: the panel folds to its menu button and the hint, clear of
+   the car, and opens over the scene on tap */
+.look-hint .look-hint-menu {
+    float: right;
+    margin: 0 0 6px 10px;
+    min-height: 30px;
+    padding: 4px 12px;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.9);
+    font-family: monospace;
+    font-size: 12px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.look-hint.folded {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 5px 10px 5px 5px;
+}
+
+.look-hint.folded .look-hint-menu {
+    float: none;
+    margin: 0;
+}
+
+.look-hint.folded > :not(.look-hint-menu):not(.look-hint-begin) {
+    display: none;
+}
+
+.look-hint.compact:not(.folded) {
+    max-height: calc(100dvh - 20px);
+}
+
+@media (pointer: coarse) {
+    .look-hint.compact button,
+    .look-hint.compact select,
+    .look-hint.compact input {
+        min-height: 30px;
+    }
+}

@@ -58,6 +58,9 @@ const runCase = async (n) => {
     pages.forEach((p, i) => p.on('pageerror', (e) => errors.push(`${i}: ${String(e).slice(0, 160)}`)));
     const enter = async (p) => {
         await p.goto(url, { waitUntil: 'domcontentloaded' });
+        // small screens fold the room panel to its menu button
+        await p.locator('.look-hint').waitFor({ timeout: 90000 });
+        if (await p.locator('.look-hint.folded').count()) await p.locator('.look-hint-menu').click();
         await p.getByRole('button', { name: /^Play Solo$/ }).waitFor({ timeout: 90000 });
         await p.waitForTimeout(600);
         await p.getByRole('button', { name: /^Play Solo$/ }).click();

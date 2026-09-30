@@ -39,10 +39,25 @@ const getAspect = (sizes: Sizes) => {
     return width / height;
 };
 
-// narrow viewports pull the wide views back so the car and desk still fit
-const narrowPullback = (sizes: Sizes) => Math.max(1, 1.25 / getAspect(sizes));
+// below 1.25 the idle widens, pulls back and aims nearer the car, fully by a
+// portrait phone: at 35 degrees a car can't fit across one from inside the room
+const NARROW_FROM = 1.25;
+const NARROW_FULL = 0.46;
+const NARROW_FOV = 52;
+const NARROW_SCALE = 1.5;
+const NARROW_AIM = 0.8;
+const BASE_FOV = 35;
 
-const HALF_FOV_TAN = Math.tan(THREE.MathUtils.degToRad(35) / 2);
+const narrowness = (sizes: Sizes) =>
+    THREE.MathUtils.clamp(
+        (NARROW_FROM - getAspect(sizes)) / (NARROW_FROM - NARROW_FULL),
+        0,
+        1
+    );
+
+// the room camera's vertical fov for this screen
+export const roomFov = (sizes: Sizes) =>
+    BASE_FOV + (NARROW_FOV - BASE_FOV) * narrowness(sizes);
 
 // the idle swing as henry tuned it, around the old focal point
 const OLD_IDLE_FOCAL = new THREE.Vector3(0, -1000, 0);
@@ -127,7 +142,8 @@ export class DeskKeyframe extends CameraKeyframeInstance {
         this.offset.y += (ny - this.offset.y) * 0.05;
 
         const direction = this.base.copy(DESK_POSITION).sub(DESK_FOCAL);
-        const fit = CLUSTER_WIDTH / 2 / (HALF_FOV_TAN * getAspect(this.sizes)) / 0.9;
+        const halfFovTan = Math.tan(THREE.MathUtils.degToRad(roomFov(this.sizes)) / 2);
+        const fit = CLUSTER_WIDTH / 2 / (halfFovTan * getAspect(this.sizes)) / 0.9;
         const distance = Math.max(direction.length(), fit);
         direction.setLength(distance);
         this.position
@@ -144,6 +160,8 @@ export class IdleKeyframe extends CameraKeyframeInstance {
     time: Time;
     application: Application;
     sizes: Sizes;
+    carModel: THREE.Object3D | null = null;
+    carCenter = new THREE.Vector3();
 
     constructor() {
         super(keys.idle);
@@ -152,17 +170,31 @@ export class IdleKeyframe extends CameraKeyframeInstance {
         this.sizes = this.application.sizes;
     }
 
+    // the car's middle, measured once per car (the idle doesn't move it)
+    getCarCenter() {
+        const model = this.application.world?.car?.model;
+        if (!model) return null;
+        if (model !== this.carModel) {
+            this.carModel = model;
+            new THREE.Box3().setFromObject(model).getCenter(this.carCenter);
+        }
+        return this.carCenter;
+    }
+
     update() {
         // henry's swing: x across the front over about 78 s, y drifting slowly
         const x = Math.sin((this.time.elapsed + 19000) * 0.00008) * -20000;
         const y = Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 + 9000;
-        // the low tier's idle is exactly today's, phones included
-        const scale = LOW_TIER ? IDLE_DISTANCE : IDLE_DISTANCE * narrowPullback(this.sizes);
+        const narrow = narrowness(this.sizes);
+        const scale = IDLE_DISTANCE + (NARROW_SCALE - IDLE_DISTANCE) * narrow;
+        this.focalPoint.copy(IDLE_AIM);
+        const car = narrow > 0 ? this.getCarCenter() : null;
+        if (car) this.focalPoint.lerp(car, NARROW_AIM * narrow);
         this.position
             .set(x, y, 20000)
             .sub(OLD_IDLE_FOCAL)
             .multiplyScalar(scale)
-            .add(IDLE_AIM);
+            .add(this.focalPoint);
     }
 }
 
