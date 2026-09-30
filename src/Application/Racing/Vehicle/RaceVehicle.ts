@@ -5333,20 +5333,23 @@ export default class RaceVehicle {
 
         if (this.grounded && this.smokeSpawnCooldown <= 0) {
             const speed = Math.hypot(this.speedMps, this.lateralSpeed);
-            if (rear > 0.18 && (onAsphalt(2) || onAsphalt(3))) {
-                this.getRearWheelWorldPositions().forEach((position) => {
-                    this.smoke.emit(position, rear, speed);
+            // from the contact patches: the wheel nodes' origins sit wherever
+            // each model put them, some in the middle of the car
+            const points = this.getWheelContactPoints();
+            if (rear > 0.18) {
+                [2, 3].forEach((index) => {
+                    if (onAsphalt(index)) this.smoke.emit(points[index], rear, speed);
                 });
             }
             // lockups smoke the fronts
-            if (front > 0.4 && (onAsphalt(0) || onAsphalt(1))) {
-                this.getFrontWheelWorldPositions().forEach((position) => {
-                    this.smoke.emit(position, front * 0.7, speed);
+            if (front > 0.4) {
+                [0, 1].forEach((index) => {
+                    if (onAsphalt(index))
+                        this.smoke.emit(points[index], front * 0.7, speed);
                 });
             }
             // dust off the grass
             if (speed > 6 && this.wheelSurfaces.some((kind) => kind === 'grass')) {
-                const points = this.getWheelContactPoints();
                 this.wheelSurfaces.forEach((kind, index) => {
                     if (kind !== 'grass') return;
                     this.smoke.emit(
@@ -5361,58 +5364,6 @@ export default class RaceVehicle {
         }
 
         this.smoke.update(deltaSeconds);
-    }
-
-    getFrontWheelWorldPositions() {
-        if (this.frontWheelRig.length > 0) {
-            return this.frontWheelRig.map((wheel) =>
-                wheel.object.getWorldPosition(new THREE.Vector3())
-            );
-        }
-        const frontOffset = Math.max(1.1, this.bodySize.z * 0.3);
-        const sideOffset = Math.max(0.5, this.bodySize.x * 0.22);
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(
-            this.carPivot.quaternion
-        );
-        const side = new THREE.Vector3()
-            .crossVectors(up, this.forward)
-            .normalize()
-            .multiplyScalar(sideOffset);
-        const base = this.position
-            .clone()
-            .addScaledVector(this.forward, frontOffset)
-            .addScaledVector(up, 0.08);
-        return [base.clone().add(side), base.clone().sub(side)];
-    }
-
-    getRearWheelWorldPositions() {
-        if (this.rearWheelRig.length > 0) {
-            return this.rearWheelRig.map((wheel) =>
-                wheel.object.getWorldPosition(new THREE.Vector3())
-            );
-        }
-
-        const rearOffset = Math.max(1.1, this.bodySize.z * 0.3);
-        const sideOffset = Math.max(0.5, this.bodySize.x * 0.22);
-        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.carPivot.quaternion);
-        const rear = this.forward.clone().multiplyScalar(-rearOffset);
-        const side = new THREE.Vector3()
-            .crossVectors(up, this.forward)
-            .normalize()
-            .multiplyScalar(sideOffset);
-
-        return [
-            this.position
-                .clone()
-                .add(rear)
-                .add(side)
-                .addScaledVector(up, 0.08),
-            this.position
-                .clone()
-                .add(rear)
-                .addScaledVector(side, -1)
-                .addScaledVector(up, 0.08),
-        ];
     }
 
     // tire contact points on the road, fl fr rl rr, from the physics geometry

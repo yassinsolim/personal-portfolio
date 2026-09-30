@@ -38,11 +38,12 @@ const vertexShader = /* glsl */ `
             gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
             return;
         }
-        // drag on the launch speed, then it drifts up and spreads
+        // drag on the launch speed, then it rolls along the road and lifts
+        // slowly as it spreads
         float drag = 1.6;
         vec3 travel = aVelocity * (1.0 - exp(-drag * age)) / drag;
-        vec3 center = aOrigin + travel + vec3(0.0, age * age * 0.35 + age * 0.4, 0.0);
-        float grow = size * (0.8 + t * 3.4);
+        float grow = size * (0.3 + t * 3.2);
+        vec3 center = aOrigin + travel + vec3(0.0, age * 0.22 + age * age * 0.06 + grow * 0.22, 0.0);
         float spin = seed * 6.2831 + age * (seed - 0.5) * 1.6;
         float c = cos(spin);
         float s = sin(spin);
@@ -206,12 +207,13 @@ export default class DriftSmoke {
                 43758.5453) %
             1;
         const jitter = Math.abs(seed);
-        origin[i3] = position.x + (jitter - 0.5) * 0.4;
-        origin[i3 + 1] = position.y - 0.15;
-        origin[i3 + 2] = position.z + (0.5 - jitter) * 0.4;
+        // position is where the tyre meets the road
+        origin[i3] = position.x + (jitter - 0.5) * 0.3;
+        origin[i3 + 1] = position.y + 0.04;
+        origin[i3 + 2] = position.z + (0.5 - jitter) * 0.3;
         const kick = Math.min(6, speedMps * 0.08);
         velocity[i3] = (jitter - 0.5) * kick;
-        velocity[i3 + 1] = 0.6 + intensity * 1.4;
+        velocity[i3 + 1] = 0.15 + intensity * 0.45;
         velocity[i3 + 2] = (0.5 - jitter) * kick;
         timing[index * 4] = this.time;
         timing[index * 4 + 1] =

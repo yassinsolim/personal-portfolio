@@ -1036,17 +1036,18 @@ export default class RaceManager {
             .applyQuaternion(visual.root.quaternion)
             .normalize();
         const side = this.tmpRemoteSide.crossVectors(up, forward).normalize();
+        // the synced position is the chassis point, about 0.3 m over the road
         return [
             visual.root.position
                 .clone()
                 .addScaledVector(forward, -1.15)
                 .addScaledVector(side, 0.62)
-                .addScaledVector(up, 0.08),
+                .addScaledVector(up, -0.28),
             visual.root.position
                 .clone()
                 .addScaledVector(forward, -1.15)
                 .addScaledVector(side, -0.62)
-                .addScaledVector(up, 0.08),
+                .addScaledVector(up, -0.28),
         ];
     }
 

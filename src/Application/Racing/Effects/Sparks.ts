@@ -1,48 +1,111 @@
 import * as THREE from 'three';
 
-// sparks off the barrier: short bright streaks stretched along their motion,
-// added on top so they bloom. same ring buffer idea as the smoke
-const CAPACITY = 320;
+// barrier sparks: tiny white hot heads with short soft tails that cool to
+// orange and red, fall, and skip once off the road, plus a flash of glow at
+// each hit. one instanced quad each, moved by the vertex shader and added on
+// top so the hot ones bloom a little. same ring buffer idea as the smoke
+const CAPACITY = 480;
 
 const vertexShader = /* glsl */ `
     attribute vec3 aOrigin;
     attribute vec3 aVelocity;
-    attribute vec2 aTiming;
+    // birth, life, the road's height under it, kind (0 spark, 1 flash)
+    attribute vec4 aTiming;
+    attribute float aSize;
     uniform float uTime;
-    varying float vAlpha;
     varying vec2 vUv;
+    varying float vT;
+    varying float vKind;
+    varying float vAspect;
+
+    const float G = 9.81;
 
     void main() {
         float age = uTime - aTiming.x;
         float life = aTiming.y;
         float t = age / life;
         vUv = uv;
+        vT = t;
+        vKind = aTiming.w;
+        vAspect = 1.0;
         if (t < 0.0 || t > 1.0 || life <= 0.0) {
-            vAlpha = 0.0;
             gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
             return;
         }
-        vec3 gravity = vec3(0.0, -9.81, 0.0);
-        vec3 velocity = aVelocity + gravity * age;
-        vec3 head = aOrigin + aVelocity * age + 0.5 * gravity * age * age;
-        vec3 tail = head - velocity * 0.035;
-        vec3 along = head - tail;
-        vec3 toCamera = normalize(cameraPosition - head);
-        vec3 across = normalize(cross(along, toCamera)) * 0.018;
-        // position.y runs 0..1 from tail to head, position.x is the side
-        vec3 world = mix(tail, head, position.y + 0.5) + across * position.x * 2.0;
-        vAlpha = 1.0 - t;
+        vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+        vec3 up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+        if (aTiming.w > 0.5) {
+            vec2 corner = position.xy * aSize * (0.7 + t * 0.6);
+            vec3 glow = aOrigin + right * corner.x + up * corner.y;
+            gl_Position = projectionMatrix * viewMatrix * vec4(glow, 1.0);
+            return;
+        }
+        // one skip off the road, then it lies there cooling
+        float ground = aTiming.z;
+        vec3 v0 = aVelocity;
+        float drop = max(0.0, aOrigin.y - ground);
+        float land = (v0.y + sqrt(v0.y * v0.y + 2.0 * G * drop)) / G;
+        vec3 head;
+        vec3 velocity;
+        if (age < land) {
+            head = aOrigin + v0 * age;
+            head.y -= 0.5 * G * age * age;
+            velocity = v0 - vec3(0.0, G * age, 0.0);
+        } else {
+            vec3 at = aOrigin + v0 * land;
+            at.y = ground;
+            vec3 skip = vec3(v0.x * 0.5, (G * land - v0.y) * 0.3, v0.z * 0.5);
+            float after = age - land;
+            head = at + skip * after;
+            head.y = max(ground + 0.01, head.y - 0.5 * G * after * after);
+            velocity = skip - vec3(0.0, G * after, 0.0);
+        }
+        // a short tail along the motion, round at both ends
+        float width = aSize * (1.0 - 0.45 * t);
+        vec3 streak = velocity * 0.012;
+        float len = length(streak);
+        vec3 dir = len > 1e-4 ? streak / len : up;
+        vec3 side = cross(dir, normalize(cameraPosition - head));
+        float sideLength = length(side);
+        side = sideLength > 1e-4 ? side / sideLength : right;
+        float total = len + width;
+        vec3 world = head - dir * len * 0.5 + dir * position.y * total + side * position.x * width;
+        vAspect = total / width;
         gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
     }
 `;
 
 const fragmentShader = /* glsl */ `
-    varying float vAlpha;
     varying vec2 vUv;
+    varying float vT;
+    varying float vKind;
+    varying float vAspect;
+
     void main() {
-        float core = 1.0 - abs(vUv.x - 0.5) * 2.0;
-        vec3 hot = mix(vec3(6.0, 1.6, 0.35), vec3(9.0, 6.0, 2.4), vUv.y);
-        gl_FragColor = vec4(hot * core * vAlpha, core * vAlpha);
+        float t = vT;
+        vec3 color;
+        float alpha;
+        if (vKind > 0.5) {
+            float r = length(vUv - 0.5) * 2.0;
+            alpha = exp(-r * r * 5.0) * (1.0 - t) * (1.0 - t);
+            color = mix(vec3(1.6, 1.25, 0.9), vec3(1.4, 0.55, 0.12), t);
+        } else {
+            // a capsule in units of the width: a bright core, soft edges
+            vec2 p = vec2(vUv.x - 0.5, (vUv.y - 0.5) * vAspect);
+            float halfLength = max(0.0, vAspect - 1.0) * 0.5;
+            float d = length(vec2(p.x, max(abs(p.y) - halfLength, 0.0)));
+            vec3 hot = mix(vec3(1.0, 0.93, 0.78), vec3(1.0, 0.5, 0.12), smoothstep(0.0, 0.45, t));
+            // the head burns brightest, the tail is where it was a moment ago
+            color = mix(hot, vec3(0.75, 0.16, 0.03), smoothstep(0.45, 1.0, t))
+                * mix(3.0, 0.9, t) * mix(0.35, 1.0, vUv.y);
+            alpha = smoothstep(0.5, 0.05, d) * (1.0 - t) * (1.0 - 0.5 * t);
+        }
+        if (alpha < 0.004) discard;
+        gl_FragColor = vec4(color, alpha);
+        // straight to the screen (no post chain) it still gets the tone
+        // map, so orange doesn't clip to yellow
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
     }
 `;
 
@@ -55,6 +118,7 @@ export default class Sparks {
     private origin: THREE.InstancedBufferAttribute;
     private velocity: THREE.InstancedBufferAttribute;
     private timing: THREE.InstancedBufferAttribute;
+    private size: THREE.InstancedBufferAttribute;
     private dirty: boolean;
     private seed: number;
 
@@ -73,15 +137,20 @@ export default class Sparks {
             3
         );
         this.timing = new THREE.InstancedBufferAttribute(
-            new Float32Array(CAPACITY * 2),
-            2
+            new Float32Array(CAPACITY * 4),
+            4
         );
-        [this.origin, this.velocity, this.timing].forEach((attr) =>
+        this.size = new THREE.InstancedBufferAttribute(
+            new Float32Array(CAPACITY),
+            1
+        );
+        [this.origin, this.velocity, this.timing, this.size].forEach((attr) =>
             attr.setUsage(THREE.DynamicDrawUsage)
         );
         this.geometry.setAttribute('aOrigin', this.origin);
         this.geometry.setAttribute('aVelocity', this.velocity);
         this.geometry.setAttribute('aTiming', this.timing);
+        this.geometry.setAttribute('aSize', this.size);
         this.geometry.instanceCount = CAPACITY;
         this.material = new THREE.ShaderMaterial({
             vertexShader,
@@ -107,38 +176,94 @@ export default class Sparks {
         return this.seed / 2147483647;
     }
 
-    // at a scrape point: along the car's travel, kicked away from the wall
+    private spawn(
+        x: number,
+        y: number,
+        z: number,
+        vx: number,
+        vy: number,
+        vz: number,
+        life: number,
+        size: number,
+        ground: number,
+        kind: number
+    ) {
+        const i = this.cursor;
+        this.cursor = (this.cursor + 1) % CAPACITY;
+        const origin = this.origin.array as Float32Array;
+        const velocity = this.velocity.array as Float32Array;
+        const timing = this.timing.array as Float32Array;
+        origin[i * 3] = x;
+        origin[i * 3 + 1] = y;
+        origin[i * 3 + 2] = z;
+        velocity[i * 3] = vx;
+        velocity[i * 3 + 1] = vy;
+        velocity[i * 3 + 2] = vz;
+        timing[i * 4] = this.time;
+        timing[i * 4 + 1] = life;
+        timing[i * 4 + 2] = ground;
+        timing[i * 4 + 3] = kind;
+        (this.size.array as Float32Array)[i] = size;
+        this.dirty = true;
+    }
+
+    // a scrape: sparks off the body where it grinds the barrier, dragged
+    // along the car's travel and kicked away from the wall. ground is the
+    // road's height there. force (0..1) makes them faster and hotter
     emit(
         point: THREE.Vector3,
         velocity: THREE.Vector3,
         away: THREE.Vector3,
-        count: number
+        count: number,
+        ground: number,
+        force = 0
     ) {
-        const origin = this.origin.array as Float32Array;
-        const speed = this.velocity.array as Float32Array;
-        const timing = this.timing.array as Float32Array;
         for (let n = 0; n < count; n++) {
-            const i = this.cursor;
-            this.cursor = (this.cursor + 1) % CAPACITY;
-            origin[i * 3] = point.x;
-            origin[i * 3 + 1] = point.y + 0.25 + this.random() * 0.3;
-            origin[i * 3 + 2] = point.z;
-            const drag = 0.45 + this.random() * 0.35;
-            const kick = 1.5 + this.random() * 4;
-            speed[i * 3] =
-                velocity.x * drag + away.x * kick + (this.random() - 0.5) * 3;
-            speed[i * 3 + 1] = 1 + this.random() * 3.5;
-            speed[i * 3 + 2] =
-                velocity.z * drag + away.z * kick + (this.random() - 0.5) * 3;
-            timing[i * 2] = this.time;
-            timing[i * 2 + 1] = 0.22 + this.random() * 0.35;
+            const drag = 0.35 + this.random() * 0.45;
+            const kick = 1.5 + this.random() * (3 + force * 5);
+            const spread = 2.5 + force * 3;
+            this.spawn(
+                point.x + (this.random() - 0.5) * 0.3,
+                ground + 0.12 + this.random() * 0.35,
+                point.z + (this.random() - 0.5) * 0.3,
+                velocity.x * drag + away.x * kick + (this.random() - 0.5) * spread,
+                0.4 + this.random() * (2.2 + force * 3),
+                velocity.z * drag + away.z * kick + (this.random() - 0.5) * spread,
+                0.25 + this.random() * (0.35 + force * 0.3),
+                0.01 + this.random() * 0.012,
+                ground,
+                0
+            );
         }
-        this.dirty = true;
+    }
+
+    // a hit: a spray of fast sparks and a flash where the body met the wall
+    burst(
+        point: THREE.Vector3,
+        velocity: THREE.Vector3,
+        away: THREE.Vector3,
+        strength: number,
+        ground: number
+    ) {
+        const force = THREE.MathUtils.clamp(strength, 0, 1);
+        this.emit(point, velocity, away, Math.round(14 + force * 40), ground, force);
+        this.spawn(
+            point.x + away.x * 0.15,
+            ground + 0.35,
+            point.z + away.z * 0.15,
+            0,
+            0,
+            0,
+            0.1 + force * 0.08,
+            0.7 + force * 1.3,
+            ground,
+            1
+        );
     }
 
     clear() {
         const timing = this.timing.array as Float32Array;
-        for (let i = 0; i < CAPACITY; i++) timing[i * 2 + 1] = 0;
+        for (let i = 0; i < CAPACITY; i++) timing[i * 4 + 1] = 0;
         this.timing.needsUpdate = true;
     }
 
@@ -149,6 +274,7 @@ export default class Sparks {
             this.origin.needsUpdate = true;
             this.velocity.needsUpdate = true;
             this.timing.needsUpdate = true;
+            this.size.needsUpdate = true;
             this.dirty = false;
         }
     }
