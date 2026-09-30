@@ -327,6 +327,20 @@ const App = () => {
         });
     }, []);
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
+    // the black cut in and out of the garage from the homepage button
+    const [garageFade, setGarageFade] = useState<'' | 'open' | 'home'>('');
+    const openGarageFromHome = useCallback(() => {
+        setGarageFade('open');
+        eventBus.dispatch('garage:fromHome', {});
+    }, []);
+    const garageToHome = useCallback(() => {
+        setGarageFade('home');
+        setGarageOpen(false);
+        setGarageFromCard(false);
+        eventBus.dispatch('race:garageOpen', { open: false });
+        // the cut is black before the room comes back
+        window.setTimeout(() => eventBus.dispatch('garage:backHome', {}), 280);
+    }, []);
 
     useEffect(() => {
         // holdHint: the loading screen says when (loader:showHint), after its
@@ -360,6 +374,16 @@ const App = () => {
         );
 
         eventBus.on('race:lobbyChoice', () => setLobbyChoiceOpen(true));
+        eventBus.on('race:garageFromHome', (state?: { failed?: boolean }) => {
+            if (!state?.failed) {
+                setGarageFromCard(false);
+                setLobbyChoiceOpen(false);
+                setGarageOpen(true);
+                eventBus.dispatch('race:garageOpen', { open: true });
+            }
+            window.setTimeout(() => setGarageFade(''), state?.failed ? 0 : 350);
+        });
+        eventBus.on('garage:home', () => window.setTimeout(() => setGarageFade(''), 300));
         eventBus.on('race:garageState', (state: GarageState) => setGarageState(state));
         eventBus.on('race:trackOutline', (state: { points?: number[][] } | undefined) => {
             if (state?.points?.length) setTrackOutline(state.points);
@@ -1132,8 +1156,27 @@ const App = () => {
                 />
             )}
             {raceModeActive && garageOpen && (
-                <Garage state={garageState} onClose={closeGarage} />
+                <Garage state={garageState} onClose={closeGarage} onHome={garageToHome} />
             )}
+            {showHint && !raceModeActive && !roomFocus && !deskView && !freeCamActive && !garageFade && (
+                <button
+                    type="button"
+                    className="garage-launch"
+                    data-prevent-click
+                    onClick={openGarageFromHome}
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21.7 7.1a6 6 0 0 1-7.9 6.7l-7.4 7.4a2.1 2.1 0 0 1-3-3l7.4-7.4a6 6 0 0 1 6.7-7.9l-3.6 3.6 1 2.9 2.9 1z" />
+                    </svg>
+                    <span>
+                        <strong>Garage</strong>
+                        <small>Customize your car</small>
+                    </span>
+                </button>
+            )}
+            <div className={`garage-fade ${garageFade ? 'on' : ''}`} data-prevent-click={garageFade ? '' : undefined}>
+                <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
+            </div>
             {raceModeActive && racePaused && (
                 <div className="race-menu-overlay" data-prevent-click>
                     <div className="race-menu-panel" data-prevent-click>

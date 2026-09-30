@@ -101,6 +101,8 @@ export default class RaceChaseCamera {
     viewIndex: number;
     farOverride = 0;
     garage = false;
+    // where the car stands in the garage scene, when it's there
+    garageAnchor: THREE.Vector3 | null = null;
     garageAngle = 0;
     garagePitch = 0;
     garageDragIdle = 10;
@@ -501,14 +503,17 @@ export default class RaceChaseCamera {
             this.garageAngle += dt * (this.garageDragIdle > 1.5 ? 0.22 : 0);
             this.garageDragIdle += dt;
             const radius = vehicle.bodySize.z * 0.95 + 2.2;
-            const angle = carYaw + Math.PI * 0.8 + this.garageAngle;
+            // on the garage's stand the car faces +z
+            const center = this.garageAnchor || anchor;
+            const angle =
+                (this.garageAnchor ? 0 : carYaw) + Math.PI * 0.8 + this.garageAngle;
             camera.position.set(
-                anchor.x + Math.sin(angle) * radius,
-                anchor.y + 1.25 + this.garagePitch * 2.5,
-                anchor.z + Math.cos(angle) * radius
+                center.x + Math.sin(angle) * radius,
+                center.y + 1.25 + this.garagePitch * 2.5,
+                center.z + Math.cos(angle) * radius
             );
             camera.up.set(0, 1, 0);
-            camera.lookAt(anchor.x, anchor.y + 0.45, anchor.z);
+            camera.lookAt(center.x, center.y + 0.45, center.z);
             this.initialized = false;
             return;
         }

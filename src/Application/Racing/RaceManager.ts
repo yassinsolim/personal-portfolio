@@ -9,6 +9,7 @@ import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
 import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
 import { carHasCalipers } from './Garage/carLook';
+import GarageScene, { GARAGE_ORIGIN } from './Garage/GarageScene';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
@@ -92,6 +93,15 @@ export default class RaceManager {
     lapTimer: LapTimer;
     sectors: SectorTimer;
     garageOpen = false;
+    garageScene: GarageScene | null = null;
+    // what the garage hid or swapped, put back when it closes
+    garageStash: {
+        hidden: THREE.Object3D[];
+        environment: THREE.Texture | null;
+        environmentIntensity: number;
+        fog: THREE.Fog | THREE.FogExp2 | null;
+        background: THREE.Color | THREE.Texture | null;
+    } | null = null;
     // the homepage transition parks the car while the ring builds around it,
     // so it sits exactly where the room's last frame shows it
     transitionHold = false;
@@ -392,6 +402,8 @@ export default class RaceManager {
             if (open === this.garageOpen) return;
             this.garageOpen = open;
             this.chaseCamera.garage = open;
+            if (open) this.showGarageScene();
+            else this.hideGarageScene();
             if (open) {
                 this.garageSetupAtOpen = JSON.stringify([this.vehicle.look, this.vehicle.tune]);
                 this.dispatchGarage();
@@ -536,6 +548,11 @@ export default class RaceManager {
 
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
+        if (this.garageOpen) {
+            this.garageOpen = false;
+            this.chaseCamera.garage = false;
+            this.hideGarageScene();
+        }
         // no realtime traffic outside race mode, the lobby is rejoined on return
         void this.multiplayer.suspend();
 
@@ -631,6 +648,58 @@ export default class RaceManager {
     publishGarage() {
         const { look, tune } = this.vehicle;
         this.multiplayer.setLocalLook(look, !isStockSetup(tune, look));
+    }
+
+    // the garage is its own room far under the track: the race world is
+    // hidden, the car moves onto the garage's stand with its lights and
+    // reflections, and the orbit camera circles the stand
+    showGarageScene() {
+        if (this.garageStash) return;
+        const garage = (this.garageScene ||= new GarageScene(this.raceRoot));
+        garage.build();
+        const scene = this.scene;
+        const hidden = this.raceRoot.children.filter(
+            (child) => child !== garage.root && child.visible
+        );
+        hidden.forEach((child) => (child.visible = false));
+        this.garageStash = {
+            hidden,
+            environment: scene.environment,
+            environmentIntensity: scene.environmentIntensity,
+            fog: scene.fog as THREE.Fog | THREE.FogExp2 | null,
+            background: scene.background as THREE.Color | THREE.Texture | null,
+        };
+        scene.environment = garage.buildEnvironment(this.application.renderer.instance);
+        scene.environmentIntensity = 0.8;
+        scene.fog = null;
+        scene.background = new THREE.Color(0x0b0c0e);
+        garage.root.visible = true;
+        // the car's floor contact is rideHeight under its pivot
+        garage.stand.position.set(0, this.vehicle.rideHeight, 0);
+        const model = this.vehicle.carModel;
+        if (model) garage.stand.add(model);
+        this.vehicle.modelHolder = garage.stand;
+        this.chaseCamera.garageAnchor = GARAGE_ORIGIN.clone().add(garage.stand.position);
+    }
+
+    hideGarageScene() {
+        const stash = this.garageStash;
+        if (!stash) return;
+        this.garageStash = null;
+        const garage = this.garageScene!;
+        garage.root.visible = false;
+        this.vehicle.modelHolder = null;
+        // back on the pivot
+        const model = this.vehicle.carModel;
+        if (model) this.vehicle.carPivot.add(model);
+        garage.stand.clear();
+        stash.hidden.forEach((child) => (child.visible = true));
+        const scene = this.scene;
+        scene.environment = stash.environment;
+        scene.environmentIntensity = stash.environmentIntensity;
+        scene.fog = stash.fog;
+        scene.background = stash.background;
+        this.chaseCamera.garageAnchor = null;
     }
 
     // what the garage screen shows: the current setup and the car's numbers,

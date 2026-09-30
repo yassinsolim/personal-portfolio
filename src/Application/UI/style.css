@@ -1610,7 +1610,7 @@ body.race-mode-touch .race-minimap {
 }
 
 /* the garage has the screen to itself */
-.garage-open > *:not(.garage) {
+.garage-open > *:not(.garage):not(.garage-fade) {
     visibility: hidden;
 }
 
@@ -1621,7 +1621,7 @@ body.race-transition-out #ui-app > * {
     transition: opacity 0.5s ease;
 }
 
-body.race-transition #ui-app > :not(.race-lobby-choice) {
+body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     opacity: 0 !important;
     pointer-events: none !important;
 }
@@ -1857,5 +1857,112 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     .look-hint.compact select,
     .look-hint.compact input {
         min-height: 30px;
+    }
+}
+
+/* the homepage's way into the garage: a lit pill in the corner, with a slow
+   glow so it's noticed */
+.garage-launch {
+    position: fixed;
+    right: max(18px, env(safe-area-inset-right));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 20px 11px 14px;
+    border: 1px solid rgba(255, 154, 60, 0.75);
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(34, 22, 12, 0.88), rgba(14, 15, 18, 0.88));
+    color: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 138, 22, 0.55);
+    animation: garage-launch-glow 2.8s ease-in-out 1.5s 4;
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.garage-launch:hover,
+.garage-launch:focus-visible {
+    transform: translateY(-2px);
+    border-color: #ffb35c;
+    background: linear-gradient(135deg, rgba(64, 36, 14, 0.92), rgba(18, 19, 22, 0.92));
+    outline: none;
+}
+
+.garage-launch svg {
+    width: 26px;
+    height: 26px;
+    padding: 7px;
+    border-radius: 50%;
+    background: #ff8a16;
+    fill: #1a1208;
+    flex: none;
+}
+
+.garage-launch span {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+
+.garage-launch strong {
+    font-size: 15px;
+    letter-spacing: 0.3px;
+}
+
+.garage-launch small {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+@keyframes garage-launch-glow {
+    0%,
+    100% {
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 138, 22, 0.55);
+    }
+    50% {
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 12px rgba(255, 138, 22, 0);
+    }
+}
+
+@media (max-width: 520px) {
+    .garage-launch {
+        padding: 9px 16px 9px 11px;
+    }
+    .garage-launch small {
+        display: none;
+    }
+}
+
+/* the cut to black going into the garage from the room and back */
+.garage-fade {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #050506;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.26s ease;
+}
+
+.garage-fade.on {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .garage-launch {
+        animation: none;
     }
 }
