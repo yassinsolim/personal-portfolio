@@ -122,7 +122,7 @@ const DRIFT_DOWNSHIFT_RPM = 0.54;
 export const DRIFT_TUNING = {
     startSlip: 0.12,
     endSlip: 0.05,
-    baseAngle: 0.35,
+    baseAngle: 0.45,
     extraAngle: 0.25,
     exitAngle: 0.3,
     steerGain: 0.8,
@@ -135,7 +135,19 @@ export const DRIFT_TUNING = {
     rearGripDrop: 0.16,
     // extra rear grip given up while the angle is under target, so a small
     // flick can still grow into the drift
-    buildGripDrop: 0.2,
+    buildGripDrop: 0.3,
+    // share of the target angle held with the throttle off: lifting winds
+    // the slide down, feathering holds it in between
+    liftTarget: 0.6,
+    // seconds the drift throttle takes to follow the pedal
+    driveTime: 0.4,
+    // share of the build-up grip drop that stays with the throttle off
+    buildFloor: 0.6,
+    // and per rad/s the angle is falling away under the target, which
+    // catches a slide that's snapping back while the throttle is feathered
+    catchGripDrop: 0.6,
+    gearRpm: DRIFT_GEAR_RPM,
+    downshiftRpm: DRIFT_DOWNSHIFT_RPM,
 };
 const INNER_STEP = 1 / 600;
 // slip denominators don't go below this, which keeps the tires stable (and
@@ -267,6 +279,14 @@ export default class VehiclePhysics {
     driftTuning: typeof DRIFT_TUNING;
     private driftAngle: number;
     private driftShortfall = 0;
+    // rad/s the slip angle is shrinking by under the target
+    private driftFalling = 0;
+    // the handbrake asks for a slide: standard's stability and traction
+    // control step back and the drift hold takes it until the car is straight
+    driftWindow = false;
+    private straightTime = 0;
+    // the throttle smoothed, so taps on a key feather the slide
+    driftDrive = 0;
     limiterActive: boolean;
     engineTorqueNow: number;
     manualShiftRequest: number;
@@ -362,6 +382,9 @@ export default class VehiclePhysics {
         this.tcsScale = 1;
         this.absScale = [1, 1, 1, 1];
         this.manualShiftRequest = 0;
+        this.driftActive = false;
+        this.driftWindow = false;
+        this.driftDrive = 0;
         this.gear = speed > 0.5 ? this.gearForSpeed(speed) : 1;
         this.pendingGear = this.gear;
         this.engineRpm = Math.max(
@@ -498,20 +521,23 @@ export default class VehiclePhysics {
         // there's rpm left to spin the rear. on the handbrake it doesn't shift
         // at all
         if (controls.handbrake > 0.1) return;
-        if (this.driftActive) {
+        const sliding =
+            this.driftActive ||
+            (Math.abs(this.getBodySlip()) > 0.15 && this.getSpeed() > 5);
+        if (sliding) {
             const speed = this.getSpeed();
             let want = 1;
             while (
                 want < gears &&
                 this.rpmForSpeed(speed, want) >
-                    spec.redlineRpm * DRIFT_GEAR_RPM
+                    spec.redlineRpm * this.driftTuning.gearRpm
             ) {
                 want++;
             }
             if (
                 want < this.gear &&
                 this.rpmForSpeed(speed, this.gear - 1) >
-                    spec.redlineRpm * DRIFT_DOWNSHIFT_RPM
+                    spec.redlineRpm * this.driftTuning.downshiftRpm
             ) {
                 want = this.gear;
             }
@@ -525,8 +551,16 @@ export default class VehiclePhysics {
             return;
         }
         if (this.gear > 1) {
+            // wheels locked by the handbrake or a stab of brake aren't the
+            // road speed, so downshifts go by whichever is faster
+            const omega = Math.max(
+                Math.abs(drivenOmega),
+                Math.abs(this.vx) / spec.wheelRadius
+            );
+            const current =
+                omega * Math.abs(this.gearRatio(this.gear)) * RAD_PER_S_TO_RPM;
             const lower =
-                Math.abs(drivenOmega) *
+                omega *
                 Math.abs(this.gearRatio(this.gear - 1)) *
                 RAD_PER_S_TO_RPM;
             const braking =
@@ -534,8 +568,8 @@ export default class VehiclePhysics {
             const kickdown =
                 controls.throttle > 0.95 &&
                 lower < spec.shiftUpRpm * 0.78 &&
-                rpmNow < spec.shiftDownRpm * 1.6;
-            if (rpmNow < spec.shiftDownRpm || braking || kickdown) {
+                current < spec.shiftDownRpm * 1.6;
+            if (current < spec.shiftDownRpm || braking || kickdown) {
                 this.startShift(this.gear - 1);
             }
         }
@@ -597,10 +631,11 @@ export default class VehiclePhysics {
     }
 
     // drift assist: once the rear is out, the steering picks the slip angle
-    // (straight ~20 degrees, into the corner up to ~34, out of it winds the
-    // slide down) and the front wheels are aimed where the front axle is
-    // going plus a correction toward that angle. the throttle is eased when
-    // the angle overshoots, so the car doesn't swap ends
+    // (straight ~26 degrees, into the corner up to ~35, out of it winds the
+    // slide down) and the throttle scales it (lifting winds it down too). the
+    // front wheels are aimed where the front axle is going plus a correction
+    // toward that angle, and the throttle is eased when the angle overshoots,
+    // so the car doesn't swap ends
     updateDrift(
         steerInput: number,
         speed: number,
@@ -609,7 +644,10 @@ export default class VehiclePhysics {
     ) {
         const beta = this.getBodySlip();
         const oversteer = beta * this.yawRate < 0;
-        if (!this.assists.drift || speed < 5 || this.vx < 2) {
+        const hold =
+            this.assists.drift ||
+            (this.driftWindow && this.assists.stability);
+        if (!hold || speed < 5 || this.vx < 2) {
             this.driftActive = false;
             return false;
         }
@@ -631,16 +669,18 @@ export default class VehiclePhysics {
         const turn = -Math.sign(beta) || 1;
         const into = Math.max(0, steerInput * turn);
         const out = Math.max(0, -steerInput * turn);
-        const targetAngle = clamp(
-            tuning.baseAngle +
-                tuning.extraAngle * into -
-                tuning.exitAngle * out,
-            0.02,
-            0.62
-        );
+        const targetAngle =
+            clamp(
+                tuning.baseAngle +
+                    tuning.extraAngle * into -
+                    tuning.exitAngle * out,
+                0.02,
+                0.62
+            ) * lerp(tuning.liftTarget, 1, this.driftDrive);
         this.driftTarget = targetAngle * -turn;
         const error = targetAngle - angle;
         this.driftShortfall = Math.max(0, error);
+        this.driftFalling = error > 0 ? Math.max(0, -angleRate) : 0;
         const correction = clamp(
             tuning.steerGain * error - tuning.steerDamping * angleRate,
             -0.35,
@@ -805,12 +845,29 @@ export default class VehiclePhysics {
         this.displacementZ = 0;
         if (!(dt > 0)) return;
         this.handbrakeInput = clamp(controls.handbrake, 0, 1);
+        this.updateDriftWindow(dt, controls);
         this.updateSteering(dt, steerInput);
         const steps = Math.max(1, Math.ceil(dt / INNER_STEP));
         const h = dt / steps;
         for (let i = 0; i < steps; i++) {
             this.substep(h, controls, surface);
         }
+    }
+
+    updateDriftWindow(dt: number, controls: PhysicsControls) {
+        const speed = this.getSpeed();
+        if (this.handbrakeInput > 0.5 && speed > 6 && this.vx > 2) {
+            this.driftWindow = true;
+            this.straightTime = 0;
+        } else if (this.driftWindow) {
+            const straight =
+                Math.abs(this.getBodySlip()) < 0.07 || speed < 4;
+            this.straightTime = straight ? this.straightTime + dt : 0;
+            if (this.straightTime > 0.6) this.driftWindow = false;
+        }
+        this.driftDrive +=
+            (clamp(controls.throttle, 0, 1) - this.driftDrive) *
+            clamp(dt / this.driftTuning.driveTime, 0, 1);
     }
 
     substep(dt: number, controls: PhysicsControls, surface: PhysicsSurface) {
@@ -824,15 +881,22 @@ export default class VehiclePhysics {
         );
         let brake = clamp(reverse ? controls.throttle : controls.brake, 0, 1);
         const handbrake = clamp(controls.handbrake, 0, 1);
+        // a held drift takes the smoothed pedal, so taps on a key feather it
+        if (this.driftActive && !reverse) throttle = this.driftDrive;
         if (throttle > 0.05 && brake > 0.35) throttle = 0;
         if (this.driftActive) throttle *= this.driftThrottle;
         // held in a drift, the rear gives up a little grip with the throttle,
         // the way heat and clutch kicks keep a lower torque car sliding
         const tuning = this.driftTuning;
         const shortfall = clamp(this.driftShortfall / 0.2, 0, 1);
+        const drive = this.driftDrive * this.driftThrottle;
+        const hold = lerp(tuning.buildFloor, 1, drive);
         const rearDriftGrip =
             1 -
-            (tuning.rearGripDrop + tuning.buildGripDrop * shortfall) * throttle;
+            tuning.rearGripDrop * drive -
+            (tuning.buildGripDrop * shortfall +
+                tuning.catchGripDrop * Math.min(1, this.driftFalling)) *
+                hold;
 
         const driveFront =
             spec.drive === 'FWD'
@@ -852,7 +916,12 @@ export default class VehiclePhysics {
         const speed = this.getSpeed();
         this.stabilityActive = false;
         let stabilityMoment = 0;
-        if (this.assists.stability && speed > 8 && surface.grounded) {
+        if (
+            this.assists.stability &&
+            !this.driftWindow &&
+            speed > 8 &&
+            surface.grounded
+        ) {
             const excess = Math.abs(bodySlip) - 0.13;
             if (excess > 0 && bodySlip * this.yawRate < 0) {
                 this.stabilityActive = true;
@@ -864,7 +933,7 @@ export default class VehiclePhysics {
                 throttle *= Math.max(0.25, 1 - excess * 5);
             }
         }
-        if (this.assists.tractionControl) {
+        if (this.assists.tractionControl && !this.driftWindow) {
             const drivenSlip = Math.max(
                 driveFront > 0
                     ? Math.max(this.slipRatio[0], this.slipRatio[1])

@@ -1275,6 +1275,12 @@ const App = () => {
                             restart lap. Gamepad: triggers, left stick, A handbrake,
                             Y reset.
                         </p>
+                        <p className="race-menu-controls">
+                            Drifting: turn in and tap Space, then feather W to
+                            hold the slide. Steer into the corner for more angle,
+                            out of it to straighten up. Off assists leave it all
+                            to you, the garage's drift build helps there.
+                        </p>
 
                         <p className="race-menu-credits">
                             Track: © OpenStreetMap contributors (ODbL).
