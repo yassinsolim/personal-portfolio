@@ -39,14 +39,19 @@ const getAspect = (sizes: Sizes) => {
     return width / height;
 };
 
-// below 1.25 the idle widens, pulls back and aims nearer the car, fully by a
+// below 1.5 the idle widens, pulls back and aims nearer the car, fully by a
 // portrait phone: at 35 degrees a car can't fit across one from inside the room
-const NARROW_FROM = 1.25;
+const NARROW_FROM = 1.5;
 const NARROW_FULL = 0.46;
 const NARROW_FOV = 52;
 const NARROW_SCALE = 1.5;
 const NARROW_AIM = 0.8;
 const BASE_FOV = 35;
+// under 1.9 the car drifts off the right edge at that end of the swing, so the
+// idle slides sideways there instead, most by 1.5 where the narrow ramp starts
+const SLIDE = 3600;
+const SLIDE_FROM = 1.9;
+const UP = new THREE.Vector3(0, 1, 0);
 
 const narrowness = (sizes: Sizes) =>
     THREE.MathUtils.clamp(
@@ -54,6 +59,15 @@ const narrowness = (sizes: Sizes) =>
         0,
         1
     );
+
+const slideFor = (sizes: Sizes) =>
+    SLIDE *
+    THREE.MathUtils.clamp(
+        (SLIDE_FROM - getAspect(sizes)) / (SLIDE_FROM - NARROW_FROM),
+        0,
+        1
+    ) *
+    (1 - narrowness(sizes));
 
 // the room camera's vertical fov for this screen
 export const roomFov = (sizes: Sizes) =>
@@ -162,6 +176,7 @@ export class IdleKeyframe extends CameraKeyframeInstance {
     sizes: Sizes;
     carModel: THREE.Object3D | null = null;
     carCenter = new THREE.Vector3();
+    side = new THREE.Vector3();
 
     constructor() {
         super(keys.idle);
@@ -183,7 +198,8 @@ export class IdleKeyframe extends CameraKeyframeInstance {
 
     update() {
         // henry's swing: x across the front over about 78 s, y drifting slowly
-        const x = Math.sin((this.time.elapsed + 19000) * 0.00008) * -20000;
+        const swing = Math.sin((this.time.elapsed + 19000) * 0.00008);
+        const x = swing * -20000;
         const y = Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 + 9000;
         const narrow = narrowness(this.sizes);
         const scale = IDLE_DISTANCE + (NARROW_SCALE - IDLE_DISTANCE) * narrow;
@@ -195,6 +211,17 @@ export class IdleKeyframe extends CameraKeyframeInstance {
             .sub(OLD_IDLE_FOCAL)
             .multiplyScalar(scale)
             .add(this.focalPoint);
+        const slide =
+            slideFor(this.sizes) *
+            THREE.MathUtils.smoothstep(Math.max(0, -swing), 0, 1);
+        if (slide > 0) {
+            this.side
+                .subVectors(this.focalPoint, this.position)
+                .cross(UP)
+                .setLength(slide);
+            this.position.add(this.side);
+            this.focalPoint.add(this.side);
+        }
     }
 }
 
