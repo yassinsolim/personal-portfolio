@@ -134,7 +134,8 @@ original downloads, unmodified, are in `models-src/`.
 - Mercedes-AMG GT63s Edition One (`static/models/Cars/mercedes_benz_gt63s_edition_one/`)
   - Title in the file: "Mercedes-Benz AMG GT63 S" (a Blender re-export with no author, source or
     license metadata, added in `00b5fe1`)
-  - Author, source and license: unknown. Not found on Sketchfab by name or triangle count (1.73M)
+  - Author: friends of Yassin, who made it and shared it with him directly (not named here). It
+    has no public source or license
   - Changes: brake discs simplified, plus the same web, lite and KTX2 steps as the other cars
 
 The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has

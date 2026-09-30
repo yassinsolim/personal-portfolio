@@ -43,7 +43,7 @@ const ModelCredits = () => (
                             {credit.license.label}
                         </External>
                     ) : (
-                        'source and license unknown'
+                        (credit.shared ?? 'source and license unknown')
                     )}
                     . Changes: {credit.changes}.
                     {credit.license?.shareAlike &&
