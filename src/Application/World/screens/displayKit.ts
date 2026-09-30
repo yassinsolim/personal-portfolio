@@ -421,7 +421,7 @@ const commonPrefix = (words: string[]) =>
         while (i < prefix.length && i < word.length && prefix[i] === word[i])
             i++;
         return prefix.slice(0, i);
-    });
+    }, words[0] ?? '');
 
 const completeWord = (word: string, candidates: string[]) => {
     const hits = candidates.filter(
