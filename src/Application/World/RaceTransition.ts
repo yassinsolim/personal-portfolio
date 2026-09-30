@@ -7,7 +7,7 @@ import { CameraKey } from '../Camera/Camera';
 import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
-import { finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
+import { copyCarLook, finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
 import { reportStage } from '../Utils/loadStages';
 
 // click the car in the room: it rocks on its springs and the camera swings
@@ -95,6 +95,9 @@ export default class RaceTransition {
     private lookMatrix: THREE.Matrix4;
     private releaseResolution: (() => void) | null = null;
 
+    // the homepage garage button's start: skips the fly, opens the garage
+    toGarage = false;
+
     constructor() {
         this.application = new Application();
         this.busy = false;
@@ -117,6 +120,15 @@ export default class RaceTransition {
             if (event instanceof KeyboardEvent && event.repeat) return;
             this.skip();
         };
+        // the homepage's garage button: into race mode without the fly, and
+        // straight into the garage. back from it lands on the room again
+        UIEventBus.on('garage:fromHome', () => void this.startGarage());
+        UIEventBus.on('garage:backHome', () => void this.backHome());
+        // the room's car wears the garage look once the race manager has it
+        UIEventBus.on('raceMode:changed', (state: { active?: boolean } | undefined) => {
+            if (!state?.active) void this.dressRoomCar();
+        });
+        UIEventBus.on('carChange', () => window.setTimeout(() => void this.dressRoomCar(), 0));
 
         // capture phase, ahead of the camera's own click handler
         document.addEventListener(
@@ -282,7 +294,7 @@ export default class RaceTransition {
         );
         const camera = this.application.camera;
         const baseY = car.position.y;
-        if (!reduced) this.rock(car, baseY);
+        if (!reduced && !this.toGarage) this.rock(car, baseY);
 
         // the race world builds while the car rocks, then the camera flies,
         // so the fly never stutters on the build
@@ -901,11 +913,57 @@ export default class RaceTransition {
     // undoes start() when the race never loaded, before anything moved
     abort() {
         this.busy = false;
+        this.toGarage = false;
         this.letResolutionGo();
         window.removeEventListener('keydown', this.skipHandler, true);
         window.removeEventListener('pointerdown', this.skipHandler, true);
         document.body.classList.remove('race-transition');
         UIEventBus.dispatch('race:transitionLock', { locked: false });
+    }
+
+    async startGarage() {
+        if (!this.canStart()) {
+            UIEventBus.dispatch('race:garageFromHome', { failed: true });
+            return;
+        }
+        this.toGarage = true;
+        const started = this.start();
+        this.skip();
+        await started;
+        // the race didn't load: the room stays
+        if (this.toGarage) {
+            this.toGarage = false;
+            UIEventBus.dispatch('race:garageFromHome', { failed: true });
+        }
+    }
+
+    // out of race mode onto the room's first view, the car dressed
+    async backHome() {
+        const manager = this.application.world.raceManager;
+        if (manager?.active) manager.exitRaceMode();
+        const camera = this.application.camera;
+        camera.externalControl = null;
+        camera.currentKeyframe = undefined;
+        camera.transition(CameraKey.IDLE, 0);
+        await this.dressRoomCar();
+        UIEventBus.dispatch('garage:home', {});
+    }
+
+    // the room car takes the saved look off the race's prepared model of
+    // the same car (wheel names, rims, body kit), see copyCarLook
+    async dressRoomCar() {
+        const manager = this.application.world.raceManager;
+        const room = this.application.world.car;
+        if (!manager || manager.active || !room?.model) return;
+        const vehicle = manager.vehicle;
+        const carId = vehicle.currentCarId;
+        if (room.currentCarId !== carId) return;
+        const model = await vehicle.ensurePreparedModel(carId);
+        const wheels = vehicle.look.wheels;
+        if (wheels !== 'stock' && wheels !== carId) await vehicle.ensurePreparedModel(wheels);
+        if (!model || manager.active || room.currentCarId !== carId || !room.model) return;
+        vehicle.applyLookTo(model, carId, vehicle.look);
+        copyCarLook(model, room.model, carId, vehicle.look);
     }
 
     finish(manager: RaceManager) {
@@ -938,7 +996,10 @@ export default class RaceTransition {
         window.setTimeout(() => body.remove('race-transition-out'), 700);
         // solo, quick join or an invite link, asked once the ring is built.
         // an invite link already picked the lobby
-        if (manager.active && !getInviteLobbyCode()) {
+        if (this.toGarage) {
+            this.toGarage = false;
+            if (manager.active) UIEventBus.dispatch('race:garageFromHome', {});
+        } else if (manager.active && !getInviteLobbyCode()) {
             UIEventBus.dispatch('race:lobbyChoice', {});
         }
     }

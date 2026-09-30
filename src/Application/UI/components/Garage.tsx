@@ -46,6 +46,8 @@ const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
 type Props = {
     state: GarageState | null;
     onClose: () => void;
+    // back out of race mode to the room, the car dressed as it is now
+    onHome: () => void;
 };
 
 type Tab = 'paint' | 'wheels' | 'body' | 'tuning';
@@ -210,7 +212,7 @@ const Slider = ({
 const signed = (value: number) =>
     `${value > 0 ? '+' : ''}${Math.round(value * 100)}`;
 
-const Garage = ({ state, onClose }: Props) => {
+const Garage = ({ state, onClose, onHome }: Props) => {
     const [tab, setTab] = useState<Tab>('paint');
     const [look, setLook] = useState<CarLook>(state?.look || STOCK_LOOK);
     const [tune, setTune] = useState<CarTune>(state?.tune || STOCK_TUNE);
@@ -614,6 +616,9 @@ const Garage = ({ state, onClose }: Props) => {
                         onClick={() => apply(STOCK_LOOK, STOCK_TUNE)}
                     >
                         Reset to factory
+                    </button>
+                    <button type="button" onClick={onHome}>
+                        Main screen
                     </button>
                     <button type="button" className="primary" onClick={onClose}>
                         Drive
