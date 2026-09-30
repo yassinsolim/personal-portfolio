@@ -57,6 +57,7 @@ export default class World {
     drawWhileWarming = false;
     warmUpSwap: (() => () => void) | null = null;
     intro: PipelineIntro | null = null;
+    dock: M3Dock | null = null;
 
     constructor() {
         this.application = new Application();
@@ -97,7 +98,7 @@ export default class World {
             });
             this.intro = intro;
             // the camera boots on the terminal screen the log is written on
-            new M3Dock();
+            this.dock = new M3Dock();
             // warmUp keeps drawing the stages, and compiles the real materials
             this.drawWhileWarming = true;
             this.warmUpSwap = () => intro.warmUpSwap();
