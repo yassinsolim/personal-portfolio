@@ -1,0 +1,197 @@
+{
+  "about": "room v2 setup. metres in room local three.js axes (x right, y up, z toward the chair), origin on the floor under the main screen's centre line. every key is described in setup.md",
+  "units": {"per_metre": 2763.957, "floor_y": -2984.2},
+  "car_box_three": {"min": [-4683, -2995, -10493], "max": [8446, 377, -4707]},
+
+  "desk": {
+    "w": 1.60, "d": 0.80, "h": 0.74, "top_t": 0.025, "x": 0.10, "z": 0.0,
+    "corner_r": 0.008, "edge_bevel": 0.002,
+    "frame": {
+      "leg_inset": 0.09,
+      "column": [[0.080, 0.056], [0.072, 0.049], [0.064, 0.042]],
+      "foot": {"l": 0.70, "w": 0.075, "h": 0.030, "lift": 0.006},
+      "motor": {"w": 0.085, "h": 0.045, "d": 0.070},
+      "rail": {"l": 0.62, "w": 0.050, "h": 0.028},
+      "beam": {"w": 0.050, "h": 0.030, "z": -0.05},
+      "control_box": {"w": 0.16, "h": 0.030, "d": 0.080, "x": -0.25, "z": -0.18},
+      "keypad": {"w": 0.11, "h": 0.022, "d": 0.045, "x": 0.64, "inset": 0.012}
+    }
+  },
+
+  "screens": {
+    "active": [0.5967, 0.3357],
+    "m1": {"center": [0.0, 1.01685, -0.1985], "tilt": 0.0, "yaw": 0.0, "portrait": false},
+    "m2": {"center": [0.0, 1.382908186, -0.167873877], "tilt": 10.0, "yaw": 0.0, "portrait": false},
+    "m3": {"center": [0.491306132, 1.1997, -0.124275268], "tilt": 0.0, "yaw": -25.0, "portrait": true}
+  },
+  "monitor": {
+    "bezel": {"top": 0.005, "side": 0.005, "chin": 0.009},
+    "panel_t": 0.0065, "edge_bevel": 0.0018,
+    "bulge": {"w": 0.38, "h": 0.22, "d": 0.034, "y": -0.035, "bevel": 0.012}
+  },
+
+  "arms": {
+    "clamp": {"plate": [0.070, 0.010, 0.095], "spine_t": 0.012, "under": 0.035, "knob_r": 0.022, "knob_h": 0.016},
+    "seg": {"w": 0.042, "h": 0.026, "joint_r": 0.024, "collar_h": 0.040, "head_depth": 0.045, "plate": 0.118, "plate_t": 0.004},
+    "single": {
+      "pole": [-0.20, -0.3525], "pole_r": 0.018, "pole_h": 0.22,
+      "arms": [{"screen": "m1", "collar_y": 0.93, "l1": 0.18, "l2": 0.15, "bend": "back"}]
+    },
+    "dual": {
+      "pole": [0.22, -0.3525], "pole_r": 0.020, "pole_h": 0.57,
+      "arms": [
+        {"screen": "m2", "collar_y": 1.28, "l1": 0.20, "l2": 0.16, "bend": "back"},
+        {"screen": "m3", "collar_y": 1.12, "l1": 0.20, "l2": 0.16, "bend": "back"}
+      ]
+    }
+  },
+
+  "pc": {
+    "case": {"w": 0.239, "h": 0.477, "d": 0.528},
+    "x": 0.625, "z": 0.06, "yaw": 0.0,
+    "base_h": 0.030, "foot_h": 0.008, "top_t": 0.018, "wall_t": 0.004, "tray_x": 0.094,
+    "glass": {"t": 0.004},
+    "board": {"h": 0.305, "w": 0.244, "top": 0.410, "rear": -0.254, "x": 0.086},
+    "gpu": {"l": 0.340, "h": 0.140, "t": 0.070, "top_y": 0.262, "rear": -0.258, "gap": 0.006, "cutout": 0.11, "fins": 22},
+    "pump": {"s": 0.072, "d": 0.048, "y": 0.335, "z": -0.13},
+    "ram": {"l": 0.133, "h": 0.054, "t": 0.008, "top": 0.398, "z": [-0.062, -0.047], "slots": [-0.0695, -0.062, -0.0545, -0.047]},
+    "radiator": {"l": 0.397, "w": 0.120, "t": 0.027, "x": -0.042, "z": 0.0},
+    "fan": {"size": 0.120, "t": 0.025, "blades": 9, "ring_w": 0.0022},
+    "rear_fan": {"x": -0.035, "y": 0.335},
+    "side_fans": {"x": 0.0815, "z": 0.17, "y": [0.11, 0.235, 0.36]},
+    "shroud": {"top": 0.135, "step_z": [0.03, 0.12]},
+    "tubes": {"r": 0.0058, "offset": [0.0, -0.013, -0.006]},
+    "led": {"w": 0.006}
+  },
+
+  "keyboard": {
+    "x": -0.04, "z": 0.205, "yaw": 0.0,
+    "case": [0.302, 0.116], "front_h": 0.018, "angle": 6.0, "corner_r": 0.006,
+    "bezel": [0.0081, 0.0090, 0.0118], "rim_depth": 0.006,
+    "u": 0.01905, "cap_gap": 0.0012, "cap_lift": 0.0035,
+    "row_h": [0.0098, 0.0088, 0.0082, 0.0085, 0.0085],
+    "row_tilt": [8.0, 4.0, 0.0, -4.0, -6.0],
+    "strap": {"w": 0.020, "t": 0.003, "l": 0.065, "clip_z": 0.016},
+    "cable": {"enabled": true, "x": 0.11, "r": 0.0022, "path": [[0.10, -0.02], [0.14, -0.20], [0.32, -0.33], [0.36, -0.38]]},
+    "uv_weight": 2.4
+  },
+  "mouse": {
+    "x": 0.36, "z": 0.20, "yaw": 3.0,
+    "l": 0.1213, "w": 0.0568, "h": 0.037,
+    "profile_t": [0.0, 0.03, 0.1, 0.25, 0.45, 0.64, 0.82, 0.93, 1.0],
+    "profile_w": [0.044, 0.053, 0.0585, 0.0600, 0.0590, 0.0625, 0.0605, 0.052, 0.030],
+    "profile_h": [0.0150, 0.0200, 0.0240, 0.0290, 0.0350, 0.0384, 0.0358, 0.0280, 0.0120],
+    "squareness": 2.4,
+    "wheel_t": 0.2, "wheel_r": 0.0105, "wheel_w": 0.007,
+    "side_buttons_t": [0.38, 0.5], "side_buttons_y": 0.0203,
+    "inlays": [[0.08, 0.55, 0.0026, 0.010], [0.2, 1.15, 0.0032, 0.013], [0.68, 0.5, 0.0026, 0.012]],
+    "uv_weight": 3.0
+  },
+  "pad": {"x": 0.35, "z": 0.19, "yaw": 0.0, "w": 0.42, "d": 0.33, "t": 0.004, "r": 0.008, "uv_weight": 0.8},
+  "headphones": {
+    "x": -0.47, "z": -0.10, "yaw": 8.0,
+    "cup": [0.110, 0.088], "cup_d": 0.030, "pad_t": 0.024, "span": 0.176,
+    "band_depth": 0.12, "band_w": 0.030, "band_t": 0.012,
+    "uv_weight": 2.0
+  },
+  "mug": {"x": 0.70, "z": 0.08, "r": 0.0425, "h": 0.095, "wall": 0.004, "coffee_gap": 0.014, "handle_yaw": -40.0, "uv_weight": 1.6},
+  "card": {"x": -0.62, "z": 0.14, "yaw": 23.0, "tilt": -15.0, "leg": 25.0, "w": 0.12, "h": 0.17, "t": 0.0006, "uv_weight": 14.0},
+  "flipper_spot": {"x": -0.36, "z": 0.21, "yaw": 20.0, "device": [0.100, 0.040, 0.025], "clear": [0.14, 0.08]},
+
+  "chair": {
+    "x": 0.22, "z": 1.28, "yaw": -32.0,
+    "seat_y": 0.47,
+    "base": {"r": 0.31, "hub_y": 0.10, "tip_y": 0.075},
+    "seat": {"w": 0.50, "h": 0.085, "d": 0.48, "r": 0.03},
+    "back": {"w": 0.44, "h": 0.34, "t": 0.055, "y0": 0.62, "lean": 0.06, "curve": 0.03},
+    "arms": {"enabled": true, "h": 0.2},
+    "uv_weight": 0.8
+  },
+
+  "shell": {
+    "floor_cuts_x": [-4.5, -3.0, -2.0, -1.4, -0.9, -0.5, -0.1, 0.3, 0.7, 1.1, 1.5, 2.0, 2.6, 3.4, 4.5],
+    "floor_cuts_z": [-4.5, -3.5, -2.6, -1.8, -1.2, -0.7, -0.3, 0.1, 0.5, 0.9, 1.3, 1.8, 2.6, 4.0],
+    "warp": {"center": [0.4, -0.6], "sigma": [2.2, 2.0], "gain": 3.0},
+    "uv_wall": 0.06, "uv_ceiling": 0.01
+  },
+
+  "uv": {"angle": 66.0, "gap_px": 8, "down_weight": 0.35, "back_weight": 0.5, "pc_right_weight": 0.6},
+
+  "palette": {
+    "desk_top": {"color": "#303033", "rough": 0.7},
+    "frame": {"color": "#29292c"},
+    "frame_dark": {"color": "#1c1c1e"},
+    "display": {"color": "#0e0f12"},
+    "monitor": {"color": "#232326"},
+    "screen_back": {"color": "#050505"},
+    "arm": {"color": "#2b2b2e"},
+    "arm_accent": {"color": "#46474b"},
+    "pc_white": {"color": "#e6e7e9"},
+    "pc_tray": {"color": "#d9dadd"},
+    "pc_dark": {"color": "#2a2b2e"},
+    "board": {"color": "#1b1b1d"},
+    "heatsink": {"color": "#6e7074"},
+    "gpu_shroud": {"color": "#393b40"},
+    "gpu_dark": {"color": "#1e1f22"},
+    "gpu_plate": {"color": "#85888d"},
+    "gpu_fins": {"color": "#4a4c50"},
+    "fan_white": {"color": "#ededee"},
+    "fan_blade": {"color": "#f4f5f7"},
+    "rad": {"color": "#e9e9ea"},
+    "tube": {"color": "#ececed"},
+    "pump": {"color": "#f1f1f2"},
+    "pump_face": {"color": "#18181a"},
+    "ram": {"color": "#1c1c1e"},
+    "cable": {"color": "#18181a"},
+    "kb_case": {"color": "#2c2c2f"},
+    "kb_plate": {"color": "#c9c9cc"},
+    "key": {"color": "#2a2a2d"},
+    "strap": {"color": "#f3c300"},
+    "mouse_shell": {"color": "#161618"},
+    "mouse_trim": {"color": "#1d1e21"},
+    "mouse_accent": {"color": "#505963"},
+    "pad": {"color": "#1f1f22"},
+    "hp_black": {"color": "#232326"},
+    "hp_grille": {"color": "#3a3b3f"},
+    "hp_trim": {"color": "#9a9ca1"},
+    "hp_pad": {"color": "#2d2d30"},
+    "mug": {"color": "#d8d2c8"},
+    "coffee": {"color": "#3b2414"},
+    "card": {"color": "#f2f0ea", "kind": "card"},
+    "card_back": {"color": "#e4e1d9"},
+    "chair_fabric": {"color": "#34343a"},
+    "chair_plastic": {"color": "#232326"},
+    "chair_metal": {"color": "#56575c"},
+    "floor": {"color": "#cecdd0"},
+    "wall": {"color": "#cdccd2"},
+    "screen": {"kind": "emit", "temp": 6800, "strength": 18.0, "one_sided": true, "display": "#101014"},
+    "led": {"kind": "emit", "temp": 7200, "strength": 26.0, "display": "#e8f0ff"},
+    "glass": {"color": "#e8f0ff", "kind": "glass", "alpha": 0.12}
+  },
+
+  "lighting": {
+    "ambient": {"size": [24.0, 24.0], "center": [0.3, 12.5, -0.6], "color": [1.0, 1.0, 1.0], "strength": 1674.5},
+    "key": {"size": [7.0, 7.0], "center": [0.2, 5.5, 0.0], "color": [1.0, 0.995, 0.99], "strength": 115.3},
+    "fill": {"size": [5.0, 2.5], "center": [-3.0, 1.8, 4.0], "aim": [0.3, 0.5, 0.0], "strength": 12.0},
+    "shell_albedo": {"floor": [0.6195, 0.6107, 0.6298], "wall": [0.6126, 0.6023, 0.6451]},
+    "exposure": 1.0,
+    "targets_srgb": {"floor": [0.725, 0.72, 0.73], "wall": [0.635, 0.63, 0.65]}
+  },
+
+  "bake": {
+    "samples": {"high": 128, "low": 512},
+    "margin": 16,
+    "atlas": {
+      "high": {"setup": 2048, "pc": 2048, "shell": 1024},
+      "low": {"setup": 1024, "pc": 1024, "shell": 512}
+    }
+  },
+
+  "export": {
+    "materials": {
+      "screen": {"color": [0.0, 0.0, 0.0]},
+      "led": {"color": [0.86, 0.92, 1.0]},
+      "glass": {"color": [0.9, 0.94, 1.0], "alpha": 0.12, "rough": 0.05}
+    }
+  }
+}
