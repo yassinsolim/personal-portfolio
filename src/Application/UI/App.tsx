@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
+import HybridLoader from './components/loaders/HybridLoader';
+import { loaderVariant } from './loaders/variant';
+import { isWebGLAvailable } from '../Utils/webgl';
 import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
@@ -240,6 +243,12 @@ const formatLapTime = (valueMs: number) => {
     )}.${String(milliseconds).padStart(3, '0')}`;
 };
 
+// the hybrid by default; ?loader=bios, or no webgl, gets the bios screen
+const Loader = () => {
+    const [variant] = useState(() => (isWebGLAvailable() ? loaderVariant() : 'bios'));
+    return variant === 'hybrid' ? <HybridLoader /> : <LoadingScreen />;
+};
+
 const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
@@ -310,8 +319,16 @@ const App = () => {
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
 
     useEffect(() => {
-        eventBus.on('loadingScreenDone', () => {
-            setShowHint(true);
+        // holdHint: the loading screen says when (loader:showHint), after its
+        // finish, so the panel doesn't crowd it. a timeout in case it never does
+        eventBus.on('loadingScreenDone', (data?: { holdHint?: boolean }) => {
+            if (!data?.holdHint) {
+                setShowHint(true);
+                return;
+            }
+            const show = () => setShowHint(true);
+            eventBus.on('loader:showHint', show);
+            window.setTimeout(show, 6000);
         });
 
         eventBus.on(
@@ -703,7 +720,7 @@ const App = () => {
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
-            <LoadingScreen />
+            <Loader />
             {showHint && (
                 <div
                     className={['look-hint', roomFocus && 'room-focused', deskView && !roomFocus && 'room-desk']

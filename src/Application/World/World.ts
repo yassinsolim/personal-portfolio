@@ -15,6 +15,9 @@ import { isLowPowerDevice } from '../Utils/Device';
 import { reportStage } from '../Utils/loadStages';
 import { afterFrame } from '../Racing/slicing';
 import type RaceManager from '../Racing/RaceManager';
+import PipelineIntro from './intro/PipelineIntro';
+import M3Dock from './intro/M3Dock';
+import { loaderVariant } from '../UI/loaders/variant';
 
 // the camera's intro move takes 2.5 s after the loading screen
 const RACE_PREFETCH_DELAY_MS = 3000;
@@ -49,6 +52,12 @@ export default class World {
     pendingRaceAction: RaceAction | null;
     // set while the room's textures and programs get ready (warmUp)
     warming: Promise<void> | null = null;
+    // the hybrid loading screen draws its pipeline stages while the room
+    // warms up, and has the real materials compiled instead of its stand ins
+    drawWhileWarming = false;
+    warmUpSwap: (() => () => void) | null = null;
+    intro: PipelineIntro | null = null;
+    dock: M3Dock | null = null;
 
     constructor() {
         this.application = new Application();
@@ -81,6 +90,19 @@ export default class World {
                 reportStage('homepage', 'ready', 1);
             });
         });
+        // the hybrid loading screen (the default), after the build handler
+        // above so its own 'ready' handler runs second
+        if (loaderVariant() === 'hybrid') {
+            const intro = new PipelineIntro({
+                onRelease: (catchUpMs) => UIEventBus.dispatch('hybrid:workDone', { catchUpMs }),
+            });
+            this.intro = intro;
+            // the camera boots on the terminal screen the log is written on
+            this.dock = new M3Dock();
+            // warmUp keeps drawing the stages, and compiles the real materials
+            this.drawWhileWarming = true;
+            this.warmUpSwap = () => intro.warmUpSwap();
+        }
     }
 
     // while the loading screen is up, the room's textures go to the gpu a
@@ -111,8 +133,13 @@ export default class World {
                 renderer.initTexture(texture);
             }
             reportStage('homepage', 'compile', 0);
+            // compileAsync gathers its materials right away, so a swap only
+            // needs to last for the call
+            const restore = this.warmUpSwap?.();
+            const compiling = renderer.compileAsync(this.scene, this.application.camera.instance);
+            restore?.();
             await Promise.race([
-                renderer.compileAsync(this.scene, this.application.camera.instance),
+                compiling,
                 new Promise((resolve) => window.setTimeout(resolve, COMPILE_WAIT_MS)),
             ]);
         } catch (error) {
@@ -217,6 +244,8 @@ export default class World {
     }
 
     update() {
+        // the intro's stages follow the camera, so after it and before the draw
+        if (this.intro) this.intro.update();
         this.screens.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
         if (this.flipper) this.flipper.update();

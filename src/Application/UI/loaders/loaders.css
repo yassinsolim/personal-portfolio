@@ -1,0 +1,28 @@
+/* the hybrid loading screen: the scan line of the pipeline sweeps */
+
+.hyb-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.pipe-scan {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    margin-top: -1px;
+    opacity: 0;
+    background: linear-gradient(
+        90deg,
+        rgba(143, 227, 255, 0),
+        rgba(143, 227, 255, 0.9) 12%,
+        rgba(255, 255, 255, 1) 50%,
+        rgba(143, 227, 255, 0.9) 88%,
+        rgba(143, 227, 255, 0)
+    );
+    box-shadow: 0 0 14px 2px rgba(110, 205, 255, 0.5);
+    will-change: transform;
+}
