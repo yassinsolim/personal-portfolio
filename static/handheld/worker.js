@@ -23,6 +23,9 @@ let statsFrom = 0;
 let store = null;
 let persistTimer = 0;
 const persisted = new Map();
+// the rtc backup registers live next to the sd files under a key that isn't a path
+const RTC_KEY = 'rtc:backup';
+let rtcSeq = -1;
 
 self.onmessage = (event) => {
     const msg = event.data;
@@ -99,6 +102,7 @@ async function init({ moduleUrl, wasmUrl, sdUrl, name, storageKey }) {
         mod._free(ptr);
     }
 
+    restoreRtc(saved.get(RTC_KEY));
     mod._flipper_boot();
     post({ type: 'ready' });
     resume();
@@ -279,6 +283,7 @@ class SdStore {
 
 function restore(FS, saved) {
     for (const [path, data] of saved) {
+        if (!path.startsWith('/')) continue;
         FS.mkdirTree(path.slice(0, path.lastIndexOf('/')));
         FS.writeFile(path, data);
         persisted.set(path, signature(data));
@@ -307,11 +312,26 @@ function walk(FS, dir, out) {
     }
 }
 
+function restoreRtc(data) {
+    if (!data || data.length !== mod._flipper_rtc_size()) return;
+    const ptr = mod._malloc(data.length);
+    mod.HEAPU8.set(data, ptr);
+    mod._flipper_rtc_restore(ptr, data.length);
+    mod._free(ptr);
+    rtcSeq = mod._flipper_rtc_seq();
+}
+
 function persistNow() {
     if (!mod || !store) return;
+    const puts = [];
+    const seq = mod._flipper_rtc_seq();
+    if (seq !== rtcSeq) {
+        rtcSeq = seq;
+        const ptr = mod._flipper_rtc_save();
+        puts.push([RTC_KEY, mod.HEAPU8.slice(ptr, ptr + mod._flipper_rtc_size())]);
+    }
     const files = [];
     for (const root of PERSIST_ROOTS) walk(mod.FS, root, files);
-    const puts = [];
     const seen = new Set();
     for (const path of files) {
         seen.add(path);
