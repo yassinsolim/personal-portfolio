@@ -210,6 +210,38 @@ test('phones and tablets go low', () => {
     );
 });
 
+test("brave's made up cores and hidden renderer don't make a machine low", () => {
+    const brave = { vendor: 'Brave', cores: 4, memoryGb: 16, farbled: true };
+    assert.equal(classifyGpu({ renderer: 'Brave', ...brave }).tier, 'high');
+    assert.equal(classifyGpu({ renderer: '', ...brave }).kind, 'unknown');
+    assert.equal(
+        classifyGpu({
+            renderer: 'ANGLE (Apple, ANGLE Metal Renderer: Apple M5, Unspecified Version)',
+            ...brave,
+            cores: 2,
+            memoryGb: 2,
+        }).tier,
+        'high'
+    );
+    // what the renderer or a phone says still counts
+    assert.equal(
+        classifyGpu({ renderer: 'Google SwiftShader', ...brave }).tier,
+        'low'
+    );
+    assert.equal(
+        classifyGpu({ renderer: 'Brave', ...brave, mobile: true }).tier,
+        'low'
+    );
+    assert.equal(
+        classifyGpu({
+            renderer:
+                'ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+            ...brave,
+        }).tier,
+        'low'
+    );
+});
+
 const { calibrate } = await import('../../src/Application/Utils/gpuClass.ts');
 
 test('a slow homepage or a slow race before sends a high guess low', () => {

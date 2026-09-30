@@ -557,6 +557,10 @@ export default class Car {
         const canvas = this.application.renderer.instance.domElement;
         window.addEventListener('mousedown', (event) => {
             if (event.button !== 0 || !this.model) return;
+            // a click on a screen or a panel isn't a click on the car behind it
+            const target = event.target as HTMLElement | null;
+            if (target?.closest?.('#prevent-click, [data-prevent-click]'))
+                return;
             if (this.application.camera.handledClicks.has(event)) return;
             const rect = canvas.getBoundingClientRect();
             const pointer = new THREE.Vector2(

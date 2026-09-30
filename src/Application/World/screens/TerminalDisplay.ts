@@ -8,18 +8,34 @@ import {
     clockTime,
     completeInput,
     el,
+    findFile,
     formatLap,
     graphicsLines,
     liveStats,
     openNames,
+    projectDir,
+    projectFiles,
+    projectPath,
     resolveOpen,
+    resolveProject,
     resolveTheme,
     subscribe,
+    suggestCommand,
     toOsState,
     visitorSpecs,
     type Themed,
 } from './displayKit';
-import { COMMANDS, CREDITS, OLDER_PROJECTS, PROJECTS, RIG } from './roomFacts';
+import {
+    COMMANDS,
+    CONTACT,
+    CREDITS,
+    HOME,
+    NOW,
+    OLDER_PROJECTS,
+    PROJECTS,
+    RIG,
+    type Project,
+} from './roomFacts';
 
 // m3, the portrait screen: a terminal. while the site loads, the loader
 // writes its build log here (boot). then it's a yassin@room shell (shell):
@@ -56,6 +72,8 @@ export function createTerminalDisplay(
     const history: string[] = [];
     let historyAt = 0;
     let draft = '';
+    // the project folder the shell is in, null at ~
+    let cwd: Project | null = null;
     const touch =
         typeof matchMedia === 'function' &&
         matchMedia('(pointer: coarse)').matches;
@@ -75,7 +93,8 @@ export function createTerminalDisplay(
     const bar = el('div', 'rd-term-bar');
     const icon = el('span', 'rd-term-icon', '>_');
     icon.setAttribute('aria-hidden', 'true');
-    bar.append(icon, el('span', 'rd-term-title', 'yassin@room: ~'));
+    const title = el('span', 'rd-term-title', 'yassin@room: ~');
+    bar.append(icon, title);
 
     const live = el('section', 'rd-term-live');
     live.setAttribute('aria-label', 'Live stats');
@@ -98,7 +117,7 @@ export function createTerminalDisplay(
 
     const ps1 = () => {
         const node = el('span', 'rd-ps1', 'yassin@room');
-        node.append(el('span', 'rd-ps1-path', ':~$'));
+        node.append(el('span', 'rd-ps1-path', `:${projectPath(cwd)}$`));
         return node;
     };
     const prompt = el('label', 'rd-term-prompt');
@@ -115,8 +134,9 @@ export function createTerminalDisplay(
     const typed = el('span', 'rd-term-typed');
     const cursor = el('span', 'rd-term-cursor');
     cursor.setAttribute('aria-hidden', 'true');
+    let promptPs1 = ps1();
     prompt.append(
-        ps1(),
+        promptPs1,
         input,
         typed,
         cursor,
@@ -260,10 +280,100 @@ export function createTerminalDisplay(
     const motd = () => {
         const node = block(
             line("Hi, I'm Yassin. This is the terminal on my right monitor."),
-            line('Type help to see what it can do, or try neofetch.', 'dim')
+            line('Type help, or ls and then cd into a project.', 'dim')
         );
         node.classList.add('rd-motd');
         return node;
+    };
+
+    const setCwd = (project: Project | null) => {
+        cwd = project;
+        title.textContent = `yassin@room: ${projectPath(cwd)}`;
+        const next = ps1();
+        promptPs1.replaceWith(next);
+        promptPs1 = next;
+    };
+
+    const shortUrl = (url: string) =>
+        url.replace(/^(https?:\/\/(www\.)?|mailto:)/, '').replace(/\/$/, '');
+
+    const link = (url: string, text = shortUrl(url)) => {
+        const node = el('a', 'rd-link', text);
+        node.href = url;
+        if (/^https?:/.test(url)) {
+            node.target = '_blank';
+            node.rel = 'noopener noreferrer';
+        }
+        node.tabIndex = focused ? 0 : -1;
+        return node;
+    };
+
+    // a key column and a value column that may hold a link
+    const pairs = (rows: [string, string | Node][]) => {
+        const node = el('div', 'rd-grid');
+        for (const [key, value] of rows) {
+            const cell = el('div', 'rd-grid-value');
+            cell.append(value);
+            node.append(el('div', 'rd-grid-key', key), cell);
+        }
+        return node;
+    };
+
+    const readme = (project: Project) => {
+        const card = block();
+        card.classList.add('rd-readme');
+        const head = el('div', 'rd-readme-head');
+        head.append(
+            el('span', '', `# ${project.name}`),
+            el('span', 'rd-readme-when', project.timeline)
+        );
+        const list = el('ul', 'rd-readme-list');
+        for (const item of project.highlights) list.append(el('li', '', item));
+        const chips = el('div', 'rd-chips');
+        for (const tech of project.tech)
+            chips.append(el('span', 'rd-chip', tech));
+        card.append(head, el('div', 'rd-readme-about', project.about), list, chips);
+        for (const file of projectFiles(project)) {
+            if (!file.url) continue;
+            const row = el('div', 'rd-line');
+            row.append(link(file.url));
+            card.append(row);
+        }
+        return card;
+    };
+
+    // cd and cat open the project's folder on the main screen as well, and
+    // leave the camera here
+    const mirror = (project: Project): Node[] => {
+        if (!project.folder) return [];
+        const shown = attempt(
+            () =>
+                Boolean(
+                    ctx.showInOS?.('FileExplorer', `${HOME}/${project.folder}`)
+                ),
+            false
+        );
+        return shown
+            ? [line(`${projectPath(project)} is open on the main screen too`, 'dim')]
+            : [];
+    };
+
+    const about = () => [
+        block(
+            el('div', 'rd-readme-head', CONTACT.name),
+            line(NOW.role),
+            line(NOW.school),
+            line(CONTACT.place, 'dim'),
+            line('contact for where to find me, ls for what I build', 'dim')
+        ),
+    ];
+
+    const openFolder = (project: Project) => {
+        attempt(
+            () => ctx.openInOS('FileExplorer', `${HOME}/${project.folder}`),
+            undefined
+        );
+        return [line(`opening ${projectPath(project)} on the main screen`, 'ok')];
     };
 
     const copyButton = (text: string, source: HTMLElement) => {
@@ -297,25 +407,90 @@ export function createTerminalDisplay(
 
     const commands: Record<string, (arg: string) => Node[]> = {
         help: () => [block(grid(COMMANDS))],
-        ls: () => [
-            block(
-                grid(
-                    PROJECTS.map((project) => [project.name, project.summary]),
-                    { layout: 'list' }
+        ls: (arg) => {
+            const project = arg ? resolveProject(arg) : cwd;
+            if (arg && !project)
+                return [line(`ls: ${arg}: no such project, try ls`, 'warn')];
+            if (project)
+                return [
+                    block(
+                        pairs(
+                            projectFiles(project).map(
+                                (file): [string, string | Node] => [
+                                    file.name,
+                                    file.url ? link(file.url) : project.summary,
+                                ]
+                            )
+                        )
+                    ),
+                ];
+            return [
+                block(
+                    grid(
+                        PROJECTS.map((item) => [item.name, item.summary]),
+                        { layout: 'list' }
+                    ),
+                    line('cd <name> to step in, cat <name> to read about it', 'dim'),
+                    line(
+                        `${OLDER_PROJECTS.length} older ones are in the Portfolio app`,
+                        'dim'
+                    )
                 ),
-                line('open <name> opens its folder on the main screen', 'dim'),
-                line(
-                    `${OLDER_PROJECTS.length} older ones are in the Portfolio app`,
-                    'dim'
-                )
-            ),
-        ],
+            ];
+        },
+        cd: (arg) => {
+            const target = arg.trim();
+            if (target === '.') return [];
+            if (!target || /^(~|\.\.|\/)\/?$/.test(target)) {
+                setCwd(null);
+                return [];
+            }
+            const project = resolveProject(target);
+            if (!project)
+                return [line(`cd: ${target}: no such project, try ls`, 'warn')];
+            setCwd(project);
+            return [
+                block(
+                    line(project.about),
+                    line('ls to look around, cat README.md to read it', 'dim'),
+                    ...mirror(project)
+                ),
+            ];
+        },
+        cat: (arg) => {
+            const target = arg.trim();
+            if (!target)
+                return [line('usage: cat <project>, or cat README.md in one')];
+            const file = findFile(cwd, target);
+            if (file && cwd) {
+                if (!file.url) return [readme(cwd), ...mirror(cwd)];
+                // a windows internet shortcut, like the ones in yassinOS
+                const url = el('div', 'rd-line', 'URL=');
+                url.append(link(file.url, file.url));
+                return [block(line('[InternetShortcut]'), url)];
+            }
+            if (!cwd && /^readme(\.md)?$/i.test(target)) return about();
+            const project = resolveProject(target);
+            if (!project)
+                return [
+                    line(`cat: ${target}: no such file or project, try ls`, 'warn'),
+                ];
+            return [readme(project), ...mirror(project)];
+        },
+        pwd: () => [line(`/home/yassin${cwd ? `/${projectDir(cwd)}` : ''}`)],
         open: (arg) => {
             if (!arg)
                 return [
                     line('usage: open <name>'),
                     line(`names: ${openNames().join(', ')}`, 'dim'),
                 ];
+            if (arg === '.' && cwd?.folder) return openFolder(cwd);
+            const file = findFile(cwd, arg);
+            if (file?.url) {
+                window.open(file.url, '_blank', 'noopener,noreferrer');
+                return [line(`opening ${shortUrl(file.url)} in a new tab`, 'ok')];
+            }
+            if (file && cwd?.folder) return openFolder(cwd);
             const target = resolveOpen(arg);
             if (!target)
                 return [
@@ -325,6 +500,31 @@ export function createTerminalDisplay(
             attempt(() => ctx.openInOS(target.app, target.url), undefined);
             return [line(`opening ${target.label} on the main screen`, 'ok')];
         },
+        whoami: about,
+        contact: () => [
+            block(
+                pairs([
+                    ['email', link(`mailto:${CONTACT.email}`, CONTACT.email)],
+                    ['github', link(CONTACT.github)],
+                    ['linkedin', link(CONTACT.linkedin)],
+                ])
+            ),
+        ],
+        history: () => [
+            block(
+                ...history.map((entry, i) =>
+                    line(`${String(i + 1).padStart(4)}  ${entry}`)
+                )
+            ),
+        ],
+        echo: (arg) => [line(arg)],
+        date: () => [line(new Date().toString())],
+        sudo: () => [
+            line(
+                'yassin is not in the sudoers file. This incident will be reported.',
+                'warn'
+            ),
+        ],
         neofetch: () => {
             const you = visitorSpecs(readInfo());
             return [
@@ -381,8 +581,17 @@ export function createTerminalDisplay(
             ? commands[name]
             : null;
         if (command) nodes.push(...command(arg));
-        else if (name)
-            nodes.push(line(`${name}: command not found, try help`, 'warn'));
+        else if (name) {
+            const hint = suggestCommand(name);
+            nodes.push(
+                line(
+                    hint
+                        ? `${name}: command not found, did you mean ${hint}?`
+                        : `${name}: command not found, try help`,
+                    'warn'
+                )
+            );
+        }
         write(nodes, true);
     };
 
@@ -420,7 +629,7 @@ export function createTerminalDisplay(
                 historyAt === history.length ? draft : history[historyAt];
             caretToEnd();
         } else if (event.key === 'Tab') {
-            const completed = completeInput(input.value);
+            const completed = completeInput(input.value, cwd);
             if (completed === null || completed === input.value) return;
             event.preventDefault();
             input.value = completed;
@@ -431,6 +640,18 @@ export function createTerminalDisplay(
         } else if (event.ctrlKey && (event.key === 'l' || event.key === 'L')) {
             event.preventDefault();
             clear();
+        } else if (
+            event.ctrlKey &&
+            (event.key === 'c' || event.key === 'C') &&
+            input.selectionStart === input.selectionEnd &&
+            !window.getSelection()?.toString()
+        ) {
+            // with nothing selected to copy, it drops the line like a shell
+            event.preventDefault();
+            write([echo(`${input.value}^C`)], true);
+            input.value = '';
+            draft = '';
+            historyAt = history.length;
         }
     });
 
@@ -447,7 +668,7 @@ export function createTerminalDisplay(
     root.addEventListener('click', (event) => {
         if (!focused || mode !== 'shell') return;
         const target = event.target as Element | null;
-        if (target?.closest?.('button, input')) return;
+        if (target?.closest?.('button, input, a')) return;
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed) return;
         focusInput();
@@ -583,7 +804,7 @@ export function createTerminalDisplay(
             focused = Boolean(next);
             root.classList.toggle('is-focused', focused);
             input.tabIndex = focused ? 0 : -1;
-            root.querySelectorAll<HTMLElement>('.rd-btn').forEach((node) => {
+            root.querySelectorAll<HTMLElement>('.rd-btn, .rd-link').forEach((node) => {
                 node.tabIndex = focused ? 0 : -1;
             });
             typed.textContent = input.value;

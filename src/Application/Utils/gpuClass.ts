@@ -18,6 +18,8 @@ export type GpuHints = {
     cores?: number;
     memoryGb?: number;
     mobile?: boolean;
+    // brave: cores and memory are made up, and the renderer may be hidden
+    farbled?: boolean;
 };
 
 export type GpuClass = {
@@ -52,8 +54,17 @@ export const classifyGpu = (hints: GpuHints): GpuClass => {
         return { kind: 'software', tier: 'low', reason: 'software renderer' };
     if (hints.mobile || MOBILE.test(renderer))
         return { kind: 'mobile', tier: 'low', reason: 'mobile gpu' };
+    if (hints.farbled && (!renderer || /^brave$/i.test(renderer)))
+        return {
+            kind: 'unknown',
+            tier: 'high',
+            reason: 'hidden by brave, measured instead',
+        };
     // a small cpu can't feed the full world whatever the gpu is
-    if ((cores && cores <= 4) || (memory !== undefined && memory <= 4))
+    if (
+        !hints.farbled &&
+        ((cores && cores <= 4) || (memory !== undefined && memory <= 4))
+    )
         return {
             kind: 'unknown',
             tier: 'low',
@@ -116,6 +127,19 @@ export const readRenderer = (
     } catch {
         return { renderer: '', vendor: '' };
     }
+};
+
+// what the browser says about the machine, for classifyGpu
+export const machineHints = () => {
+    const nav = navigator as Navigator & {
+        deviceMemory?: number;
+        brave?: unknown;
+    };
+    return {
+        cores: nav.hardwareConcurrency,
+        memoryGb: nav.deviceMemory,
+        farbled: Boolean(nav.brave),
+    };
 };
 
 // what was measured on this machine, on top of the renderer string

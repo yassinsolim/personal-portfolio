@@ -368,6 +368,56 @@ test('tab completes commands and what open takes', () => {
     assert.equal(kit.completeInput('neofetch now'), null);
 });
 
+test('cd, cat and ls find projects, and complete them and their files', () => {
+    assert.equal(kit.resolveProject('AetherVSr').name, 'AetherVSR');
+    assert.equal(kit.resolveProject('aether').name, 'AetherVSR');
+    assert.equal(kit.resolveProject('nord').name, 'Nordschleife Racer');
+    assert.equal(kit.resolveProject('../MacMST').name, 'MacMST');
+    assert.equal(kit.resolveProject('~/navoss/').name, 'NavOSS');
+    // webstrafe and waybionic both start with w
+    assert.equal(kit.resolveProject('w'), null);
+    assert.equal(kit.resolveProject('doom'), null);
+    assert.equal(kit.resolveProject(''), null);
+    const nord = kit.resolveProject('nordschleife');
+    assert.equal(kit.projectPath(nord), '~/Nordschleife-Racer');
+    assert.equal(kit.projectPath(null), '~');
+    const aether = kit.resolveProject('aethervsr');
+    assert.deepEqual(
+        kit.projectFiles(aether).map((file) => file.name),
+        ['README.md', 'GitHub.url']
+    );
+    assert.equal(kit.findFile(aether, 'readme.md').name, 'README.md');
+    assert.equal(kit.findFile(aether, 'github.url').url, aether.repo);
+    assert.equal(kit.findFile(null, 'README.md'), null);
+    assert.equal(kit.completeInput('cd aet'), 'cd aethervsr');
+    assert.equal(kit.completeInput('cat mac'), 'cat macmst');
+    assert.equal(kit.completeInput('cd'), 'cd ');
+    assert.equal(kit.completeInput('wh'), 'whoami');
+    assert.equal(kit.completeInput('cat rea', aether), 'cat readme.md');
+    assert.equal(kit.completeInput('cat rea'), null);
+    assert.equal(kit.completeInput('open git', aether), 'open github.url');
+});
+
+test('a mistyped command gets the nearest one', () => {
+    assert.equal(kit.suggestCommand('cta'), 'cat');
+    assert.equal(kit.suggestCommand('hlep'), 'help');
+    assert.equal(kit.suggestCommand('LS'), 'ls');
+    assert.equal(kit.suggestCommand('neofech'), 'neofetch');
+    assert.equal(kit.suggestCommand('xyzzy'), null);
+});
+
+test("every project has a README and https links", () => {
+    for (const project of facts.PROJECTS) {
+        assert.ok(project.about && project.timeline, project.name);
+        assert.ok(project.highlights.length > 0, project.name);
+        assert.ok(project.tech.length > 0, project.name);
+        for (const url of [project.repo, project.site].filter(Boolean))
+            assert.match(url, /^https:\/\//, `${project.name} ${url}`);
+    }
+    for (const url of [facts.CONTACT.github, facts.CONTACT.linkedin])
+        assert.match(url, /^https:\/\//);
+});
+
 test('graphics lines read like the graphics info panel', () => {
     const info = {
         renderer:

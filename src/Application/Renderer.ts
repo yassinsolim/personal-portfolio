@@ -8,7 +8,7 @@ import Time from './Utils/Time';
 import AdaptiveResolution from './Utils/AdaptiveResolution';
 import { isLowPowerDevice, isMobileDevice } from './Utils/Device';
 import FrameStats from './Utils/FrameStats';
-import { calibrate, classifyGpu, readRenderer } from './Utils/gpuClass';
+import { calibrate, classifyGpu, machineHints, readRenderer } from './Utils/gpuClass';
 
 // the room's film grain: one tile of colour noise, drawn once
 const GRAIN_TILE = 256;
@@ -122,8 +122,7 @@ export default class Renderer {
             classifyGpu({
                 renderer,
                 vendor,
-                cores: nav.hardwareConcurrency,
-                memoryGb: nav.deviceMemory,
+                ...machineHints(),
                 mobile: this.mobileDevice,
             }),
             { homeP50: home.percentile(0.5), homeFrames: home.count }
@@ -228,13 +227,11 @@ export default class Renderer {
         }
         this.sizeGrain(grain);
         const { renderer, vendor } = readRenderer(this.instance.getContext());
-        const nav = navigator as Navigator & { deviceMemory?: number };
         this.grainAllowed =
             classifyGpu({
                 renderer,
                 vendor,
-                cores: nav.hardwareConcurrency,
-                memoryGb: nav.deviceMemory,
+                ...machineHints(),
                 mobile: this.mobileDevice,
             }).tier !== 'low';
         document.querySelector('#overlay')?.appendChild(grain);

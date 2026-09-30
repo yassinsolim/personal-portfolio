@@ -1,4 +1,4 @@
-import { classifyGpu, readRenderer } from './gpuClass';
+import { classifyGpu, machineHints, readRenderer } from './gpuClass';
 import { isLowPowerDevice, isMobileDevice } from './Device';
 
 export type RoomTier = 'high' | 'low';
@@ -21,12 +21,10 @@ export const roomTier = (): RoomTier => {
         const gl = canvas.getContext('webgl');
         if (gl) {
             const { renderer, vendor } = readRenderer(gl);
-            const nav = navigator as Navigator & { deviceMemory?: number };
             tier = classifyGpu({
                 renderer,
                 vendor,
-                cores: nav.hardwareConcurrency,
-                memoryGb: nav.deviceMemory,
+                ...machineHints(),
                 mobile: isMobileDevice(),
             }).tier;
             gl.getExtension('WEBGL_lose_context')?.loseContext();
