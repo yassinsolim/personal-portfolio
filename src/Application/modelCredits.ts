@@ -16,6 +16,8 @@ export type ModelCredit = {
     // null when the original download couldn't be traced
     sourceUrl: string | null;
     license: ModelLicense | null;
+    // shown instead of a license, for a model that was shared rather than published
+    shared?: string;
     changes: string;
 };
 
@@ -117,10 +119,11 @@ export const MODEL_CREDITS: ModelCredit[] = [
     {
         usedFor: 'Mercedes-AMG GT63s Edition One',
         title: 'Mercedes-Benz AMG GT63 S',
-        author: 'unknown',
+        author: 'friends of Yassin',
         authorUrl: '',
         sourceUrl: null,
         license: null,
+        shared: 'shared with him directly',
         changes: `brake discs simplified, ${carChanges(true)}`,
     },
     sketchfabCar(
