@@ -84,6 +84,8 @@ export default class RaceVisuals {
     renderMode: RenderMode;
     effectsLow: boolean;
     tier: GpuTier;
+    // the gpu is high tier but the homepage or an old slow race made it low
+    calibratedDown = false;
     // software gl: shader compiles take seconds, the transition does them
     // where nothing on screen moves
     software: boolean;
@@ -151,17 +153,22 @@ export default class RaceVisuals {
         const renderer = this.application.renderer;
         const found = detectGpu(renderer.instance.getContext());
         const home = renderer.frameStats.home;
-        this.gpu = found.forced
-            ? found
-            : {
-                  ...found,
-                  ...calibrate(found, {
-                      homeP50: home.percentile(0.5),
-                      homeFrames: home.count,
-                      slowBefore: readSlowHint(found.renderer),
-                  }),
-              };
+        this.renderMode = renderer.renderMode;
+        // an explicit quality pick gets the world the gpu itself earned: the
+        // homepage timing and an old slow race only steer auto
+        this.gpu =
+            found.forced || this.renderMode === 'quality'
+                ? found
+                : {
+                      ...found,
+                      ...calibrate(found, {
+                          homeP50: home.percentile(0.5),
+                          homeFrames: home.count,
+                          slowBefore: readSlowHint(found.renderer),
+                      }),
+                  };
         this.tier = this.gpu.tier;
+        this.calibratedDown = found.tier === 'high' && this.tier === 'low';
         this.autoStep = 0;
         this.autoSlowMs = 0;
         this.autoFastMs = 0;
@@ -194,7 +201,6 @@ export default class RaceVisuals {
         this.skids = new SkidMarks(this.root);
         this.post = null;
         this.active = false;
-        this.renderMode = this.application.renderer.renderMode;
         this.effectsLow = this.application.renderer.effectsLow;
         this.saved = null;
         this.wheelContact = new THREE.Vector3();
@@ -242,6 +248,9 @@ export default class RaceVisuals {
                     state?.mode === 'quality' || state?.mode === 'performance'
                         ? state.mode
                         : 'auto';
+                // the world stays as built, the car can come back now
+                if (this.renderMode === 'quality' && this.calibratedDown)
+                    this.vehicle.useFullMaterials();
                 this.applyQuality();
             }
         );
@@ -285,6 +294,15 @@ export default class RaceVisuals {
             (stats.gpuP50 !== null && work < AUTO_FAST_WORK_MS);
         this.autoSlowMs = slow ? this.autoSlowMs + elapsed : 0;
         this.autoFastMs = fast ? this.autoFastMs + elapsed : 0;
+        // light because of an old slow race, and fast now: the next visit
+        // measures the full world again
+        if (
+            this.calibratedDown &&
+            this.autoStep === 0 &&
+            this.autoFastMs >= AUTO_UP_AFTER_MS &&
+            readSlowHint(this.gpu.renderer)
+        )
+            writeSlowHint(this.gpu.renderer, false);
         const adaptive = renderer.adaptive;
         const scaled = adaptive.ratio <= adaptive.min + 0.051;
         if (
