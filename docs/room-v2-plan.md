@@ -72,7 +72,7 @@ Yassin's answers replaced the placeholders. All sizes live in `scripts/room/setu
 | Desk | 160 x 80 cm, 74 cm high, matte black top on a black two leg standing frame |
 | PC | Phanteks NV5 on the floor under the desk's right end, inside the right leg, front toward the room, side glass toward the knee space, so the panoramic corner faces the default camera |
 | Chair | Low back, no headrest, pushed back about 0.9 m from the desk and turned 32 degrees toward the PC. Front left spots hide 25 to 45% of the PC glass from the default camera; this one blocks nothing the checks look at (`build_room.py --check`) |
-| Peripherals | Wooting 60HE with its strap, Finalmouse ULX (large) on an Artisan Ninja FX Hien L, Sennheiser HD 599 SE lying on the desk's left side |
+| Peripherals | Wooting 60HE with its strap, Finalmouse ULX Phantom (Lion, medium) on an Artisan Ninja FX Hien L, Sennheiser HD 599 SE lying on the desk's left side |
 | Props | The coffee mug and a small credits card; no plant or binders. The Flipper Zero spot is an empty for the Flipper agent |
 | Lighting | Studio default: the light grey studio calibrated to RaceReveal's greys, plus cool white light from the screens (6800 K) and the PC's strips and fan rings (7200 K) baked onto the desk, keyboard, pad and floor |
 
