@@ -611,7 +611,9 @@ export default class RaceVehicle {
         }
 
         this.ensurePreparedModel(carId).then((model) => {
-            if (!model) return;
+            // a load from before a switch between lite and full isn't shown
+            if (!model || Boolean(model.userData.raceLite) !== this.cheapMaterials)
+                return;
             this.swapModelIfCurrent(carId, model);
         });
     }
@@ -621,6 +623,15 @@ export default class RaceVehicle {
     useCheapMaterials() {
         if (this.cheapMaterials) return;
         this.cheapMaterials = true;
+        this.cachedModels.clear();
+        if (this.currentCarId && this.carModel)
+            this.setModel(this.currentCarId);
+    }
+
+    // back to the full car when quality is picked after a light build
+    useFullMaterials() {
+        if (!this.cheapMaterials) return;
+        this.cheapMaterials = false;
         this.cachedModels.clear();
         if (this.currentCarId && this.carModel)
             this.setModel(this.currentCarId);
@@ -646,7 +657,9 @@ export default class RaceVehicle {
         const loadPromise = new Promise<THREE.Group>((resolve, reject) => {
             const loaded = (gltf: GLTF) => {
                 if (!cheap) this.resources.items.gltfModel[option.resourceName] = gltf;
-                resolve(this.prepareModel(gltf.scene.clone(true), carId));
+                const model = this.prepareModel(gltf.scene.clone(true), carId);
+                model.userData.raceLite = cheap;
+                resolve(model);
             };
             this.resources.loadModel(
                 cheap ? option.modelPath.replace(/\.glb$/, '.lite.glb') : option.modelPath,
