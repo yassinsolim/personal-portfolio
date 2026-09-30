@@ -121,6 +121,17 @@ export async function mountDisplaysPreview(site: Site) {
             // the room would move the camera to m1
             setFocus(null);
         },
+        showInOS(app, url) {
+            const pid = url ? `${app}__${url}` : app;
+            say(
+                `showInOS(${JSON.stringify(app)}${url ? `, ${JSON.stringify(url)}` : ''})`
+            );
+            setOs({
+                apps: os.apps.indexOf(pid) < 0 ? [...os.apps, pid] : os.apps,
+                focused: pid,
+            });
+            return true;
+        },
         graphicsInfo() {
             try {
                 return site?.renderer?.graphicsInfo?.() || {};

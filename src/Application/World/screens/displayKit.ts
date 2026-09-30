@@ -13,9 +13,11 @@ import {
     APP_TITLES,
     APPS,
     COMMANDS,
+    HIDDEN_COMMANDS,
     HOME,
     PROJECTS,
     type OpenTarget,
+    type Project,
 } from './roomFacts';
 
 export type Rect = [number, number, number, number];
@@ -413,7 +415,84 @@ export const resolveOpen = (name: string): OpenTarget | null => {
     };
 };
 
-export const COMMAND_NAMES = COMMANDS.map(([usage]) => usage.split(' ')[0]);
+export const COMMAND_NAMES = [
+    ...COMMANDS.map(([usage]) => usage.split(' ')[0]),
+    ...HIDDEN_COMMANDS,
+];
+
+// the ones that take a name after them
+const ARG_COMMANDS = ['open', 'cd', 'cat', 'ls'];
+
+// a project by name in any case, or the start of one when only one matches
+export const resolveProject = (name: string): Project | null => {
+    const key = squash(name.replace(/^(\.\.|~)?\/+|\/+$/g, ''));
+    if (!key) return null;
+    const exact = PROJECTS.filter((project) => squash(project.name) === key);
+    if (exact.length) return exact[0];
+    const starts = PROJECTS.filter(
+        (project) => squash(project.name).indexOf(key) === 0
+    );
+    return starts.length === 1 ? starts[0] : null;
+};
+
+// its folder's name in the terminal
+export const projectDir = (project: Project) =>
+    project.name.replace(/\s+/g, '-');
+
+export const projectPath = (project: Project | null) =>
+    project ? `~/${projectDir(project)}` : '~';
+
+// what's in a project's folder: its readme, and shortcuts like the ones in
+// its yassinOS workspace
+export const projectFiles = (project: Project) => {
+    const files: { name: string; url?: string }[] = [{ name: 'README.md' }];
+    if (project.repo) files.push({ name: 'GitHub.url', url: project.repo });
+    if (project.site)
+        files.push({
+            name: `${projectDir(project)}.url`,
+            url: project.site,
+        });
+    return files;
+};
+
+export const findFile = (project: Project | null, name: string) =>
+    project
+        ? projectFiles(project).filter(
+              (file) => file.name.toLowerCase() === name.trim().toLowerCase()
+          )[0] || null
+        : null;
+
+// edits between two words, a swap of neighbours counting as one (cta is cat)
+const distance = (a: string, b: string) => {
+    const d = Array.from({ length: a.length + 1 }, (_, i) =>
+        Array.from({ length: b.length + 1 }, (_, j) => (i ? (j ? 0 : i) : j))
+    );
+    for (let i = 1; i <= a.length; i++)
+        for (let j = 1; j <= b.length; j++) {
+            d[i][j] = Math.min(
+                d[i - 1][j] + 1,
+                d[i][j - 1] + 1,
+                d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+                d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+        }
+    return d[a.length][b.length];
+};
+
+// the command a typo was closest to, within two edits
+export const suggestCommand = (name: string) => {
+    let best: string | null = null;
+    let bestDistance = 3;
+    for (const command of COMMAND_NAMES) {
+        const d = distance(name.toLowerCase(), command);
+        if (d < bestDistance) {
+            best = command;
+            bestDistance = d;
+        }
+    }
+    return best;
+};
 
 const commonPrefix = (words: string[]) =>
     words.reduce((prefix, word) => {
@@ -433,21 +512,31 @@ const completeWord = (word: string, candidates: string[]) => {
     return prefix.length > word.length ? prefix : null;
 };
 
-// tab completion: the command, then open's argument. null when there's
-// nothing to add
-export const completeInput = (value: string) => {
+// tab completion: the command, then its argument (open takes apps and
+// projects, cd, cat and ls projects, and inside one its files). null when
+// there's nothing to add
+export const completeInput = (value: string, cwd: Project | null = null) => {
     const first = /^\s*(\S+)$/.exec(value);
     if (first) {
         const hit = completeWord(first[1].toLowerCase(), COMMAND_NAMES);
         if (!hit) return null;
-        return hit === 'open' ? 'open ' : hit;
+        return ARG_COMMANDS.indexOf(hit) >= 0 ? `${hit} ` : hit;
     }
-    const open = /^\s*open\s+(\S*)$/i.exec(value);
-    if (open) {
-        const hit = completeWord(open[1].toLowerCase(), openNames());
-        return hit ? `open ${hit}` : null;
-    }
-    return null;
+    const arg = /^\s*(open|cd|cat|ls)\s+(\S*)$/i.exec(value);
+    if (!arg) return null;
+    const command = arg[1].toLowerCase();
+    const files = cwd
+        ? projectFiles(cwd).map((file) => file.name.toLowerCase())
+        : [];
+    const projects = PROJECTS.map((project) => squash(project.name));
+    const candidates =
+        command === 'open'
+            ? [...openNames(), ...files]
+            : command === 'cd'
+              ? projects
+              : [...projects, ...files];
+    const hit = completeWord(arg[2].toLowerCase(), candidates);
+    return hit ? `${command} ${hit}` : null;
 };
 
 const num = (value: unknown) => (isNumber(value) ? value : null);

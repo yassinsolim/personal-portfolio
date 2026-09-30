@@ -1671,10 +1671,20 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     font-size: 10px;
 }
 
-/* a room target has the camera: the panel fades out of its way */
+/* a room target has the camera: the panel fades out of its way, and nothing
+   in it takes a click or a key while it's gone (its controls set their own
+   pointer-events, hence the important) */
 .look-hint.room-focused {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
+    transition:
+        opacity 0.3s ease,
+        visibility 0s linear 0.3s;
+}
+
+.look-hint.room-focused * {
+    pointer-events: none !important;
 }
 
 .look-hint {

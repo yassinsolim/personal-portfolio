@@ -37,6 +37,8 @@ export interface DisplayContext {
     theme: RoomTheme;
     // open an app in yassinOS on m1 (a yassinOS process id), and focus m1
     openInOS(app: string, url?: string): void;
+    // the same without moving the camera. false where m1 has no yassinOS
+    showInOS?(app: string, url?: string): boolean;
     // the graphics info panel's data (Renderer.graphicsInfo())
     graphicsInfo(): Record<string, unknown>;
     // subscribe to a UIEventBus event, returns the unsubscribe

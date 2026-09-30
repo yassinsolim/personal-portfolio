@@ -89,6 +89,7 @@ export default class Screens {
     iframeReady = false;
     osVisible = true;
     pendingOs: Array<Record<string, unknown>> = [];
+    lastShown: Record<string, unknown> | null = null;
     extraTargets = new Map<FocusTarget, { object: THREE.Object3D; pose: () => Pose }>();
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
@@ -127,6 +128,10 @@ export default class Screens {
         UIEventBus.on('loadingScreenDone', () => {
             if (this.terminalClaimed) return;
             void this.terminal().then((terminal) => terminal?.setMode('shell'));
+        });
+        // free cam takes the camera: nothing stays focused behind it
+        UIEventBus.on('freeCam:state', (state: { active?: boolean; pending?: boolean } | undefined) => {
+            if ((state?.active || state?.pending) && this.focused) this.backOut(true);
         });
         this.applyPointer();
     }
@@ -269,6 +274,7 @@ export default class Screens {
         return {
             theme: this.theme,
             openInOS: (app, url) => this.openInOS(app, url),
+            showInOS: (app, url) => this.showInOS(app, url),
             graphicsInfo: () => this.application.renderer.graphicsInfo(),
             on: <T,>(event: string, callback: (payload: T) => void) => {
                 UIEventBus.on(event, callback);
@@ -390,6 +396,21 @@ export default class Screens {
         if (this.iframeReady) this.postOs(message);
         else this.pendingOs.push(message);
         this.focus('m1');
+    }
+
+    // open on m1 and leave the camera where it is. before the iframe is up
+    // (the low tier makes it when m1 is focused) only the latest waits
+    showInOS(app: string, url?: string) {
+        if (this.mobile) return false;
+        const message = { type: 'yassinos:open', app, ...(url ? { url } : {}) };
+        if (this.iframeReady) {
+            this.postOs(message);
+            return true;
+        }
+        this.pendingOs = this.pendingOs.filter((queued) => queued !== this.lastShown);
+        this.pendingOs.push(message);
+        this.lastShown = message;
+        return true;
     }
 
     bindMessages() {

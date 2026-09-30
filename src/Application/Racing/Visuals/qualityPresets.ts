@@ -1,5 +1,5 @@
 import { isMobileDevice } from '../../Utils/Device';
-import { classifyGpu, readRenderer, type GpuClass } from '../../Utils/gpuClass';
+import { classifyGpu, machineHints, readRenderer, type GpuClass } from '../../Utils/gpuClass';
 
 // race graphics presets. auto picks balanced on a capable gpu and performance
 // on weak or software ones, and the adaptive resolution still runs on top.
@@ -118,14 +118,10 @@ export const detectGpu = (
     gl: WebGLRenderingContext | WebGL2RenderingContext
 ): GpuClass & { renderer: string; vendor: string; forced: boolean } => {
     const { renderer, vendor } = readRenderer(gl);
-    const { deviceMemory, hardwareConcurrency } = navigator as Navigator & {
-        deviceMemory?: number;
-    };
     const found = classifyGpu({
         renderer,
         vendor,
-        cores: hardwareConcurrency,
-        memoryGb: deviceMemory,
+        ...machineHints(),
         mobile: isMobileDevice(),
     });
     const forced = new URLSearchParams(window.location.search).get('raceTier');

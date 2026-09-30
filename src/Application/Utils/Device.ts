@@ -1,4 +1,4 @@
-type NavigatorWithHints = Navigator & { deviceMemory?: number };
+type NavigatorWithHints = Navigator & { deviceMemory?: number; brave?: unknown };
 
 export const isMobileDevice = () =>
     Boolean(
@@ -8,10 +8,12 @@ export const isMobileDevice = () =>
     );
 
 // safari and firefox don't expose deviceMemory, so unknown has to count as
-// fine or every mac in safari gets treated as a low power device
+// fine or every mac in safari gets treated as a low power device. brave makes
+// both numbers up, so there only the phone check counts
 export const isLowPowerDevice = () => {
-    const { deviceMemory, hardwareConcurrency } =
+    const { deviceMemory, hardwareConcurrency, brave } =
         navigator as NavigatorWithHints;
+    if (brave) return isMobileDevice();
     return (
         isMobileDevice() ||
         (Boolean(hardwareConcurrency) && hardwareConcurrency <= 4) ||

@@ -377,7 +377,10 @@ const App = () => {
         );
 
         eventBus.on('room:focus', (state: { target?: string | null } | undefined) => {
-            setRoomFocus(Boolean(state?.target));
+            const focused = Boolean(state?.target);
+            setRoomFocus(focused);
+            const active = document.activeElement;
+            if (focused && active instanceof HTMLElement && active.closest('.look-hint')) active.blur();
         });
         eventBus.on('camera:view', (state: { key?: string } | undefined) => {
             setDeskView(state?.key === 'desk');
