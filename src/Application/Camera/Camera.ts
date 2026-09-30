@@ -11,7 +11,7 @@ import Time from '../Utils/Time';
 import BezierEasing from 'bezier-easing';
 import {
     CameraKeyframeInstance,
-    MonitorKeyframe,
+    FocusKeyframe,
     IdleKeyframe,
     LoadingKeyframe,
     DeskKeyframe,
@@ -21,7 +21,8 @@ import {
 
 export enum CameraKey {
     IDLE = 'idle',
-    MONITOR = 'monitor',
+    // a screen, the flipper or the pc (World/screens/Screens.ts)
+    FOCUS = 'focus',
     LOADING = 'loading',
     DESK = 'desk',
     ORBIT_CONTROLS_START = 'orbitControlsStart',
@@ -77,7 +78,7 @@ export default class Camera extends EventEmitter {
 
         this.keyframes = {
             idle: new IdleKeyframe(),
-            monitor: new MonitorKeyframe(),
+            focus: new FocusKeyframe(),
             loading: new LoadingKeyframe(),
             desk: new DeskKeyframe(),
             orbitControlsStart: new OrbitControlsStart(),
@@ -104,7 +105,6 @@ export default class Camera extends EventEmitter {
 
         this.setPostLoadTransition();
         this.setInstance();
-        this.setMonitorListeners();
         this.setFreeCamListeners();
     }
 
@@ -135,6 +135,8 @@ export default class Camera extends EventEmitter {
 
         this.currentKeyframe = undefined;
         this.targetKeyframe = key;
+        // the ui lays itself out around the view it's heading to
+        UIEventBus.dispatch('camera:view', { key });
 
         const keyframe = this.keyframes[key];
 
@@ -157,7 +159,7 @@ export default class Camera extends EventEmitter {
 
     setInstance() {
         // near plane sets depth precision. car stripes/decals sit <1mm above the
-        // paint and z-fight at near=10. closest view (monitor) is ~1700 units away
+        // paint and z-fight at near=10. closest view (a focused screen) is ~1600 units away
         this.instance = new THREE.PerspectiveCamera(
             35,
             this.getAspect(),
@@ -181,19 +183,15 @@ export default class Camera extends EventEmitter {
     }
 
 
-    setMonitorListeners() {
-        this.on('enterMonitor', () => {
-            this.transition(
-                CameraKey.MONITOR,
-                2000,
-                BezierEasing(0.13, 0.99, 0, 1)
-            );
-            UIEventBus.dispatch('enterMonitor', {});
-        });
-        this.on('leftMonitor', () => {
-            this.transition(CameraKey.DESK);
-            UIEventBus.dispatch('leftMonitor', {});
-        });
+    // glide to a target's framing. the pose is asked for every frame, so a
+    // resize refits it. moving from one target straight to another works too
+    focusOn(pose: () => { position: THREE.Vector3; focal: THREE.Vector3 } | null) {
+        const focus = this.keyframes.focus as FocusKeyframe;
+        focus.provider = pose;
+        focus.update();
+        if (this.currentKeyframe === CameraKey.FOCUS) this.currentKeyframe = undefined;
+        const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        this.transition(CameraKey.FOCUS, reduced ? 1 : 1100, BezierEasing(0.13, 0.99, 0, 1));
     }
 
     setFreeCamListeners() {
@@ -345,8 +343,8 @@ export default class Camera extends EventEmitter {
         );
         this.orbitControls.dampingFactor = 0.05;
         this.orbitControls.maxPolarAngle = Math.PI / 2;
-        this.orbitControls.minDistance = 4000;
-        this.orbitControls.maxDistance = 29000;
+        this.orbitControls.minDistance = 2900;
+        this.orbitControls.maxDistance = 21000;
 
         this.orbitControls.update();
         this.syncOrbitControlsState();

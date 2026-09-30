@@ -246,6 +246,11 @@ const App = () => {
     const [freeCamActive, setFreeCamActive] = useState(false);
     const [freeCamPending, setFreeCamPending] = useState(false);
     const [raceModeActive, setRaceModeActive] = useState(false);
+    // a monitor (or the flipper, the pc) is the camera's focus: the room
+    // panel steps aside so it doesn't sit over the screen
+    const [roomFocus, setRoomFocus] = useState(false);
+    // the desk view: the panel folds to a small tab so it clears the top screen
+    const [deskView, setDeskView] = useState(false);
     const [racePaused, setRacePaused] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
@@ -343,6 +348,13 @@ const App = () => {
                 setPointerLocked(Boolean(state?.locked));
             }
         );
+
+        eventBus.on('room:focus', (state: { target?: string | null } | undefined) => {
+            setRoomFocus(Boolean(state?.target));
+        });
+        eventBus.on('camera:view', (state: { key?: string } | undefined) => {
+            setDeskView(state?.key === 'desk');
+        });
 
         eventBus.on(
             'freeCam:state',
@@ -693,7 +705,14 @@ const App = () => {
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <LoadingScreen />
             {showHint && (
-                <div className="look-hint">
+                <div
+                    className={['look-hint', roomFocus && 'room-focused', deskView && !roomFocus && 'room-desk']
+                        .filter(Boolean)
+                        .join(' ')}
+                    data-label="Controls"
+                    data-prevent-click
+                    tabIndex={deskView ? 0 : -1}
+                >
                     <div>
                         Click anywhere to begin.
                     </div>

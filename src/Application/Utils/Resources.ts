@@ -41,8 +41,9 @@ const ktx2Enabled = () => {
     }
 };
 
-// cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs)
-const hasKtx2Twin = (path: string) => /models\/Cars\/.+(?<!\.ktx2)\.glb$/.test(path);
+// cars, full and lite, have a ktx2 twin (scripts/build-ktx2-cars.mjs), and
+// so does the room (scripts/room)
+const hasKtx2Twin = (path: string) => /models\/(Cars|Room)\/.+(?<!\.ktx2)\.glb$/.test(path);
 // once a ktx2 car has downloaded and the decoder is known to work, its parse
 // (draco and texture transcode) gets this long before the webp one is
 // loaded instead

@@ -4,6 +4,22 @@ import Time from '../Utils/Time';
 import Application from '../Application';
 import Mouse from '../Utils/Mouse';
 import Sizes from '../Utils/Sizes';
+import {
+    CLUSTER_WIDTH,
+    DESK_FOCAL,
+    DESK_POSITION,
+    IDLE_FOCAL,
+    IDLE_SCALE,
+    ORBIT_FOCAL,
+} from '../World/screens/layout';
+import { roomTier } from '../Utils/roomTier';
+
+// the low tier keeps today's idle framing: in software gl the closer one
+// cost 35 to 50 ms a frame (the car and the room fill more pixels), measured
+// at the same swing pose in both builds. the high tier gets the closer view
+const LOW_TIER = roomTier() === 'low';
+const IDLE_AIM = LOW_TIER ? new THREE.Vector3(0, -1000, 0) : IDLE_FOCAL;
+const IDLE_DISTANCE = LOW_TIER ? 1 : IDLE_SCALE;
 
 export class CameraKeyframeInstance {
     position: THREE.Vector3;
@@ -16,35 +32,46 @@ export class CameraKeyframeInstance {
 
     update() {}
 }
-const getViewportRatio = (sizes: Sizes) => {
-    const width =
-        Number.isFinite(sizes.width) && sizes.width > 0 ? sizes.width : 1;
-    const height =
-        Number.isFinite(sizes.height) && sizes.height > 0 ? sizes.height : 1;
-    return height / width;
+
+const getAspect = (sizes: Sizes) => {
+    const width = Number.isFinite(sizes.width) && sizes.width > 0 ? sizes.width : 1;
+    const height = Number.isFinite(sizes.height) && sizes.height > 0 ? sizes.height : 1;
+    return width / height;
 };
 
+// narrow viewports pull the wide views back so the car and desk still fit
+const narrowPullback = (sizes: Sizes) => Math.max(1, 1.25 / getAspect(sizes));
+
+const HALF_FOV_TAN = Math.tan(THREE.MathUtils.degToRad(35) / 2);
+
+// the idle swing as henry tuned it, around the old focal point
+const OLD_IDLE_FOCAL = new THREE.Vector3(0, -1000, 0);
+const OLD_ORBIT_POSITION = new THREE.Vector3(-15000, 10000, 15000);
+const OLD_ORBIT_FOCAL = new THREE.Vector3(-100, 350, 0);
 
 const keys: { [key in CameraKey]: CameraKeyframe } = {
     idle: {
         position: new THREE.Vector3(-20000, 12000, 20000),
-        focalPoint: new THREE.Vector3(0, -1000, 0),
+        focalPoint: IDLE_AIM.clone(),
     },
-    monitor: {
-        position: new THREE.Vector3(0, 950, 2000),
-        focalPoint: new THREE.Vector3(0, 950, 0),
+    // set by focusOn, from the target's own framing
+    focus: {
+        position: DESK_POSITION.clone(),
+        focalPoint: DESK_FOCAL.clone(),
     },
     desk: {
-        position: new THREE.Vector3(0, 1800, 5500),
-        focalPoint: new THREE.Vector3(0, 500, 0),
+        position: DESK_POSITION.clone(),
+        focalPoint: DESK_FOCAL.clone(),
     },
     loading: {
         position: new THREE.Vector3(-35000, 35000, 35000),
         focalPoint: new THREE.Vector3(0, -5000, 0),
     },
     orbitControlsStart: {
-        position: new THREE.Vector3(-15000, 10000, 15000),
-        focalPoint: new THREE.Vector3(-100, 350, 0),
+        position: ORBIT_FOCAL.clone().add(
+            OLD_ORBIT_POSITION.clone().sub(OLD_ORBIT_FOCAL).multiplyScalar(IDLE_SCALE)
+        ),
+        focalPoint: ORBIT_FOCAL.clone(),
     },
     // placeholder, World/Flipper.ts frames the device from its real size every frame
     flipper: {
@@ -53,107 +80,96 @@ const keys: { [key in CameraKey]: CameraKeyframe } = {
     },
 };
 
-export class MonitorKeyframe extends CameraKeyframeInstance {
-    application: Application;
-    sizes: Sizes;
-    targetPos: THREE.Vector3;
-    origin: THREE.Vector3;
+export class FocusKeyframe extends CameraKeyframeInstance {
+    provider: (() => { position: THREE.Vector3; focal: THREE.Vector3 } | null) | null = null;
 
     constructor() {
-        const keyframe = keys.monitor;
-        super(keyframe);
-        this.application = new Application();
-        this.sizes = this.application.sizes;
-        this.origin = new THREE.Vector3().copy(keyframe.position);
-        this.targetPos = new THREE.Vector3().copy(keyframe.position);
+        super(keys.focus);
     }
 
     update() {
-        const aspect = getViewportRatio(this.sizes);
-        const additionalZoom = this.sizes.width < 768 ? 0 : 600;
-        this.targetPos.z = this.origin.z + aspect * 1200 - additionalZoom;
-        this.position.copy(this.targetPos);
+        const pose = this.provider?.();
+        if (!pose) return;
+        this.position.copy(pose.position);
+        this.focalPoint.copy(pose.focal);
     }
 }
 
 export class LoadingKeyframe extends CameraKeyframeInstance {
     constructor() {
-        const keyframe = keys.loading;
-        super(keyframe);
+        super(keys.loading);
     }
-
-    update() {}
 }
 
+// in front of the chair at standing eye height, looking at the three screens,
+// drifting a little with the mouse
 export class DeskKeyframe extends CameraKeyframeInstance {
-    origin: THREE.Vector3;
     application: Application;
     mouse: Mouse;
     sizes: Sizes;
-    targetFoc: THREE.Vector3;
-    targetPos: THREE.Vector3;
+    base: THREE.Vector3;
+    offset: THREE.Vector2;
 
     constructor() {
-        const keyframe = keys.desk;
-        super(keyframe);
+        super(keys.desk);
         this.application = new Application();
         this.mouse = this.application.mouse;
         this.sizes = this.application.sizes;
-        this.origin = new THREE.Vector3().copy(keyframe.position);
-        this.targetFoc = new THREE.Vector3().copy(keyframe.focalPoint);
-        this.targetPos = new THREE.Vector3().copy(keyframe.position);
+        this.base = new THREE.Vector3();
+        this.offset = new THREE.Vector2();
     }
 
     update() {
-        this.targetFoc.x +=
-            (this.mouse.x - this.sizes.width / 2 - this.targetFoc.x) * 0.05;
-        this.targetFoc.y +=
-            (-(this.mouse.y - this.sizes.height) - this.targetFoc.y) * 0.05;
+        const moved = this.mouse.x || this.mouse.y;
+        const nx = moved ? (this.mouse.x / this.sizes.width) * 2 - 1 : 0;
+        const ny = moved ? (this.mouse.y / this.sizes.height) * 2 - 1 : 0;
+        this.offset.x += (nx - this.offset.x) * 0.05;
+        this.offset.y += (ny - this.offset.y) * 0.05;
 
-        this.targetPos.x +=
-            (this.mouse.x - this.sizes.width / 2 - this.targetPos.x) * 0.025;
-        this.targetPos.y +=
-            (-(this.mouse.y - this.sizes.height * 2) - this.targetPos.y) *
-            0.025;
-
-        const aspect = getViewportRatio(this.sizes);
-        this.targetPos.z = this.origin.z + aspect * 3000 - 1800;
-
-        this.focalPoint.copy(this.targetFoc);
-        this.position.copy(this.targetPos);
+        const direction = this.base.copy(DESK_POSITION).sub(DESK_FOCAL);
+        const fit = CLUSTER_WIDTH / 2 / (HALF_FOV_TAN * getAspect(this.sizes)) / 0.9;
+        const distance = Math.max(direction.length(), fit);
+        direction.setLength(distance);
+        this.position
+            .copy(DESK_FOCAL)
+            .add(direction)
+            .add(new THREE.Vector3(this.offset.x * 260, -this.offset.y * 160, 0));
+        this.focalPoint
+            .copy(DESK_FOCAL)
+            .add(new THREE.Vector3(this.offset.x * 380, -this.offset.y * 220, 0));
     }
 }
 
 export class IdleKeyframe extends CameraKeyframeInstance {
     time: Time;
-    origin: THREE.Vector3;
     application: Application;
+    sizes: Sizes;
 
     constructor() {
-        const keyframe = keys.idle;
-        super(keyframe);
-        this.origin = new THREE.Vector3().copy(keyframe.position);
+        super(keys.idle);
         this.application = new Application();
         this.time = this.application.time;
+        this.sizes = this.application.sizes;
     }
 
     update() {
-        this.position.x =
-            Math.sin((this.time.elapsed + 19000) * 0.00008) * this.origin.x;
-        this.position.y =
-            Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 +
-            this.origin.y -
-            3000;
+        // henry's swing: x across the front over about 78 s, y drifting slowly
+        const x = Math.sin((this.time.elapsed + 19000) * 0.00008) * -20000;
+        const y = Math.sin((this.time.elapsed + 1000) * 0.000004) * 4000 + 9000;
+        // the low tier's idle is exactly today's, phones included
+        const scale = LOW_TIER ? IDLE_DISTANCE : IDLE_DISTANCE * narrowPullback(this.sizes);
+        this.position
+            .set(x, y, 20000)
+            .sub(OLD_IDLE_FOCAL)
+            .multiplyScalar(scale)
+            .add(IDLE_AIM);
     }
 }
 
 export class OrbitControlsStart extends CameraKeyframeInstance {
     constructor() {
-        const keyframe = keys.orbitControlsStart;
-        super(keyframe);
+        super(keys.orbitControlsStart);
     }
-
-    update() {}
 }
 
 export class FlipperKeyframe extends CameraKeyframeInstance {

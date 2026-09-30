@@ -1671,6 +1671,16 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     font-size: 10px;
 }
 
+/* a room target has the camera: the panel fades out of its way */
+.look-hint.room-focused {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.look-hint {
+    transition: opacity 0.3s ease;
+}
+
 /* the room's film grain: a noise tile under soft light, moved to a new
    offset every 1/120 s so each frame shows fresh noise, like the per frame
    shader did. transform only, so it stays on the compositor */
@@ -1766,4 +1776,28 @@ body.race-transition #ui-app > :not(.race-lobby-choice) {
     .film-grain {
         animation: none;
     }
+}
+
+/* the desk view: the panel folds to a tab in its corner and opens again on
+   hover or keyboard focus, so it never sits over the top screen */
+.look-hint.room-desk {
+    pointer-events: auto;
+    cursor: default;
+}
+
+.look-hint.room-desk:not(:hover):not(:focus-within) {
+    width: auto;
+    min-width: 0;
+    padding: 7px 12px;
+}
+
+.look-hint.room-desk:not(:hover):not(:focus-within) > * {
+    display: none;
+}
+
+.look-hint.room-desk:not(:hover):not(:focus-within)::before {
+    content: attr(data-label);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    opacity: 0.85;
 }

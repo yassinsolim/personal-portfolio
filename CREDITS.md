@@ -5,16 +5,25 @@
 - Outer portfolio baseline and room assets: Henry Heffernan
   - Repo: https://github.com/henryjeff/portfolio-website
   - License: MIT, Copyright 2024 Henry Heffernan (notice below)
-  - Files from that repo, byte for byte: the room models (`static/models/Computer/computer_setup.glb`,
-    `static/models/Decor/decor.glb`, `static/models/World/environment.glb`) and the environment map
-    (`static/textures/environmentMap/`). The baked room textures next to the models are
-    re-encoded or edited versions of upstream's
+  - Files from that repo, byte for byte: the environment map (`static/textures/environmentMap/`).
+    The old room models and their bakes are gone since room v2; its studio backdrop mesh comes
+    from upstream's `environment.glb` (re-baked, inside `static/models/Room/room_v2*.glb`)
   - Upstream doesn't say where the environment map came from. Its room sounds and radio tracks
     (`static/audio/`) were never loaded or deployed here and were removed
 
 - Inner OS inspiration: Dustin Brett (daedalOS)
   - Repo: https://github.com/DustinBrett/daedalOS
   - License/attribution: per upstream repository
+
+## Room v2 (September 2026)
+
+- The desk setup (desk, arms, the three monitors, the PC and its parts, keyboard, mouse, pad,
+  headphones, chair, mug, credits card) is modelled from scratch by `scripts/room/` (bpy) after
+  the real products' published dimensions (`docs/room-v2-peripherals.md`), with no downloaded
+  models and no brand logos. Lighting baked in Blender Cycles.
+- The studio backdrop mesh is carried over from Henry Heffernan's original room (MIT, below).
+- The old room's desk, computer, chair, plant and paper models (and their bakes) are no longer
+  used and were removed.
 
 ### MIT License (henryjeff/portfolio-website)
 

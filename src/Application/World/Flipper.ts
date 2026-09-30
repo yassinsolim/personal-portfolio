@@ -4,6 +4,7 @@ import BezierEasing from 'bezier-easing';
 import Application from '../Application';
 import Camera, { CameraKey } from '../Camera/Camera';
 import Resources from '../Utils/Resources';
+import { UNITS_PER_METRE } from './screens/layout';
 import Sizes from '../Utils/Sizes';
 import UIEventBus from '../UI/EventBus';
 import { isLowPowerDevice, isMobileDevice } from '../Utils/Device';
@@ -18,12 +19,10 @@ import FlipperDevice, { FlipperButton, FLIPPER_BUTTONS } from './flipper/Flipper
 // press(button) and the hit areas, only the placement constants change.
 
 const MODEL_LENGTH_METERS = 0.1003;
-// today's desk: the old prop's 420 units for the device's 100.3 mm
-const FLIPPER_LENGTH_UNITS = 420;
-const PAPER_ANCHOR = new THREE.Vector3(-2064, -444, 986);
-const FLIPPER_OFFSET = new THREE.Vector3(520, 0, 380);
-// turned toward the chair
-const FLIPPER_YAW = 18 * THREE.MathUtils.DEG2RAD;
+// room v2 is at true scale: the device's real 100.3 mm, on the room's
+// flipper_spot, turned toward the chair like the spot
+const FLIPPER_LENGTH_UNITS = MODEL_LENGTH_METERS * UNITS_PER_METRE;
+const FLIPPER_YAW = 20 * THREE.MathUtils.DEG2RAD;
 
 // focus pose: above and in front, device about 55% of the viewport height
 const FOCUS_ELEVATION = 58 * THREE.MathUtils.DEG2RAD;
@@ -198,7 +197,7 @@ export default class Flipper {
         model.position.set(0, 0, 0);
         model.updateMatrixWorld(true);
         const box = new THREE.Box3().setFromObject(model);
-        const target = PAPER_ANCHOR.clone().add(FLIPPER_OFFSET);
+        const target = this.application.world.room.anchor('flipper_spot');
         model.position.set(target.x, target.y - box.min.y, target.z);
         model.updateMatrixWorld(true);
         new THREE.Box3().setFromObject(model).getBoundingSphere(this.bounds);

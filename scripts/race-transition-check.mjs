@@ -1,7 +1,7 @@
 // checks the homepage to race transition hands the keys to the game. from the
 // desk view it clicks the car, then skips with a click over the monitor (or a
 // key, or not at all), and checks focus isn't in the yassinOS iframe and W
-// drives. last, outside race mode, a click on the monitor must still reach
+// drives. last, outside race mode, a click focuses the monitor and the next must reach
 // the iframe. exits 1 on any failure.
 //
 //   node scripts/race-transition-check.mjs --url http://192.168.1.166:8190/
@@ -87,7 +87,8 @@ const findCar = async (page) => {
     for (const [dx, dy] of [[0, 0], [60, 0], [120, 0], [-60, 0], [60, -40], [120, -40], [180, -20], [200, 0], [250, -30], [300, 0], [350, -40]]) {
         await page.mouse.move(c.x + dx, c.y + dy);
         await sleep(250);
-        if ((await page.evaluate(() => document.body.style.cursor)) === 'pointer') {
+        // the screens show a pointer too: it has to be the car's hover
+        if (await page.evaluate(() => document.body.style.cursor === 'pointer' && window.Application.world.raceTransition.hovering)) {
             return { x: c.x + dx, y: c.y + dy };
         }
     }
@@ -166,14 +167,20 @@ for (let run = 0; run < runs; run++) {
     const monitor = await monitorAt(page);
     const r = { mode: 'desk-monitor' };
     if (monitor) {
+        // the first click focuses the screen (the camera glides in), then
+        // the iframe takes the pointer and the next click lands in it
         await page.mouse.move(monitor.x, monitor.y);
-        await sleep(800);
-        r.pointerEvents = await page.evaluate(() => getComputedStyle(document.getElementById('computer-screen')).pointerEvents);
+        await sleep(300);
+        r.idlePointerEvents = await page.evaluate(() => getComputedStyle(document.getElementById('computer-screen')).pointerEvents);
         await page.mouse.click(monitor.x, monitor.y);
+        await sleep(1800);
+        const focused = await monitorAt(page);
+        r.pointerEvents = await page.evaluate(() => getComputedStyle(document.getElementById('computer-screen')).pointerEvents);
+        await page.mouse.click(focused.x, focused.y);
         await sleep(800);
         r.focus = await focusState(page);
     }
-    r.pass = r.focus === 'IFRAME#computer-screen' && r.pointerEvents === 'auto';
+    r.pass = r.focus === 'IFRAME#computer-screen' && r.pointerEvents === 'auto' && r.idlePointerEvents === 'none';
     results.push(r);
     console.log('[transition-check]', JSON.stringify(r));
     await page.close();

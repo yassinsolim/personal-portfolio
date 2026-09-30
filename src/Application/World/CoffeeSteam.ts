@@ -49,11 +49,12 @@ export default class CoffeeSteam {
         });
 
         this.model.mesh = new THREE.Mesh(
-            new THREE.PlaneGeometry(280, 700),
+            new THREE.PlaneGeometry(140, 350),
             this.model.material
         );
 
-        this.model.mesh.position.copy(new THREE.Vector3(1670, 200, 900));
+        // on the new mug, half the old size (the room is at true scale now)
+        this.model.mesh.position.copy(this.application.world.room.anchor('anchor_mug').add(new THREE.Vector3(0, 180, 0)));
 
         this.scene.add(this.model.mesh);
     }

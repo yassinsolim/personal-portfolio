@@ -12,38 +12,11 @@ export class AudioSource {
 
     update() {}
 }
+// key and click sounds while yassinOS on the main screen has the pointer or
+// keys. the embed bridge reports only the kind of input, never which key
 export class ComputerAudio extends AudioSource {
-    lastKey: string;
-
     constructor(manager: AudioManager) {
         super(manager);
-
-        document.addEventListener('mousedown', (event) => {
-            // @ts-ignore
-            if (event.inComputer) {
-                this.manager.playAudio('mouseDown', {
-                    volume: 0.8,
-                    position: new THREE.Vector3(800, -300, 1200),
-                });
-            }
-        });
-
-        document.addEventListener('mouseup', (event) => {
-            // @ts-ignore
-            if (event.inComputer) {
-                this.manager.playAudio('mouseUp', {
-                    volume: 0.8,
-                    position: new THREE.Vector3(800, -300, 1200),
-                });
-            }
-        });
-
-        document.addEventListener('keyup', (event) => {
-            // @ts-ignore
-            if (event.inComputer) {
-                this.lastKey = '';
-            }
-        });
 
         document.addEventListener('keydown', (event) => {
             if (event.key.includes('_AUTO_')) {
@@ -52,16 +25,21 @@ export class ComputerAudio extends AudioSource {
                     randDetuneScale: 0,
                     pitch: 20,
                 });
-                return;
             }
-            if (this.lastKey === event.key) return;
-            this.lastKey = event.key;
+        });
 
-            // @ts-ignore
-            if (event.inComputer) {
+        UIEventBus.on('room:osInput', (input: { kind?: string } | undefined) => {
+            const room = this.manager.application.world?.room;
+            if (!room) return;
+            if (input?.kind === 'keydown') {
                 this.manager.playAudio('keyboardKeydown', {
                     volume: 0.8,
-                    position: new THREE.Vector3(-300, -400, 1200),
+                    position: room.anchor('anchor_keyboard'),
+                });
+            } else if (input?.kind === 'pointerdown' || input?.kind === 'pointerup') {
+                this.manager.playAudio(input.kind === 'pointerdown' ? 'mouseDown' : 'mouseUp', {
+                    volume: 0.8,
+                    position: room.anchor('anchor_mouse'),
                 });
             }
         });

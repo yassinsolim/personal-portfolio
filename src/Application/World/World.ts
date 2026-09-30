@@ -1,10 +1,8 @@
 import * as THREE from 'three';
 import Application from '../Application';
 import Resources from '../Utils/Resources';
-import ComputerSetup from './Computer';
-import MonitorScreen from './MonitorScreen';
-import Environment from './Environment';
-import Decor from './Decor';
+import Room from './Room';
+import Screens from './screens/Screens';
 import CoffeeSteam from './CoffeeSteam';
 import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
@@ -34,10 +32,10 @@ export default class World {
     resources: Resources;
 
     // Objects in the scene
-    environment: Environment;
-    decor: Decor;
-    computerSetup: ComputerSetup;
-    monitorScreen: MonitorScreen;
+    room: Room;
+    // the three monitors. built at once, before the room loads, so the
+    // loader can dock its terminal on m3 (screens.get('m3'))
+    screens: Screens;
     coffeeSteam: CoffeeSteam;
     cursor: Cursor;
     car: Car;
@@ -59,19 +57,20 @@ export default class World {
         this.raceManager = null;
         this.raceManagerLoading = null;
         this.pendingRaceAction = null;
+        this.screens = new Screens();
         this.bindRaceManagerLoader();
         UIEventBus.on('loadingScreenDone', () => this.prefetchRaceWhenIdle());
         // Wait for resources
         this.resources.on('ready', () => {
             // Setup
-            this.environment = new Environment();
-            this.decor = new Decor();
-            this.computerSetup = new ComputerSetup();
-            this.monitorScreen = new MonitorScreen();
+            this.room = new Room();
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
             this.raceTransition = new RaceTransition();
             this.flipper = new Flipper();
+            if (this.room.pc) {
+                this.screens.addTarget('pc', this.room.pc, () => this.room.pcPose());
+            }
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
             this.warming = this.warmUp();
@@ -218,8 +217,7 @@ export default class World {
     }
 
     update() {
-        if (this.monitorScreen) this.monitorScreen.update();
-        if (this.environment) this.environment.update();
+        this.screens.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
         if (this.flipper) this.flipper.update();
         if (this.raceManager) this.raceManager.update();
