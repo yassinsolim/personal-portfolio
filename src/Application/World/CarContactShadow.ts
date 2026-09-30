@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
 import { HorizontalBlurShader } from 'three/examples/jsm/shaders/HorizontalBlurShader.js';
 import { VerticalBlurShader } from 'three/examples/jsm/shaders/VerticalBlurShader.js';
 
@@ -6,20 +7,25 @@ import { VerticalBlurShader } from 'three/examples/jsm/shaders/VerticalBlurShade
 // this renders the car from underneath once when it's prepared (closer to the
 // ground = darker), blurs it, and lays it on the floor as a child of the car
 const TEXTURE_SIZE = 1024;
+// the blur runs at half size with its taps one texel apart: stretched taps
+// left offset copies of thin parts along the edges, the streaks
+const BLUR_SCALE = 0.5;
+const BLUR_PASSES = 9;
 const MARGIN = 0.1;
 const HEIGHT_FACTOR = 0.5;
 const DARKNESS = 1.6;
 const OPACITY = 0.85;
-const BLUR = 4;
 const LIFT = 4;
 
 let depthMaterial: THREE.MeshDepthMaterial | null = null;
-let blurQuad: THREE.Mesh | null = null;
-const blurCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+let quad: THREE.Mesh | null = null;
+const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const horizontalBlur = new THREE.ShaderMaterial(HorizontalBlurShader);
 const verticalBlur = new THREE.ShaderMaterial(VerticalBlurShader);
-horizontalBlur.depthTest = false;
-verticalBlur.depthTest = false;
+const copy = new THREE.ShaderMaterial(CopyShader);
+[horizontalBlur, verticalBlur, copy].forEach((material) => {
+    material.depthTest = false;
+});
 
 const getDepthMaterial = () => {
     if (depthMaterial) return depthMaterial;
@@ -34,41 +40,54 @@ const getDepthMaterial = () => {
     return depthMaterial;
 };
 
-const getBlurQuad = () => {
-    if (!blurQuad) {
-        blurQuad = new THREE.Mesh(
-            new THREE.PlaneGeometry(2, 2),
-            horizontalBlur
-        );
-        blurQuad.position.z = -0.5;
+const getQuad = () => {
+    if (!quad) {
+        quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), copy);
+        quad.position.z = -0.5;
         // rendering a bare mesh skips the scene's matrix update
-        blurQuad.updateMatrixWorld();
+        quad.updateMatrixWorld();
     }
-    return blurQuad;
+    return quad;
+};
+
+const draw = (
+    renderer: THREE.WebGLRenderer,
+    material: THREE.ShaderMaterial,
+    target: THREE.WebGLRenderTarget
+) => {
+    const mesh = getQuad();
+    mesh.material = material;
+    renderer.setRenderTarget(target);
+    renderer.render(mesh, quadCamera);
 };
 
 const blur = (
     renderer: THREE.WebGLRenderer,
     target: THREE.WebGLRenderTarget,
     scratch: THREE.WebGLRenderTarget,
-    amount: number
+    passes: number
 ) => {
-    const quad = getBlurQuad();
-    quad.material = horizontalBlur;
-    horizontalBlur.uniforms.tDiffuse.value = target.texture;
-    horizontalBlur.uniforms.h.value = amount / target.width;
-    renderer.setRenderTarget(scratch);
-    renderer.render(quad, blurCamera);
-
-    quad.material = verticalBlur;
-    verticalBlur.uniforms.tDiffuse.value = scratch.texture;
-    verticalBlur.uniforms.v.value = amount / target.height;
-    renderer.setRenderTarget(target);
-    renderer.render(quad, blurCamera);
+    horizontalBlur.uniforms.h.value = 1 / target.width;
+    verticalBlur.uniforms.v.value = 1 / target.height;
+    for (let i = 0; i < passes; i++) {
+        horizontalBlur.uniforms.tDiffuse.value = target.texture;
+        draw(renderer, horizontalBlur, scratch);
+        verticalBlur.uniforms.tDiffuse.value = scratch.texture;
+        draw(renderer, verticalBlur, target);
+    }
 };
 
-// lift is in the car's world units: the room is in centimeters, race mode in
-// meters
+const copyInto = (
+    renderer: THREE.WebGLRenderer,
+    source: THREE.WebGLRenderTarget,
+    target: THREE.WebGLRenderTarget
+) => {
+    copy.uniforms.tDiffuse.value = source.texture;
+    draw(renderer, copy, target);
+};
+
+// groundY is where the tyres touch, lift raises the plane from there. both are
+// in the car's world units: room scene units, race mode meters
 export const addContactShadow = (
     renderer: THREE.WebGLRenderer,
     car: THREE.Object3D,
@@ -99,8 +118,9 @@ export const addContactShadow = (
     camera.rotation.x = Math.PI / 2;
     camera.updateMatrixWorld();
 
-    const target = new THREE.WebGLRenderTarget(texWidth, texHeight);
-    const scratch = new THREE.WebGLRenderTarget(texWidth, texHeight);
+    const target = new THREE.WebGLRenderTarget(texWidth, texHeight, {
+        samples: 4,
+    });
     const scene = new THREE.Scene();
     scene.overrideMaterial = getDepthMaterial();
 
@@ -114,21 +134,42 @@ export const addContactShadow = (
     renderer.render(scene, camera);
     scene.remove(car);
     parent?.add(car);
-    blur(renderer, target, scratch, BLUR);
-    blur(renderer, target, scratch, BLUR * 0.4);
+
+    // half float keeps the soft tails through the passes where it's supported
+    const blurWidth = Math.round(texWidth * BLUR_SCALE);
+    const blurHeight = Math.round(texHeight * BLUR_SCALE);
+    const halfFloat =
+        renderer.extensions.has('EXT_color_buffer_float') ||
+        renderer.extensions.has('EXT_color_buffer_half_float');
+    const type = halfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
+    const small = new THREE.WebGLRenderTarget(blurWidth, blurHeight, { type });
+    const scratch = new THREE.WebGLRenderTarget(blurWidth, blurHeight, {
+        type,
+    });
+    const result = new THREE.WebGLRenderTarget(blurWidth, blurHeight);
+    copyInto(renderer, target, small);
+    blur(renderer, small, scratch, BLUR_PASSES);
+    copyInto(renderer, small, result);
 
     // read it back so the shadow is a plain texture: no render targets kept
     // alive per cached car, and the scene exporter can handle it
-    const pixels = new Uint8Array(texWidth * texHeight * 4);
-    renderer.readRenderTargetPixels(target, 0, 0, texWidth, texHeight, pixels);
+    const pixels = new Uint8Array(blurWidth * blurHeight * 4);
+    renderer.readRenderTargetPixels(
+        result,
+        0,
+        0,
+        blurWidth,
+        blurHeight,
+        pixels
+    );
     renderer.setRenderTarget(previousTarget);
     renderer.setClearColor(previousColor, previousAlpha);
-    target.dispose();
-    scratch.dispose();
+    [target, small, scratch, result].forEach((t) => t.dispose());
 
-    const texture = new THREE.DataTexture(pixels, texWidth, texHeight);
-    texture.minFilter = THREE.LinearFilter;
+    const texture = new THREE.DataTexture(pixels, blurWidth, blurHeight);
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
     texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
     texture.needsUpdate = true;
 
     const geometry = new THREE.PlaneGeometry(width, depth).rotateX(

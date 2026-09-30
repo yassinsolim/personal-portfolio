@@ -5,7 +5,7 @@ import UIEventBus from '../UI/EventBus';
 import { applyBmwM5GlassTint } from '../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../Utils/CarFinish';
 import { addContactShadow } from './CarContactShadow';
-import { CAR_GROUND_Y, OLD_DESK_CENTER } from './screens/layout';
+import { CAR_GROUND_Y, FLOOR_Y, OLD_DESK_CENTER } from './screens/layout';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
 import {
@@ -35,6 +35,10 @@ const TOYOTA_CROWN_DESK_WIDTH_SHIFT = 0.15;
 const MOBILE_MAX_WIDTH = 768;
 const MOBILE_CAR_BACK_SHIFT = 0.12;
 const WHEEL_SILVER = legacyColor(0xcfd3da);
+// the tyres sit 11 units under the room floor (see CAR_GROUND_Y). the contact
+// shadow goes about 3 mm above the floor: from the tyres it sat under it and
+// only showed through the depth bias, which breaks up into streaks
+const SHADOW_FLOOR_GAP = 8;
 
 export default class Car {
     application: Application;
@@ -252,7 +256,12 @@ export default class Car {
                 child.receiveShadow = true;
             }
         });
-        addContactShadow(this.application.renderer.instance, car, groundY);
+        addContactShadow(
+            this.application.renderer.instance,
+            car,
+            groundY,
+            FLOOR_Y + SHADOW_FLOOR_GAP - groundY
+        );
     }
 
     cloneMaterials(car: THREE.Object3D) {
