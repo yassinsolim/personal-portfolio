@@ -5268,11 +5268,12 @@ export default class RaceVehicle {
         this.frontSpinAngle += front * deltaSeconds;
         this.rearSpinAngle += rear * deltaSeconds;
         this.wheelSpinAngle = (this.frontSpinAngle + this.rearSpinAngle) * 0.5;
-        const target = THREE.MathUtils.clamp(
-            this.steerAngle,
-            -WHEEL_VISUAL_STEER_LIMIT,
-            WHEEL_VISUAL_STEER_LIMIT
+        // an angle kit turns the wheels further than the stock limit
+        const limit = Math.max(
+            WHEEL_VISUAL_STEER_LIMIT,
+            this.physics.spec.maxSteer
         );
+        const target = THREE.MathUtils.clamp(this.steerAngle, -limit, limit);
         this.steerVisualAngle = THREE.MathUtils.lerp(
             this.steerVisualAngle,
             target,

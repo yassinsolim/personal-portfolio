@@ -7,7 +7,7 @@ import type { PhysicsSpec } from '../Vehicle/VehiclePhysics';
 export type PaintFinish =
     'stock' | 'gloss' | 'metallic' | 'pearl' | 'matte' | 'chrome';
 export type Spoiler = 'none' | 'ducktail' | 'wing';
-export type TireCompound = 'street' | 'sport' | 'semi' | 'slick';
+export type TireCompound = 'street' | 'sport' | 'semi' | 'slick' | 'drift';
 
 export type CarLook = {
     // hex like #1f4fa8, null keeps the factory color
@@ -38,6 +38,8 @@ export type CarTune = {
     brakeBias: number;
     // false takes the electronic top speed limiter out
     speedLimiter: boolean;
+    // angle kit: more steering lock, for countersteering big slides
+    angleKit: boolean;
 };
 
 export const STOCK_LOOK: CarLook = {
@@ -62,7 +64,21 @@ export const STOCK_TUNE: CarTune = {
     gearing: 0,
     brakeBias: STOCK_BRAKE_BIAS,
     speedLimiter: true,
+    angleKit: false,
 };
+
+// what the drift build button sets: drift tires, a locked diff, a stiffer
+// rear, shorter gearing and the angle kit
+export const DRIFT_BUILD: Partial<CarTune> = {
+    tires: 'drift',
+    diff: 1,
+    springsFront: 0.2,
+    springsRear: 0.6,
+    gearing: 0.4,
+    angleKit: true,
+};
+
+const ANGLE_KIT_LOCK = (56 * Math.PI) / 180;
 
 export const LIMITS = {
     power: [0.85, 1.15],
@@ -76,12 +92,15 @@ export const LIMITS = {
 
 const TIRES: Record<
     TireCompound,
-    { grip: number; peak: number; shape: number }
+    { grip: number; rear: number; peak: number; shape: number }
 > = {
-    street: { grip: 0.92, peak: 0.01, shape: -0.1 },
-    sport: { grip: 1, peak: 0, shape: 0 },
-    semi: { grip: 1.06, peak: -0.005, shape: 0.05 },
-    slick: { grip: 1.12, peak: -0.01, shape: 0.12 },
+    street: { grip: 0.92, rear: 1, peak: 0.01, shape: -0.1 },
+    sport: { grip: 1, rear: 1, peak: 0, shape: 0 },
+    semi: { grip: 1.06, rear: 1, peak: -0.005, shape: 0.05 },
+    slick: { grip: 1.12, rear: 1, peak: -0.01, shape: 0.12 },
+    // a hard rear compound that lets go early and slides predictably: less
+    // grip at the back, a wider peak and a flatter fall past it
+    drift: { grip: 0.97, rear: 0.86, peak: 0.03, shape: -0.2 },
 };
 
 // rear downforce and drag each body kit adds (clA, cdA in m^2)
@@ -145,7 +164,7 @@ export const sanitizeTune = (raw: unknown): CarTune => {
     ) => clamp(Number(value ?? fallback), min, max);
     return {
         power: num(source.power, 1, LIMITS.power),
-        tires: (['street', 'sport', 'semi', 'slick'] as const).includes(
+        tires: (['street', 'sport', 'semi', 'slick', 'drift'] as const).includes(
             source.tires as TireCompound
         )
             ? (source.tires as TireCompound)
@@ -157,6 +176,7 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         gearing: num(source.gearing, 0, LIMITS.gearing),
         brakeBias: num(source.brakeBias, STOCK_BRAKE_BIAS, LIMITS.brakeBias),
         speedLimiter: source.speedLimiter !== false,
+        angleKit: source.angleKit === true,
     };
 };
 
@@ -182,6 +202,7 @@ export const applyTune = (
         torqueTable: spec.torqueTable.map((torque) => torque * power),
         speedLimit: tune.speedLimiter ? spec.speedLimit : Infinity,
         tireGrip: spec.tireGrip * tires.grip,
+        tireGripRear: spec.tireGripRear * tires.rear,
         slipAnglePeak: spec.slipAnglePeak + tires.peak,
         tireShape: spec.tireShape + tires.shape,
         // stiffer front than rear takes more of the roll up front (understeer)
@@ -199,6 +220,9 @@ export const applyTune = (
         lsdLock: spec.lsdLock * Math.pow(2, tune.diff),
         finalDrive: spec.finalDrive * (1 + 0.1 * tune.gearing),
         brakeBias: tune.brakeBias,
+        maxSteer: tune.angleKit
+            ? Math.max(spec.maxSteer, ANGLE_KIT_LOCK)
+            : spec.maxSteer,
         // lower sits the weight lower
         cgHeight: Math.max(0.3, spec.cgHeight + rideOffsetMeters(look) * 0.8),
         clA,
@@ -217,7 +241,8 @@ export const isStockTune = (tune: CarTune) =>
     tune.diff === 0 &&
     tune.gearing === 0 &&
     Math.abs(tune.brakeBias - STOCK_BRAKE_BIAS) < 1e-6 &&
-    tune.speedLimiter;
+    tune.speedLimiter &&
+    !tune.angleKit;
 
 // what changes the physics: the tune, aero and ride height. paint and wheels
 // are only looks
@@ -225,7 +250,8 @@ export const isStockSetup = (tune: CarTune, look: CarLook) =>
     isStockTune(tune) && look.spoiler === 'none' && look.ride === 0;
 
 // a short code for the tuned board, one base 36 digit per setting. a removed
-// speed limiter adds a digit at the end, so older codes keep their meaning
+// speed limiter adds a digit at the end and an angle kit an 'a', so older
+// codes keep their meaning
 export const tuneCode = (tune: CarTune, look: CarLook) => {
     const q = (value: number, min: number, max: number) =>
         Math.round(
@@ -233,7 +259,9 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         ).toString(36);
     return [
         q(tune.power, ...LIMITS.power),
-        ['street', 'sport', 'semi', 'slick'].indexOf(tune.tires).toString(36),
+        ['street', 'sport', 'semi', 'slick', 'drift']
+            .indexOf(tune.tires)
+            .toString(36),
         q(tune.springsFront, ...LIMITS.springs),
         q(tune.springsRear, ...LIMITS.springs),
         q(tune.damping, ...LIMITS.damping),
@@ -243,6 +271,7 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         q(look.ride, ...LIMITS.ride),
         ['none', 'ducktail', 'wing'].indexOf(look.spoiler).toString(36),
         tune.speedLimiter ? '' : '1',
+        tune.angleKit ? 'a' : '',
     ].join('');
 };
 

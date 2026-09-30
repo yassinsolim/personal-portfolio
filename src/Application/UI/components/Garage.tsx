@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import eventBus from '../EventBus';
 import { carOptions } from '../../carOptions';
 import {
+    DRIFT_BUILD,
     LIMITS,
     STOCK_BRAKE_BIAS,
     STOCK_LOOK,
@@ -99,6 +100,7 @@ const TIRES: Array<[TireCompound, string]> = [
     ['sport', 'Sport (stock)'],
     ['semi', 'Semi slick'],
     ['slick', 'Race slick'],
+    ['drift', 'Drift'],
 ];
 // rims that come from the other cars
 const WHEELS = [
@@ -406,6 +408,23 @@ const Garage = ({ state, onClose }: Props) => {
                     )}
                     {tab === 'tuning' && (
                         <>
+                            <div className="garage-options column">
+                                <button
+                                    type="button"
+                                    className={
+                                        tune.tires === 'drift' && tune.angleKit
+                                            ? 'on'
+                                            : ''
+                                    }
+                                    onClick={() => setT(DRIFT_BUILD)}
+                                >
+                                    <strong>Drift build</strong>
+                                    <small>
+                                        Drift tires, angle kit, locked diff,
+                                        stiffer rear and shorter gears
+                                    </small>
+                                </button>
+                            </div>
                             <Slider
                                 label="Engine map"
                                 value={tune.power}
@@ -507,6 +526,23 @@ const Garage = ({ state, onClose }: Props) => {
                                 format={(v) => `${Math.round(v * 100)}% front`}
                                 onChange={(brakeBias) => setT({ brakeBias })}
                             />
+                            <h4>Steering lock</h4>
+                            <div className="garage-options">
+                                <button
+                                    type="button"
+                                    className={tune.angleKit ? '' : 'on'}
+                                    onClick={() => setT({ angleKit: false })}
+                                >
+                                    Stock
+                                </button>
+                                <button
+                                    type="button"
+                                    className={tune.angleKit ? 'on' : ''}
+                                    onClick={() => setT({ angleKit: true })}
+                                >
+                                    Angle kit
+                                </button>
+                            </div>
                             {state?.speedLimiter ? (
                                 <>
                                     <h4>Speed limiter</h4>
