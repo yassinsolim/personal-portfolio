@@ -20,12 +20,21 @@ const LIFT = 4;
 let depthMaterial: THREE.MeshDepthMaterial | null = null;
 let quad: THREE.Mesh | null = null;
 const quadCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const horizontalBlur = new THREE.ShaderMaterial(HorizontalBlurShader);
-const verticalBlur = new THREE.ShaderMaterial(VerticalBlurShader);
-const copy = new THREE.ShaderMaterial(CopyShader);
-[horizontalBlur, verticalBlur, copy].forEach((material) => {
-    material.depthTest = false;
-});
+// own uniforms: the shader objects are shared with the race's passes
+const pass = (shader: {
+    uniforms: Record<string, THREE.IUniform>;
+    vertexShader: string;
+    fragmentShader: string;
+}) =>
+    new THREE.ShaderMaterial({
+        uniforms: THREE.UniformsUtils.clone(shader.uniforms),
+        vertexShader: shader.vertexShader,
+        fragmentShader: shader.fragmentShader,
+        depthTest: false,
+    });
+const horizontalBlur = pass(HorizontalBlurShader);
+const verticalBlur = pass(VerticalBlurShader);
+const copy = pass(CopyShader);
 
 const getDepthMaterial = () => {
     if (depthMaterial) return depthMaterial;

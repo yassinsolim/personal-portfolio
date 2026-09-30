@@ -164,6 +164,11 @@ const isTouchRaceDevice = () =>
             window.matchMedia?.('(max-height: 520px)').matches
     );
 
+// phones: the room panel folds to a menu button and the hint
+const COMPACT_PANEL_QUERY = '(max-width: 768px), (max-height: 520px)';
+const isCompactScreen = () =>
+    Boolean(window.matchMedia?.(COMPACT_PANEL_QUERY).matches);
+
 const setTouchControl = (control: TouchControlName, active: boolean) => {
     eventBus.dispatch('race:touchControl', { control, active });
 };
@@ -260,6 +265,11 @@ const App = () => {
     const [roomFocus, setRoomFocus] = useState(false);
     // the desk view: the panel folds to a small tab so it clears the top screen
     const [deskView, setDeskView] = useState(false);
+    const [compactPanel, setCompactPanel] = useState(() => isCompactScreen());
+    const [panelOpen, setPanelOpen] = useState(false);
+    const [tapToBegin] = useState(
+        () => Boolean(window.matchMedia?.('(pointer: coarse)').matches)
+    );
     const [racePaused, setRacePaused] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
@@ -371,6 +381,7 @@ const App = () => {
         });
         eventBus.on('camera:view', (state: { key?: string } | undefined) => {
             setDeskView(state?.key === 'desk');
+            setPanelOpen(false);
         });
 
         eventBus.on(
@@ -430,6 +441,14 @@ const App = () => {
         eventBus.dispatch('race:requestLeaderboard', {});
         eventBus.dispatch('race:multiplayerSetName', { playerName });
         eventBus.dispatch('race:multiplayerRequestState', {});
+    }, []);
+
+    useEffect(() => {
+        const query = window.matchMedia?.(COMPACT_PANEL_QUERY);
+        if (!query) return;
+        const update = () => setCompactPanel(query.matches);
+        query.addEventListener?.('change', update);
+        return () => query.removeEventListener?.('change', update);
     }, []);
 
     useEffect(() => {
@@ -717,21 +736,39 @@ const App = () => {
     const displayedGear = hud.gear < 0 ? 'R' : String(hud.gear);
     const multiplayerBusy = multiplayer.connecting;
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
+    const panelMenu = compactPanel && !raceModeActive && !deskView;
+    const panelFolded = panelMenu && !panelOpen;
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <Loader />
             {showHint && (
                 <div
-                    className={['look-hint', roomFocus && 'room-focused', deskView && !roomFocus && 'room-desk']
+                    className={[
+                        'look-hint',
+                        roomFocus && 'room-focused',
+                        deskView && !roomFocus && 'room-desk',
+                        panelMenu && 'compact',
+                        panelFolded && 'folded',
+                    ]
                         .filter(Boolean)
                         .join(' ')}
                     data-label="Controls"
                     data-prevent-click
                     tabIndex={deskView ? 0 : -1}
                 >
-                    <div>
-                        Click anywhere to begin.
+                    {panelMenu && (
+                        <button
+                            type="button"
+                            className="look-hint-menu"
+                            aria-expanded={panelOpen}
+                            onClick={() => setPanelOpen((open) => !open)}
+                        >
+                            {panelOpen ? 'Close' : 'Menu'}
+                        </button>
+                    )}
+                    <div className="look-hint-begin">
+                        {tapToBegin ? 'Tap' : 'Click'} anywhere to begin.
                     </div>
                     <div>
                         Visit the inner OS{' '}

@@ -17,6 +17,7 @@ import {
     DeskKeyframe,
     OrbitControlsStart,
     FlipperKeyframe,
+    roomFov,
 } from './CameraKeyframes';
 
 export enum CameraKey {
@@ -164,7 +165,7 @@ export default class Camera extends EventEmitter {
         // near plane sets depth precision. car stripes/decals sit <1mm above the
         // paint and z-fight at near=10. closest view (a focused screen) is ~1600 units away
         this.instance = new THREE.PerspectiveCamera(
-            35,
+            roomFov(this.sizes),
             this.getAspect(),
             200,
             900000
@@ -414,6 +415,13 @@ export default class Camera extends EventEmitter {
             const keyframe = this.keyframes[this.currentKeyframe];
             this.position.copy(keyframe.position);
             this.focalPoint.copy(keyframe.focalPoint);
+        }
+
+        // the race sets its own fov, the room's comes back with the room
+        const fov = roomFov(this.sizes);
+        if (this.instance.fov !== fov) {
+            this.instance.fov = fov;
+            this.instance.updateProjectionMatrix();
         }
 
         this.instance.position.copy(this.position);
