@@ -1,4 +1,4 @@
-# desk props: finalmouse ulx (tiger / large), artisan ninja fx hien (l),
+# desk props: finalmouse ulx phantom (lion / medium), artisan ninja fx hien (l),
 # sennheiser hd 599 se lying flat, the coffee mug, the credits card and the
 # empty flipper zero spot
 import math
@@ -25,47 +25,47 @@ def mouse(b, s, desk_y):
     stations = b.seg(22, 9)
     k = b.seg(20, 9)
     p = m['squareness']
-    rings = []
-    heights = []
-    for i in range(stations + 1):
-        t = i / stations
+
+    def at(t, th):
+        # th runs from the left bottom (pi) over the top (pi / 2) to the right bottom (0)
         w = interp(ts, ws, t) * (m['w'] / max(ws))
         h = interp(ts, hs, t) * (m['h'] / max(hs))
-        z = -L / 2 + t * L
-        ring = []
-        for j in range(k + 1):
-            th = math.pi - math.pi * j / k       # left bottom, over the top, right bottom
-            c, sn = math.cos(th), math.sin(th)
-            x = (w / 2) * math.copysign(abs(c) ** (2 / p), c)
-            y = h * abs(sn) ** (2 / p)
-            ring.append((x, y, z))
-        rings.append(ring)
-        heights.append(h)
+        c, sn = math.cos(th), math.sin(th)
+        return Vector(((w / 2) * math.copysign(abs(c) ** (2 / p), c), h * abs(sn) ** (2 / p), -L / 2 + t * L))
+
+    rings = []
+    for i in range(stations + 1):
+        t = i / stations
+        rings.append([tuple(at(t, math.pi - math.pi * j / k)) for j in range(k + 1)])
     g = loft(rings, closed=False, cap0=True, cap1=True, smooth=True)
     pad_t = s['pad']['t']
     place = T(m['x'], desk_y + pad_t, m['z']) @ rot3(yaw=m.get('yaw', 0.0))
     mesh = Mesh()
-    white, blue = Geo(), Geo()
-    white.verts = blue.verts = g.verts
-    split = m['blue_split']
-    for idx, sm in zip(g.faces, g.smooth):
-        ys = [g.verts[i][1] for i in idx]
-        zs = [g.verts[i][2] for i in idx]
-        tt = (sum(zs) / len(zs) + L / 2) / L
-        hh = interp(ts, hs, min(max(tt, 0), 1)) * (m['h'] / max(hs))
-        (blue if sum(ys) / len(ys) < split * hh else white).f(idx, sm)
-    mesh.add(white, place, 'mouse_white')
-    mesh.add(blue, place, 'mouse_blue')
+    mesh.add(g, place, 'mouse_shell')
     # scroll wheel, rising out of the shell between the buttons
     tw = m['wheel_t']
     zw = -L / 2 + tw * L
     hw = interp(ts, hs, tw) * (m['h'] / max(hs))
     wheel = cylinder(m['wheel_r'], m['wheel_w'], b.seg(16, 8))
-    mesh.add(wheel, place @ T(0, hw - m['wheel_r'] * 0.55, zw) @ Matrix.Rotation(math.radians(90), 4, 'Z'), 'mouse_blue')
+    mesh.add(wheel, place @ T(0, hw - m['wheel_r'] * 0.55, zw) @ Matrix.Rotation(math.radians(90), 4, 'Z'), 'mouse_trim')
     # two side buttons on the left
     for tb in m['side_buttons_t']:
         wb = interp(ts, ws, tb) * (m['w'] / max(ws))
-        mesh.add(rbox(0.004, 0.009, 0.019, 0.0018, 1), place @ T(-wb / 2 - 0.0005, m['side_buttons_y'], -L / 2 + tb * L), 'mouse_blue')
+        mesh.add(rbox(0.004, 0.009, 0.019, 0.0018, 1), place @ T(-wb / 2 - 0.0005, m['side_buttons_y'], -L / 2 + tb * L), 'mouse_trim')
+    # the phantom's small light inlays, mirrored: thin plates lying on the
+    # shell at a length share t and an angle off the top
+    for t, off, iw, il in m['inlays']:
+        for th in (math.pi / 2 + off, math.pi / 2 - off):
+            pt = at(t, th)
+            du = (at(t + 0.01, th) - at(t - 0.01, th)).normalized()
+            dv = (at(t, th + 0.01) - at(t, th - 0.01)).normalized()
+            n = du.cross(dv).normalized()
+            if n.dot(Vector((pt.x, pt.y, 0))) < 0:
+                n = -n
+            side = n.cross(du).normalized()
+            along = side.cross(n).normalized()
+            frame = Matrix((side, n, along)).transposed().to_4x4()
+            mesh.add(rbox(iw, 0.0006, il, 0.0003, 1), place @ T(tuple(pt + n * 0.0002)) @ frame, 'mouse_accent')
     return mesh, place
 
 
