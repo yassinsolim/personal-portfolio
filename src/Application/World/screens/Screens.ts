@@ -645,6 +645,10 @@ export default class Screens {
                 if (this.iframe && document.activeElement === this.iframe && this.focused !== 'm1') {
                     this.iframe.blur();
                     window.focus();
+                    // a window opened from the terminal took the keys from it
+                    if (this.focused === 'm2' || this.focused === 'm3') {
+                        this.screens[this.focused].display?.setFocused(true);
+                    }
                 }
             }, 0);
         });
