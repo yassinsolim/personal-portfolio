@@ -282,7 +282,7 @@ const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
     const blade = across(new THREE.Shape(profile), span);
     blade.translate(-span / 2, height, lead);
     carbonParts.push(blade);
-    const trailing = profile.reduce((best, v) => (v.x > best.x ? v : best));
+    const trailing = profile.reduce((best, v) => (v.x > best.x ? v : best), profile[0]);
     // gurney strip along the trailing edge
     const gurney = new THREE.BoxGeometry(span, 0.014, 0.004);
     gurney.translate(0, height + trailing.y + 0.006, lead - trailing.x + 0.001);
