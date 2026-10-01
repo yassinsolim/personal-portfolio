@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
+import { buildDriftParkData, DRIFT_PARK_SPLITS } from './Track/driftPark';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
 import { peakOutput, predictTopSpeed, rpmAtSpeed } from './Vehicle/VehiclePhysics';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
+import DriftScore, { type DriftEvent } from './Lap/DriftScore';
 import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
-import { carHasCalipers } from './Garage/carLook';
+import { carHasCalipers, kitsThatFit } from './Garage/carLook';
 import GarageScene, { GARAGE_ORIGIN } from './Garage/GarageScene';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
@@ -19,10 +21,18 @@ import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
     type MultiplayerPlayerState,
 } from './Multiplayer/MultiplayerService';
-import RaceVisuals from './Visuals/RaceVisuals';
+import RaceVisuals, { type TrackWorld } from './Visuals/RaceVisuals';
 import CarCollisions, { type RemoteCar } from './Multiplayer/CarCollisions';
 import { carOptionsById } from '../carOptions';
-import { drain, type Steps } from './slicing';
+import { drain, slice, type Steps } from './slicing';
+import type { DriftEntry } from './Leaderboard/LocalDriftBoard';
+
+export type TrackMode = 'ring' | 'drift';
+
+type Laps = { lapTimer: LapTimer; sectors: SectorTimer };
+
+// a drift park lap can't be under this
+const DRIFT_MIN_LAP_MS = 30_000;
 
 type RaceModeState = {
     active: boolean;
@@ -153,6 +163,17 @@ export default class RaceManager {
     debugGameEnabled: boolean;
     ghostPlaybackEnabled: boolean;
     lastStartResets: number;
+    // the ring, or the drift park: each a world of its own, the park built
+    // the first time it's picked. scoring and its board are the park's
+    trackMode: TrackMode = 'ring';
+    ringWorld: TrackWorld | null = null;
+    ringLaps: Laps | null = null;
+    drift: { world: TrackWorld; laps: Laps } | null = null;
+    driftBuild: Promise<void> | null = null;
+    driftScore = new DriftScore();
+    driftEvent: (DriftEvent & { at: number }) | null = null;
+    driftLastRun: { score: number; lapTimeMs: number } | null = null;
+    pendingDrift: { score: number; lapTimeMs: number } | null = null;
 
     // built when constructed, or with defer by running pending (the
     // homepage builds it a slice a frame)
@@ -199,6 +220,8 @@ export default class RaceManager {
         );
         this.localLeaderboard = new LocalLeaderboard();
         this.leaderboardService = new LeaderboardService(this.localLeaderboard);
+        this.ringWorld = this.visuals.world();
+        this.ringLaps = { lapTimer: this.lapTimer, sectors: this.sectors };
         this.currentLapTimeMs = 0;
         this.lapRunning = false;
         this.lapProgress = 0;
@@ -289,6 +312,21 @@ export default class RaceManager {
             if (!this.active || this.paused) return;
             this.vehicle.resetToTrack();
             this.physicsAccumulator = 0;
+            // a reset is a lost chain on the drift park
+            if (this.trackMode === 'drift' && this.driftScore.chain > 0) {
+                this.driftEvent = {
+                    ...this.driftScore.lose('spin'),
+                    at: this.application.time.elapsed,
+                };
+            }
+        });
+
+        UIEventBus.on('race:setTrack', (state: { track?: string } | undefined) => {
+            void this.setTrackMode(state?.track === 'drift' ? 'drift' : 'ring');
+        });
+
+        UIEventBus.on('race:requestDriftBoard', () => {
+            void this.refreshDriftBoard();
         });
 
         UIEventBus.on('race:restartLap', () => {
@@ -379,10 +417,10 @@ export default class RaceManager {
             }
         );
 
-        // a hidden tab drops realtime too
+        // a hidden tab drops realtime too. the drift park is solo
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') void this.multiplayer.suspend();
-            else if (this.active) void this.multiplayer.resume();
+            else if (this.active && this.trackMode === 'ring') void this.multiplayer.resume();
         });
 
         UIEventBus.on('race:multiplayerLeaveLobby', async () => {
@@ -515,6 +553,118 @@ export default class RaceManager {
         this.startLapTimer();
     }
 
+    // the ring or the drift park. the park is built the first time it's
+    // picked, then both stay built and only one shows
+    async setTrackMode(mode: TrackMode) {
+        if (mode === this.trackMode || !this.active) return;
+        if (mode === 'drift' && !this.drift) {
+            UIEventBus.dispatch('race:trackState', { track: this.trackMode, building: true });
+            this.driftBuild ||= this.buildDriftPark();
+            await this.driftBuild;
+            if (!this.active || this.trackMode === mode) return;
+        }
+        this.applyTrackMode(mode);
+    }
+
+    async buildDriftPark() {
+        const track = new NordschleifeTrack(this.raceRoot, true, buildDriftParkData());
+        await slice(track.pending);
+        const world = await slice(this.visuals.buildWorld(track));
+        const split = (name: string) => {
+            const section = track.sections.find((s) => s.name === name);
+            return section ? (section.distance * track.distanceScale) / track.length : 0.5;
+        };
+        this.drift = {
+            world,
+            laps: {
+                lapTimer: new LapTimer(track.getCurve(), 900, DRIFT_MIN_LAP_MS),
+                sectors: new SectorTimer(
+                    DRIFT_PARK_SPLITS.map(split),
+                    ['Start to the hairpin', 'Hairpin to the back straight', 'Back straight to the line'],
+                    'driftpark:'
+                ),
+            },
+        };
+    }
+
+    applyTrackMode(mode: TrackMode) {
+        const target =
+            mode === 'drift'
+                ? this.drift
+                : this.ringWorld && this.ringLaps
+                  ? { world: this.ringWorld, laps: this.ringLaps }
+                  : null;
+        if (!target) return;
+        this.trackMode = mode;
+        this.track = target.world.track;
+        this.visuals.useWorld(target.world);
+        this.lapTimer = target.laps.lapTimer;
+        this.sectors = target.laps.sectors;
+        this.vehicle.spawnSlot = 0;
+        this.vehicle.setTrack(target.world.track);
+        this.driftEvent = null;
+        this.driftLastRun = null;
+        this.pendingDrift = null;
+        if (mode === 'drift') {
+            // the park is solo: no lobby and no ghost
+            void this.multiplayer.suspend();
+            this.clearRemoteVehicles();
+            this.ghostReplay.setActive(false);
+        } else {
+            if (this.active) void this.multiplayer.resume();
+            this.ghostReplay.setActive(this.ghostPlaybackEnabled);
+        }
+        this.startLapTimer();
+        UIEventBus.dispatch('race:trackOutline', { points: this.getTrackOutline() });
+        UIEventBus.dispatch('race:trackState', { track: mode, building: false });
+        if (mode === 'drift') void this.refreshDriftBoard();
+        else void this.refreshLeaderboard();
+    }
+
+    async refreshDriftBoard() {
+        const entries: DriftEntry[] = await this.leaderboardService.getDriftBoard(10);
+        UIEventBus.dispatch('race:driftBoard', { entries });
+    }
+
+    async submitPendingDrift() {
+        const run = this.pendingDrift;
+        if (!run) return;
+        this.pendingDrift = null;
+        const name = this.multiplayer.getLocalPlayerName() || 'Driver';
+        const { tune, look } = this.vehicle;
+        const entry = await this.leaderboardService.submitDrift(
+            name,
+            run.score,
+            run.lapTimeMs,
+            this.vehicle.currentCarId,
+            isStockSetup(tune, look) ? undefined : tuneCode(tune, look)
+        );
+        await this.refreshDriftBoard();
+        UIEventBus.dispatch('race:driftSubmitted', { entry });
+    }
+
+    // the drift chain, from the car as it is after this frame's physics
+    updateDriftScore(deltaSeconds: number, speedKph: number, nowMs: number) {
+        const vehicle = this.vehicle;
+        const physics = vehicle.physics;
+        // going backwards reads as a spin, crawling as nothing
+        const angle =
+            physics.vx > 2
+                ? (Math.abs(physics.getBodySlip()) * 180) / Math.PI
+                : physics.getSpeed() > 3
+                  ? 180
+                  : 0;
+        const onRoad =
+            vehicle.wheelSurfaces.filter((s) => s === 'asphalt' || s === 'kerb').length >= 2;
+        const event = this.driftScore.update(deltaSeconds, {
+            angle,
+            speedKph,
+            onRoad,
+            impact: vehicle.impact,
+        });
+        if (event) this.driftEvent = { ...event, at: nowMs };
+    }
+
     // lobby players line up by when they joined
     getSpawnSlot() {
         const state = this.multiplayer.getState();
@@ -542,7 +692,8 @@ export default class RaceManager {
         this.lapRunning = lapStart.lapRunning;
         this.lapArmed = lapStart.armed;
         this.lapProgress = lapStart.progress;
-        this.ghostReplay.holdAtStart();
+        this.driftScore.reset();
+        if (this.trackMode === 'ring') this.ghostReplay.holdAtStart();
         this.lastStartResets = this.vehicle.startResets;
     }
 
@@ -557,6 +708,8 @@ export default class RaceManager {
         void this.multiplayer.suspend();
 
         this.active = false;
+        // race mode always opens on the ring
+        if (this.trackMode !== 'ring') this.applyTrackMode('ring');
         this.paused = false;
         this.transitionHold = false;
         this.raceRoot.visible = false;
@@ -670,7 +823,7 @@ export default class RaceManager {
             background: scene.background as THREE.Color | THREE.Texture | null,
         };
         scene.environment = garage.buildEnvironment(this.application.renderer.instance);
-        scene.environmentIntensity = 0.8;
+        scene.environmentIntensity = 1.2;
         scene.fog = null;
         scene.background = new THREE.Color(0x0b0c0e);
         garage.root.visible = true;
@@ -714,6 +867,9 @@ export default class RaceManager {
             look,
             tune,
             calipers: carHasCalipers(this.vehicle.currentCarId),
+            spoilers: this.vehicle.carModel
+                ? kitsThatFit(this.vehicle.carModel, this.vehicle.currentCarId)
+                : ['ducktail', 'wing'],
             speedLimiter: this.vehicle.currentTuning.speedLimitKph,
             tuned: !isStockSetup(tune, look),
             stats: {
@@ -821,6 +977,19 @@ export default class RaceManager {
             paused: this.paused,
             pendingLapSubmission: this.pendingLapTimeMs > 0,
             ghostBestLapMs: this.ghostReplay.getBestLapTimeMs(),
+            track: this.trackMode,
+            drift:
+                this.trackMode === 'drift'
+                    ? {
+                          total: this.driftScore.total,
+                          chain: this.driftScore.chainPoints,
+                          multiplier: this.driftScore.multiplier,
+                          angle: Math.round(this.driftScore.angle),
+                          drifting: this.driftScore.drifting,
+                          event: this.driftEvent,
+                          lastRun: this.driftLastRun,
+                      }
+                    : null,
         });
     }
 
@@ -1395,18 +1564,22 @@ export default class RaceManager {
             });
 
             this.sectors.setCar(telemetry.carId);
+            const ring = this.trackMode === 'ring';
             if (!lapWasRunning && lapUpdate.lapRunning) {
-                this.ghostReplay.startLap(nowMs);
+                if (ring) this.ghostReplay.startLap(nowMs);
                 this.sectors.reset();
             }
             this.sectors.update(this.lapProgress, this.currentLapTimeMs, this.lapRunning);
 
-            if (lapUpdate.lapRunning) {
+            if (lapUpdate.lapRunning && ring) {
                 this.ghostReplay.capture(nowMs, {
                     position: telemetry.position,
                     quaternion: telemetry.quaternion,
                     carId: telemetry.carId,
                 });
+            }
+            if (lapUpdate.lapRunning && !ring) {
+                this.updateDriftScore(delta, telemetry.speedKph, nowMs);
             }
 
             if (lapUpdate.completedLapTimeMs) {
@@ -1415,16 +1588,36 @@ export default class RaceManager {
                     Boolean(lapUpdate.validLap)
                 );
                 this.lastLapTimeMs = lapUpdate.completedLapTimeMs;
-                this.ghostReplay.completeLap(
-                    Boolean(lapUpdate.validLap),
-                    lapUpdate.completedLapTimeMs
-                );
-                // the next lap started on the line: record it, and the ghost
-                // races it from its start too
-                this.ghostReplay.startLap(nowMs);
+                if (ring) {
+                    this.ghostReplay.completeLap(
+                        Boolean(lapUpdate.validLap),
+                        lapUpdate.completedLapTimeMs
+                    );
+                    // the next lap started on the line: record it, and the
+                    // ghost races it from its start too
+                    this.ghostReplay.startLap(nowMs);
+                } else {
+                    // a drift run is a lap: what's building counts, then the
+                    // next one starts from nothing
+                    const score = this.driftScore.finish();
+                    const valid = Boolean(lapUpdate.validLap);
+                    this.driftLastRun = valid
+                        ? { score, lapTimeMs: lapUpdate.completedLapTimeMs }
+                        : null;
+                    UIEventBus.dispatch('race:driftRun', {
+                        score,
+                        lapTimeMs: lapUpdate.completedLapTimeMs,
+                        valid,
+                    });
+                    if (valid && score > 0) {
+                        this.pendingDrift = { score, lapTimeMs: lapUpdate.completedLapTimeMs };
+                        void this.submitPendingDrift();
+                    }
+                    this.driftScore.reset();
+                }
             }
 
-            if (lapUpdate.completedLapTimeMs && lapUpdate.validLap) {
+            if (lapUpdate.completedLapTimeMs && lapUpdate.validLap && ring) {
                 this.pendingLapTimeMs = lapUpdate.completedLapTimeMs;
                 UIEventBus.dispatch('race:lapCompleted', {
                     lapTimeMs: lapUpdate.completedLapTimeMs,

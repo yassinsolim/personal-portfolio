@@ -173,7 +173,7 @@ export type TrackTerrainData = {
     forest: Uint8Array;
 };
 
-type TrackAssetData = {
+export type TrackAssetData = {
     name: string;
     closed: boolean;
     length: number;
@@ -263,12 +263,13 @@ export default class NordschleifeTrack {
     // built when constructed, or with defer by running pending
     pending: Steps;
 
-    constructor(parent: THREE.Object3D, defer = false) {
-        this.pending = this.build(parent);
+    // the ring from its json by default, or another lap's data (the drift park)
+    constructor(parent: THREE.Object3D, defer = false, data: TrackAssetData | null = null) {
+        this.pending = this.build(parent, data);
         if (!defer) drain(this.pending);
     }
 
-    private *build(parent: THREE.Object3D): Steps {
+    private *build(parent: THREE.Object3D, given: TrackAssetData | null): Steps {
         this.application = new Application();
         this.resources = this.application.resources;
         this.scene = this.application.scene;
@@ -290,11 +291,13 @@ export default class NordschleifeTrack {
             urlParams.has('debugColliderRay') ||
             urlParams.has('debugRay');
 
-        const data = this.getTrackAsset('nordschleifeData');
+        const data = given || this.getTrackAsset('nordschleifeData');
 
         this.root = new THREE.Group();
-        this.root.name = 'nordschleife-track-root';
-        this.root.userData[ROOT_MARKER] = true;
+        this.root.name = given
+            ? `${data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-track-root`
+            : 'nordschleife-track-root';
+        this.root.userData[ROOT_MARKER] = data.name;
 
         this.colliderCurve = this.createCurveFromAsset(data);
         this.visualCurve = this.colliderCurve;
@@ -1260,16 +1263,17 @@ export default class NordschleifeTrack {
     }
 
     warnIfDuplicateTrackRoots() {
+        const name = this.root.userData[ROOT_MARKER];
         let rootCount = 0;
         this.scene.traverse((child) => {
-            if (child.userData?.[ROOT_MARKER]) {
+            if (child.userData?.[ROOT_MARKER] === name) {
                 rootCount++;
             }
         });
 
         if (rootCount !== 1) {
             console.warn(
-                `[Racing] Expected exactly one Nordschleife track root, found ${rootCount}.`
+                `[Racing] Expected exactly one ${name} track root, found ${rootCount}.`
             );
         }
     }

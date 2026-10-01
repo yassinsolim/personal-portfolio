@@ -4,9 +4,9 @@
 // cars use, and it can be applied again at any time (live garage preview).
 // materials are copied before they're changed, clones share them otherwise
 import * as THREE from 'three';
-import type { CarLook, PaintFinish } from './garage';
+import type { CarLook, PaintFinish, Spoiler } from './garage';
 import { rideOffsetMeters, STOCK_LOOK } from './garage';
-import { buildKitParts, kitPaint } from './bodyKit';
+import { buildKitParts, kitPaint, type KitSurface } from './bodyKit';
 
 // body paint material names per car, lowercase substrings
 const PAINT: Record<string, string[]> = {
@@ -41,6 +41,8 @@ const BRAKE = /disc|disk|brake|calip|rotor/;
 const TIRE_REACH = 0.93;
 const TIRE_EDGE = 0.72;
 const TIRE_BAND = 0.81;
+// a wheel node under this share of its race wheel's size holds only the rim
+const RIM_ONLY_SHARE = 0.9;
 // a colored rim is painted: the color reads on every rim, not just as a
 // tint on chrome
 const RIM_PAINT = { metalness: 0.45, roughness: 0.32, clearcoat: 0.6 };
@@ -364,11 +366,12 @@ const topField = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
     width: number,
-    length: number
+    length: number,
+    center: THREE.Vector3
 ) => {
     const cell = 0.01;
-    const x0 = -width / 2;
-    const z0 = -length / 2 - 0.5;
+    const x0 = center.x - width / 2;
+    const z0 = center.z - length / 2 - 0.5;
     const nx = Math.ceil(width / cell) + 1;
     const nz = Math.ceil(2.1 / cell) + 1;
     const top = new Float32Array(nx * nz).fill(-Infinity);
@@ -438,17 +441,48 @@ const buildKit = (
     // mesh boxes blow up under the models' rotations, so width and length
     // come from the measured body size
     const body = model.userData.raceBodySize as number[] | undefined;
-    const fallback = pivotBox(model, roots).getSize(new THREE.Vector3());
+    const bounds = pivotBox(model, roots);
+    const fallback = bounds.getSize(new THREE.Vector3());
     const width = body ? body[0] : fallback.x;
     const length = body ? body[2] : fallback.z;
-    const surface = topField(model, roots, width, length);
+    // not every model sits centered on its pivot (the crown's starts at its
+    // nose), so the boot is looked for around the body's own middle
+    const center = bounds.getCenter(new THREE.Vector3());
+    const field = topField(model, roots, width, length, center);
+    const surface: KitSurface = (x, z) => field(x + center.x, z + center.z);
     const group = buildKitParts(kind, surface, width, length, paint);
     group.traverse((child) => {
         child.userData.garageKit = true;
     });
+    group.position.set(center.x, 0, center.z);
     group.applyMatrix4(new THREE.Matrix4().copy(model.matrix).invert());
     group.name = 'garage-kit';
     return group;
+};
+
+// the kits that can be shaped on this car's boot (a hypercar's tail has no
+// lid for a ducktail), worked out once per model
+export const kitsThatFit = (model: THREE.Object3D, carId: string) => {
+    const known = model.userData.garageKitsFit as Spoiler[] | undefined;
+    if (known) return known;
+    const roots = new Set([
+        ...wheelRoots(model),
+        ...model.children.filter((child) => child.userData.raceHub),
+    ]);
+    const fits = (['ducktail', 'wing'] as Spoiler[]).filter((kind) => {
+        const kit = buildKit(model, roots, kind, bodyPaint(model, carId, roots));
+        let meshes = 0;
+        kit.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (!mesh.isMesh) return;
+            meshes++;
+            mesh.geometry.dispose();
+            (mesh.material as THREE.Material).dispose();
+        });
+        return meshes > 0;
+    });
+    model.userData.garageKitsFit = fits;
+    return fits;
 };
 
 // the body's paint material as it is now (the garage swaps in copies)
@@ -690,17 +724,14 @@ const setWheels = (
             .getSize(new THREE.Vector3())
             .applyMatrix4(toParent(donor));
         // diameter is the larger of the height and length in the parent
-        // frame (or the real tire's), width is across the car
-        const myDiameter = Math.max(
-            Math.abs(mySize.y),
-            Math.abs(mySize.z),
-            2 * (Number(model.userData.raceWheelRadius) || 0)
-        );
-        const theirDiameter = Math.max(
-            Math.abs(theirSize.y),
-            Math.abs(theirSize.z),
-            2 * (Number(donor.userData.raceWheelRadius) || 0)
-        );
+        // frame. this car sits on its wheels as they are drawn; a donor node
+        // well short of its race wheel radius holds only the rim, which is
+        // sized by that radius so it lands inside this car's tire
+        const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
+        const theirOwn = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
+        const theirRace = 2 * (Number(donor.userData.raceWheelRadius) || 0);
+        const theirDiameter =
+            theirOwn >= theirRace * RIM_ONLY_SHARE ? theirOwn : theirRace;
         if (!(myDiameter > 0 && theirDiameter > 0)) return;
         const k = myDiameter / theirDiameter;
         // the new rim and tyre take this car's tyre width, so they sit in the
@@ -770,7 +801,7 @@ const wheelCircle = (model: THREE.Object3D, root: THREE.Object3D) => {
     const circle = {
         y: center.y,
         z: center.z,
-        r: own >= tire * 0.9 ? own : tire,
+        r: own >= tire * RIM_ONLY_SHARE ? own : tire,
     };
     root.userData.garageCircle = circle;
     return circle;

@@ -7,6 +7,7 @@ import { isWebGLAvailable } from '../Utils/webgl';
 import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
+import DriftHud, { type DriftHudState } from './components/DriftHud';
 import Minimap from './components/Minimap';
 import Garage, { GarageState } from './components/Garage';
 import GraphicsInfo from './components/GraphicsInfo';
@@ -77,6 +78,16 @@ type HudState = {
     lastLapMs?: number;
     sectors?: SectorHud & { bounds: number[] };
     map?: { x: number; z: number; heading: number; remotes: Array<{ x: number; z: number }> };
+    track?: 'ring' | 'drift';
+    drift?: DriftHudState | null;
+};
+
+type DriftBoardEntry = {
+    id: string;
+    name: string;
+    score: number;
+    lapTimeMs: number;
+    carId: string;
 };
 
 type DebugStats = {
@@ -309,6 +320,11 @@ const App = () => {
     const [trackOutline, setTrackOutline] = useState<number[][]>([]);
     const [garageOpen, setGarageOpen] = useState(false);
     const [leaderboardBoard, setLeaderboardBoard] = useState<'stock' | 'tuned'>('stock');
+    const [trackState, setTrackState] = useState<{ track: 'ring' | 'drift'; building: boolean }>({
+        track: 'ring',
+        building: false,
+    });
+    const [driftBoard, setDriftBoard] = useState<DriftBoardEntry[]>([]);
     const [garageState, setGarageState] = useState<GarageState | null>(null);
     // the lobby card comes back after the garage when it was opened from it
     const [garageFromCard, setGarageFromCard] = useState(false);
@@ -393,6 +409,18 @@ const App = () => {
         eventBus.on('race:garageState', (state: GarageState) => setGarageState(state));
         eventBus.on('race:trackOutline', (state: { points?: number[][] } | undefined) => {
             if (state?.points?.length) setTrackOutline(state.points);
+        });
+        eventBus.on(
+            'race:trackState',
+            (state: { track?: 'ring' | 'drift'; building?: boolean } | undefined) => {
+                setTrackState({
+                    track: state?.track === 'drift' ? 'drift' : 'ring',
+                    building: Boolean(state?.building),
+                });
+            }
+        );
+        eventBus.on('race:driftBoard', (state: { entries?: DriftBoardEntry[] } | undefined) => {
+            setDriftBoard(state?.entries || []);
         });
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
@@ -820,7 +848,9 @@ const App = () => {
                     <div className="look-hint-begin">
                         <span className="look-hint-pulse" aria-hidden="true" />
                         {raceModeActive
-                            ? 'Nordschleife'
+                            ? trackState.track === 'drift'
+                                ? 'Drift park'
+                                : 'Nordschleife'
                             : `${tapToBegin ? 'Tap' : 'Click'} anywhere to begin`}
                     </div>
                     {!raceModeActive && (
@@ -1071,7 +1101,34 @@ const App = () => {
                     remotes={hud.map.remotes}
                 />
             )}
-            {raceModeActive && (
+            {raceModeActive && !garageOpen && hud.track === 'drift' && hud.drift && (
+                <DriftHud drift={hud.drift} best={driftBoard[0]?.score || 0} />
+            )}
+            {raceModeActive && trackState.building && (
+                <div className="drift-building" data-prevent-click>
+                    Building the drift park
+                </div>
+            )}
+            {raceModeActive && trackState.track === 'drift' && (
+                <div className="race-hud" data-prevent-click>
+                    <div className="race-hud-board">
+                        <h4 className="race-board-head">Drift park</h4>
+                        {driftBoard.length === 0 ? (
+                            <p>No runs yet. Drift a full lap to score.</p>
+                        ) : (
+                            <ol>
+                                {driftBoard.slice(0, 5).map((entry) => (
+                                    <li key={entry.id}>
+                                        <span>{entry.name}</span>
+                                        <span>{Math.round(entry.score).toLocaleString('en-US')}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                        )}
+                    </div>
+                </div>
+            )}
+            {raceModeActive && trackState.track === 'ring' && (
                 <div className="race-hud" data-prevent-click>
 
                     <div className="race-hud-board">
@@ -1241,8 +1298,53 @@ const App = () => {
             {raceModeActive && racePaused && (
                 <div className="race-menu-overlay" data-prevent-click>
                     <div className="race-menu-panel" data-prevent-click>
-                        <h3>Nordschleife Pause</h3>
+                        <h3>{trackState.track === 'drift' ? 'Drift Park' : 'Nordschleife'} Pause</h3>
                         <p>Esc opens this menu at any time during race mode.</p>
+
+                        <div className="race-menu-row race-track-pick">
+                            <span>Track</span>
+                            <div className="race-quality-buttons">
+                                {(
+                                    [
+                                        ['ring', 'Nordschleife'],
+                                        ['drift', 'Drift park'],
+                                    ] as const
+                                ).map(([track, label]) => (
+                                    <button
+                                        type="button"
+                                        key={track}
+                                        className={trackState.track === track ? 'active' : ''}
+                                        disabled={trackState.building}
+                                        onClick={() => {
+                                            if (trackState.track === track) return;
+                                            eventBus.dispatch('race:setTrack', { track });
+                                            handleResumeRace();
+                                        }}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        {trackState.track === 'drift' && (
+                            <div className="race-menu-drift-board">
+                                <h4>Drift park scores</h4>
+                                {driftBoard.length === 0 ? (
+                                    <p>No runs yet. Drift a full lap to score.</p>
+                                ) : (
+                                    <ol>
+                                        {driftBoard.slice(0, 10).map((entry) => (
+                                            <li key={entry.id}>
+                                                <span>{entry.name}</span>
+                                                <span>{carOptions.find((car) => car.id === entry.carId)?.label || entry.carId}</span>
+                                                <span>{formatLapTime(entry.lapTimeMs)}</span>
+                                                <strong>{Math.round(entry.score).toLocaleString('en-US')}</strong>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                            </div>
+                        )}
 
                         <div className="race-menu-row">
                             <label htmlFor="race-car-select">Car</label>
@@ -1387,6 +1489,13 @@ const App = () => {
                             throttle to swing into a drift the other way, lift
                             off to straighten up. Off assists leave it all to
                             you, the garage's drift build helps there.
+                        </p>
+                        <p className="race-menu-controls">
+                            Drift park: every drift builds a chain of points,
+                            more for angle and speed, and the longer you hold
+                            it the bigger the multiplier. Straighten up to bank
+                            it; a wall, the grass or a spin loses it. Each lap
+                            is a run on the scoreboard.
                         </p>
 
                         <p className="race-menu-credits">

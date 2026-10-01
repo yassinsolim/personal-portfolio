@@ -42,6 +42,10 @@ const LobbyChoice = ({ multiplayer, playerName, onClose, onGarage }: Props) => {
     const [copied, setCopied] = useState<boolean | null>(null);
 
     const solo = () => onClose();
+    const driftPark = () => {
+        eventBus.dispatch('race:setTrack', { track: 'drift' });
+        onClose();
+    };
     const quick = () => {
         setPending('quick');
         eventBus.dispatch('race:multiplayerQuickJoin', { playerName });
@@ -84,6 +88,7 @@ const LobbyChoice = ({ multiplayer, playerName, onClose, onGarage }: Props) => {
             else if (event.code === 'Digit2') quick();
             else if (event.code === 'Digit3') invite();
             else if (event.code === 'Digit4') onGarage();
+            else if (event.code === 'Digit5') driftPark();
             else return;
             event.preventDefault();
             event.stopPropagation();
@@ -148,6 +153,18 @@ const LobbyChoice = ({ multiplayer, playerName, onClose, onGarage }: Props) => {
                                 <span className="race-lobby-key">4</span>
                                 <strong>Garage</strong>
                                 <small>Paint, wheels, body kit and tuning</small>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={driftPark}
+                                disabled={Boolean(pending)}
+                            >
+                                <span className="race-lobby-key">5</span>
+                                <strong>Drift park</strong>
+                                <small>
+                                    A wide track, points for every drift and a
+                                    scoreboard
+                                </small>
                             </button>
                         </div>
                         {failed && (

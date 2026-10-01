@@ -38,10 +38,14 @@ export function afterFrame() {
     });
 }
 
-// runs the steps in slices of about budgetMs, one slice a frame. the first
-// waits a frame too, so it isn't added to whatever task called this (like
-// the one that just ran a freshly loaded chunk)
-export async function slice(steps: Steps, budgetMs = 8) {
+// runs the steps in slices of about budgetMs, one slice a frame, and
+// resolves with what they return. the first waits a frame too, so it isn't
+// added to whatever task called this (like the one that just ran a freshly
+// loaded chunk)
+export async function slice<T = void>(
+    steps: Generator<string | void, T, void>,
+    budgetMs = 8
+): Promise<T> {
     const times = (window as unknown as { __raceBuildSteps?: StepTimes })
         .__raceBuildSteps;
     await afterFrame();
@@ -49,7 +53,7 @@ export async function slice(steps: Steps, budgetMs = 8) {
     let last = start;
     for (;;) {
         const { done, value } = steps.next();
-        if (done) return;
+        if (done) return value as T;
         const now = performance.now();
         if (times) {
             const name = value || '(step)';

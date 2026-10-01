@@ -70,6 +70,23 @@ const freezeStatic = (root: THREE.Object3D) => {
     root.updateMatrixWorld(true);
 };
 
+// a lap and what's built around it: the land, trees and trackside
+export type TrackWorld = {
+    track: NordschleifeTrack;
+    terrain: RaceTerrain;
+    forest: RaceForest;
+    trackside: RaceTrackside;
+    extras: RaceTracksideExtras;
+};
+
+const worldRoots = (world: TrackWorld) => [
+    world.track.root,
+    world.terrain.root,
+    world.forest.root,
+    world.trackside.root,
+    world.extras.root,
+];
+
 export default class RaceVisuals {
     application: Application;
     scene: THREE.Scene;
@@ -273,6 +290,62 @@ export default class RaceVisuals {
             this.effectsLow ||
                 (this.renderMode === 'auto' && this.autoStep >= 1)
         );
+    }
+
+    world(): TrackWorld {
+        return {
+            track: this.track,
+            terrain: this.terrain,
+            forest: this.forest,
+            trackside: this.trackside,
+            extras: this.extras,
+        };
+    }
+
+    // another lap's land, trees and trackside, built the way the ring's are.
+    // it starts hidden, useWorld puts it in place of the one showing
+    *buildWorld(track: NordschleifeTrack): Generator<string | void, TrackWorld, void> {
+        const lite = this.tier === 'low';
+        const terrain = new RaceTerrain(this.root, track, lite ? 'low' : 'high', true);
+        yield* terrain.pending;
+        const forest = new RaceForest(
+            this.root,
+            this.application.renderer.instance,
+            track,
+            terrain,
+            lite ? 'low' : 'high',
+            true
+        );
+        yield* forest.pending;
+        const trackside = new RaceTrackside(this.root, track, lite, true);
+        yield* trackside.pending;
+        const extras = new RaceTracksideExtras(this.root, track, terrain, lite, true);
+        yield* extras.pending;
+        if (lite) {
+            useCheapMaterials(track.root);
+            useCheapMaterials(trackside.root);
+            useCheapMaterials(extras.root);
+        }
+        const world = { track, terrain, forest, trackside, extras };
+        worldRoots(world).forEach((root) => {
+            freezeStatic(root);
+            root.visible = false;
+        });
+        yield 'visuals:world';
+        return world;
+    }
+
+    useWorld(world: TrackWorld) {
+        worldRoots(this.world()).forEach((root) => (root.visible = false));
+        this.track = world.track;
+        this.terrain = world.terrain;
+        this.forest = world.forest;
+        this.trackside = world.trackside;
+        this.extras = world.extras;
+        worldRoots(world).forEach((root) => (root.visible = true));
+        this.skids.clear();
+        this.sparks.clear();
+        this.applyQuality();
     }
 
     // the tier the settings follow: auto's second step puts a gpu it built

@@ -119,6 +119,12 @@ const DRIFT_GEAR_RPM = 0.64;
 // mid slide it only shifts back down once the lower gear is well inside its
 // range, or a slide at a gear's edge hunts between the two
 const DRIFT_DOWNSHIFT_RPM = 0.54;
+const DRIFT_FRONT_SHARE = 0.1;
+// share of the asked for yaw rate the stability control lets a car fall short
+// of on the power before it eases the throttle
+const UNDERSTEER_SLACK = 0.3;
+// body slip (rad) past which it starts taking the power off a slide
+const POWER_SLIDE_SLIP = 0.08;
 export const DRIFT_TUNING = {
     startSlip: 0.12,
     endSlip: 0.05,
@@ -129,13 +135,13 @@ export const DRIFT_TUNING = {
     // rad/s the held angle moves: steering into the corner, the other way
     // (at full lock), and settling back to the base hands off
     aimUp: 1,
-    aimDown: 0.75,
+    aimDown: 1,
     aimSettle: 0.45,
-    // the other way trims it down to this, then held there this long on the
-    // power it carries on across, and past this on the far side it swings over
+    // the other way trims it down to this. held this long on the power it
+    // carries on across, and past this on the far side it swings over
     trimAngle: 0.18,
-    crossDelay: 0.55,
-    aimCross: 1.2,
+    crossDelay: 0.5,
+    aimCross: 2.4,
     flipAngle: 0.1,
     steerGain: 0.8,
     // damping on how fast the slip angle changes, seconds. without it the car
@@ -283,6 +289,8 @@ export default class VehiclePhysics {
     vy: number;
     yawRate: number;
     steerAngle: number;
+    // the wheel angle the driver asks for, before any assist steers
+    steerRequest = 0;
     wheelOmega: number[];
     slipAngle: number[];
     slipRatio: number[];
@@ -417,6 +425,7 @@ export default class VehiclePhysics {
         this.vy = 0;
         this.yawRate = 0;
         this.steerAngle = 0;
+        this.steerRequest = 0;
         const omega = speed / this.spec.wheelRadius;
         this.wheelOmega = [omega, omega, omega, omega];
         this.slipAngle = [0, 0, 0, 0];
@@ -660,6 +669,7 @@ export default class VehiclePhysics {
             ? Math.min(spec.maxSteer, base + Math.abs(frontTravel) * 1.1)
             : base;
         let target = steerInput * limit;
+        this.steerRequest = target;
         this.driftThrottle = 1;
 
         if (this.updateDrift(steerInput, speed, frontTravel, dt)) {
@@ -734,17 +744,17 @@ export default class VehiclePhysics {
         const into = Math.max(0, steerInput * side);
         const against = Math.max(0, -steerInput * side);
         const powered = this.driftDrive > tuning.switchDrive;
+        let crossing = false;
         if (against > 0.05) {
-            if (this.driftAim > tuning.trimAngle) {
+            this.driftHold += against * dt;
+            if (this.driftHold > tuning.crossDelay && powered) {
+                crossing = against > 0.3;
+                this.driftAim -= tuning.aimCross * against * dt;
+            } else if (this.driftAim > tuning.trimAngle) {
                 this.driftAim = Math.max(
                     tuning.trimAngle,
                     this.driftAim - tuning.aimDown * against * dt
                 );
-            } else {
-                this.driftHold += against * dt;
-                if (this.driftHold > tuning.crossDelay && powered) {
-                    this.driftAim -= tuning.aimCross * against * dt;
-                }
             }
         } else {
             this.driftHold = 0;
@@ -769,11 +779,8 @@ export default class VehiclePhysics {
         const angleRate =
             dt > 0 ? (-(beta - this.driftBeta) * side) / dt : 0;
         this.driftBeta = beta;
-        // straight ends it, unless the steer is still working it on the power
-        // (trimmed right down, or being carried over to the other side). on
-        // the power it gets a moment to come back from a dip
-        const crossing =
-            this.driftAim <= tuning.trimAngle && against > 0.3 && powered;
+        // straight ends it, unless the steer is carrying it over to the other
+        // side. on the power it gets a moment to come back from a dip
         this.driftLow = angle < tuning.endSlip ? this.driftLow + dt : 0;
         const grace = powered ? tuning.lowGrace : 0;
         if (this.driftSwitch <= 0 && this.driftLow > grace && !crossing) {
@@ -782,9 +789,7 @@ export default class VehiclePhysics {
         }
         const turn = side;
         this.driftPath =
-            this.driftSwitch > 0
-                ? 0
-                : turn * (tuning.pathAccel * into - tuning.pathOut * against);
+            turn * (tuning.pathAccel * into - tuning.pathOut * against);
         const targetAngle =
             clamp(this.driftAim, -maxAngle, maxAngle) *
             lerp(tuning.liftTarget, 1, this.driftDrive);
@@ -1022,11 +1027,17 @@ export default class VehiclePhysics {
                 tuning.catchGripDrop * Math.min(1, this.driftFalling)) *
                 hold;
 
+        // with the drift assist on, all wheel drive runs its drift mode and
+        // sends nearly everything to the rear, so the power turns the car
+        // instead of pushing it wide
+        const driftMode = this.assists.drift || this.driftWindow;
         const driveFront =
             spec.drive === 'FWD'
                 ? 1
                 : spec.drive === 'AWD'
-                ? spec.frontTorqueShare
+                ? driftMode
+                    ? Math.min(spec.frontTorqueShare, DRIFT_FRONT_SHARE)
+                    : spec.frontTorqueShare
                 : 0;
         const driveRear = 1 - driveFront;
         const drivenOmega =
@@ -1047,14 +1058,36 @@ export default class VehiclePhysics {
             surface.grounded
         ) {
             const excess = Math.abs(bodySlip) - 0.13;
-            if (excess > 0 && bodySlip * this.yawRate < 0) {
+            // pushing wide on the power: the nose turns well short of what
+            // the wheel asks for, so the throttle eases until it bites
+            const wanted =
+                (this.vx * Math.tan(this.steerRequest)) / spec.wheelbase;
+            const deficit =
+                Math.abs(wanted) > 0.05
+                    ? 1 - (this.yawRate * Math.sign(wanted)) / Math.abs(wanted)
+                    : 0;
+            const sliding = bodySlip * this.yawRate < 0;
+            if (excess > 0 && sliding) {
                 this.stabilityActive = true;
                 stabilityMoment =
                     -Math.sign(this.yawRate) *
                     Math.min(excess * 5.5, 1) *
                     spec.yawInertia *
                     3.2;
-                throttle *= Math.max(0.25, 1 - excess * 5);
+            }
+            // the power comes off before the rear is far out, a slide held
+            // on the throttle runs wide
+            const powerSlide = sliding
+                ? Math.max(0, Math.abs(bodySlip) - POWER_SLIDE_SLIP)
+                : 0;
+            const pushing =
+                throttle > 0.2 ? Math.max(0, deficit - UNDERSTEER_SLACK) : 0;
+            if (powerSlide > 0 || pushing > 0) {
+                this.stabilityActive = true;
+                throttle *= Math.min(
+                    Math.max(0.25, 1 - powerSlide * 6),
+                    Math.max(0.3, 1 - pushing * 2.5)
+                );
             }
         }
         if (this.assists.tractionControl && !this.driftWindow) {

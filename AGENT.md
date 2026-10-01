@@ -6,7 +6,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 ## Hard Constraints
 - Keep current portfolio behavior intact by default.
 - Race mode must be opt-in from UI.
-- One track only (`Nordschleife`) and only one track root in scene.
+- Two tracks: the Nordschleife and the drift park (`Track/driftPark.ts`). One root per track in
+  the scene, and only one track's world shows at a time.
 - Separate visual mesh and collider mesh.
 - Collider mesh must never render.
 - Grounding raycasts must target collider mesh only.
@@ -292,6 +293,39 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   sliding. Tuning is `DRIFT_TUNING`, per instance as `physics.driftTuning`.
 - `__drive(cars, { only: ['driftAssist'] })` measures it; `--drive-options` passes that through
   `race-harness-run.mjs`. Standard and Off don't use it, so their numbers don't move.
+- October 2026: the other way held on the power commits to a transition by how long it's held
+  (`crossDelay`, not after first sitting at the trim angle), crosses at `aimCross` and the line
+  bends toward the new side during the swing, so pressing the other way turns the car within
+  about a second instead of running straight first. Taps and half second holds still only trim
+  (`scripts/test/drift.test.mjs`). With the drift assist in play (sport, or the handbrake window)
+  all wheel drive cars send at most `DRIFT_FRONT_SHARE` to the front, like the real drift modes,
+  so the power turns them instead of pushing them wide. Standard's stability control eases the
+  throttle from `POWER_SLIDE_SLIP` of body slip and when the nose turns well short of the
+  driver's wheel (`steerRequest`, `UNDERSTEER_SLACK`), so full throttle and full lock make the
+  corner.
+
+## Drift Park Notes (2026-10-01)
+- A second track for drifting, picked in the pause menu (Track) or with key 5 on the card after
+  the homepage transition (`race:setTrack`). Race mode always opens on the ring.
+- `Track/driftPark.ts` makes the lap in the ring json's shape (`TrackAssetData`: points every 4 m,
+  sections, widths, barriers, a 30 m terrain grid with forest density), so
+  `new NordschleifeTrack(parent, defer, data)` and `RaceVisuals.buildWorld(track)` build its road,
+  collider, verges, land, trees and trackside with the ring's code. It sits 26 km off the ring.
+  The layout (straights and arcs) was solved offline to close on itself; the rounding is spread
+  along the lap. 1.6 km, road 24 m wide, walls 21 m from the centerline.
+- `RaceManager.setTrackMode` builds it the first time (sliced, a few hundred ms), then
+  `applyTrackMode` swaps the visible world (`RaceVisuals.useWorld`), the vehicle's track
+  (`RaceVehicle.setTrack`), the lap timer (30 s minimum lap) and sectors (their bests saved under
+  `driftpark:`). The park is solo: the lobby is suspended and ghosts are neither shown nor
+  recorded. Track specific trackside (graffiti spots) has to skip distances past a shorter lap.
+- Scoring is `Lap/DriftScore.ts`: a chain builds while the body slip is over 12 degrees above
+  25 km/h on the road, faster with angle and speed, its multiplier up 0.5 every 2 s held (to 5).
+  0.8 s under that banks it, a barrier hit over 1.2 m/s, 0.35 s on the grass or a spin loses it.
+  A run is a lap; the score goes to the drift board (`LeaderboardService.getDriftBoard` /
+  `submitDrift`, local `yassinverse:driftpark:scores:v1`) and the `drift_park_scores` table
+  (`supabase/racing.sql`, car ids tagged `@d1`, at most 1.3 points a millisecond, the laps' rate
+  limit). Bump `DRIFT_TAG` when scores stop being comparable. `scripts/test/drift-park.test.mjs`
+  builds the park in node and checks the scoring rules.
 
 ## Track Notes (2026-09-28)
 - The lap is the real Nordschleife, full length (20.77 km) and full elevation (333 to 627 m),
@@ -823,6 +857,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Leaderboard: any tune, body kit or ride height change makes the car tuned. Tuned laps are
   tagged `<car>@v4~t<code>` and live on the tuned board; the stock board still reads `%@v4`.
 - Multiplayer: the look rides on telemetry as a short code (`encodeLook`), no extra messages.
+- October 2026: the garage is a clean studio (`Garage/GarageScene.ts`): dark epoxy floor and
+  panel walls, a hexagon LED grid over the bay, light bars down the side walls, LED strips and a
+  turntable light ring. Its environment map is rendered from the same shapes (`buildEnvironment`),
+  so the paint and floor reflect the hexagons; the lamps are soft fills on top of that. A swapped
+  rim is sized to the wheel the car sits on (its drawn size); a donor node well short of its race
+  wheel radius (the E92's, rim only) is sized by that radius and keeps this car's tire. The kit
+  is shaped around the body's own box center (the Crown's model starts at its nose), and
+  `kitsThatFit` tells the garage which spoilers a car can take (the AMG One has no lid for a
+  ducktail).
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling
