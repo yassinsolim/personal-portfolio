@@ -1,8 +1,8 @@
 // drifting on the keyboard: a handbrake flick under the standard assists
-// starts a slide that taps on the throttle key hold, steering the other way on
-// the power swings it over, lifting ends it, and the drift build's parts reach
-// the driving model. flat asphalt, the plain driving model, keys ramped like
-// DrivingInput
+// starts a slide that taps on the throttle key hold, a tap the other way trims
+// it, holding the other way on the power swings it over, lifting ends it, and
+// the drift build's parts reach the driving model. flat asphalt, the plain
+// driving model, keys ramped like DrivingInput
 //
 //   npm test
 import test from 'node:test';
@@ -134,24 +134,57 @@ for (const id of ['bmw-f82-m4', 'bmw-e92-m3', 'amg-one']) {
 }
 
 for (const id of ['bmw-f82-m4', 'bmw-e92-m3', 'amg-one']) {
-    test(`${id}: the other way on the power swings it into the other drift`, () => {
+    test(`${id}: held the other way on the power it swings into the other drift`, () => {
         const swing = flick(makeCar(id, 'standard'), (t) => ({
             a: t < 3,
             d: t >= 3,
             w: t % 0.5 < 0.3,
         }));
-        assert.ok(swing.right > 3, `right side ${swing.right.toFixed(2)} s`);
+        assert.ok(swing.right > 2, `right side ${swing.right.toFixed(2)} s`);
         assert.equal(swing.wild, false);
         // and back and forth on a held throttle, a slalom of drifts
         const slalom = flick(makeCar(id, 'standard'), (t) => {
             const left = Math.floor(t / 2) % 2 === 0;
             return { a: left, d: !left, w: true };
         });
-        assert.ok(slalom.flips >= 3, `changed sides ${slalom.flips} times`);
-        assert.ok(slalom.right > 2, `right side ${slalom.right.toFixed(2)} s`);
+        assert.ok(slalom.flips >= 2, `changed sides ${slalom.flips} times`);
+        assert.ok(slalom.right > 0.5, `right side ${slalom.right.toFixed(2)} s`);
         assert.equal(slalom.wild, false);
     });
+
+    test(`${id}: taps and short holds the other way only trim the drift`, () => {
+        // a tap every 1.5 s, the way a correction goes
+        const taps = flick(makeCar(id, 'standard'), (t) => ({
+            d: t % 1.5 > 1.3,
+            w: t % 0.5 < 0.3,
+        }));
+        assert.ok(taps.right < 0.3, `right side ${taps.right.toFixed(2)} s`);
+        assert.ok(taps.sideways > 4, `held ${taps.sideways.toFixed(2)} s`);
+        assert.equal(taps.wild, false);
+        // half a second the other way, then hands off
+        const hold = flick(makeCar(id, 'standard'), (t) => ({
+            d: t > 2 && t < 2.5,
+            w: t % 0.5 < 0.3,
+        }));
+        assert.ok(hold.right < 0.3, `right side ${hold.right.toFixed(2)} s`);
+        assert.ok(hold.sideways > 5, `held ${hold.sideways.toFixed(2)} s`);
+    });
 }
+
+test('a drift held on the throttle keeps its speed, the line stays put', () => {
+    const car = makeCar('bmw-f82-m4', 'standard');
+    const held = flick(car, () => ({ a: true, w: true }));
+    assert.ok(held.sideways > 7, `held ${held.sideways.toFixed(2)} s`);
+    assert.ok(car.getSpeed() * 3.6 < 100, `${(car.getSpeed() * 3.6).toFixed(0)} km/h`);
+});
+
+test('lifting straightens the drift build too', () => {
+    const tune = garage.sanitizeTune({ ...garage.STOCK_TUNE, ...garage.DRIFT_BUILD });
+    const car = makeCar('bmw-f82-m4', 'standard', tune);
+    const lift = flick(car, () => ({}));
+    assert.ok(lift.sideways < 1.5, `lift held ${lift.sideways.toFixed(2)} s`);
+    assert.equal(lift.spun, false);
+});
 
 test('the other way off the power straightens up instead', () => {
     const car = makeCar('bmw-f82-m4', 'standard');

@@ -32,8 +32,18 @@ const PAINT_EXACT: Record<string, string[]> = {
     'amg-one': ['black', 'material'],
 };
 const CALIPER = /callipergloss|calliperanodised|_caliper|tire_brake|^brakes$/;
-const TIRE =
-    /tire|tyre|tread|rubber|michelin|pirelli|sidewall|disc|disk|brake|calip/;
+const BRAKE = /disc|disk|brake|calip|rotor/;
+// rim or tire goes by shape, whatever the materials are called (some exports
+// name the tire 'wheel' and the rim 'tire_hub'). as shares of the wheel's
+// radius: a tire reaches the tread and sits mostly out past where a sidewall
+// can start, a rim and tire made as one piece are cut at the band (a rim's
+// lip reaches about 0.8)
+const TIRE_REACH = 0.93;
+const TIRE_EDGE = 0.72;
+const TIRE_BAND = 0.81;
+// a colored rim is painted: the color reads on every rim, not just as a
+// tint on chrome
+const RIM_PAINT = { metalness: 0.45, roughness: 0.32, clearcoat: 0.6 };
 
 // what the weak gpu merge has to keep apart so the garage can recolor it
 export const isGarageMaterial = (carId: string, name: string) =>
@@ -134,6 +144,7 @@ const underAny = (
 };
 
 // this model's own copy of a mesh's material, with the factory values kept
+// (a copy of another model's copy keeps that one's factory values)
 const ownMaterial = (model: THREE.Object3D, mesh: THREE.Mesh) => {
     const current = mesh.material as THREE.MeshPhysicalMaterial;
     if (current.userData.garageOwner === model.uuid) return current;
@@ -141,7 +152,7 @@ const ownMaterial = (model: THREE.Object3D, mesh: THREE.Mesh) => {
     copy.userData = {
         ...current.userData,
         garageOwner: model.uuid,
-        garageStock: {
+        garageStock: current.userData.garageStock ?? ({
             color: current.color.clone(),
             metalness: current.metalness,
             roughness: current.roughness,
@@ -151,7 +162,7 @@ const ownMaterial = (model: THREE.Object3D, mesh: THREE.Mesh) => {
             map: current.map,
             shininess: (current as unknown as THREE.MeshPhongMaterial)
                 .shininess,
-        } as Stock,
+        } as Stock),
     };
     mesh.material = copy;
     return copy;
@@ -173,9 +184,38 @@ const physicalPaint = (model: THREE.Object3D, mesh: THREE.Mesh) => {
     return physical;
 };
 
+// a colored rim's texture keeps its shading (spokes over a dark barrel), but
+// a dark texture doesn't swallow the color: its darkest parts keep 40% of it
+const TINT_MAP = /* glsl */ `
+#ifdef USE_MAP
+    vec4 garageTexel = texture2D( map, vMapUv );
+    float garageLuma = dot( garageTexel.rgb, vec3( 0.299, 0.587, 0.114 ) );
+    diffuseColor.rgb *= mix( 0.4, 1.0, smoothstep( 0.0, 0.5, garageLuma ) );
+    diffuseColor.a *= garageTexel.a;
+#endif
+`;
+const tintMap = (material: THREE.Material, on: boolean) => {
+    const tinted = material.userData.garageTint === true;
+    if (tinted === on) return;
+    material.userData.garageTint = on;
+    material.onBeforeCompile = on
+        ? (shader) => {
+              shader.fragmentShader = shader.fragmentShader.replace(
+                  '#include <map_fragment>',
+                  TINT_MAP
+              );
+          }
+        : THREE.Material.prototype.onBeforeCompile;
+    material.customProgramCacheKey = on
+        ? () => 'garage-rim-tint'
+        : THREE.Material.prototype.customProgramCacheKey;
+    material.needsUpdate = true;
+};
+
 const restore = (material: THREE.MeshPhysicalMaterial) => {
     const stock = material.userData.garageStock as Stock | undefined;
     if (!stock) return;
+    tintMap(material, false);
     material.color.copy(stock.color);
     if (stock.metalness !== undefined) material.metalness = stock.metalness;
     if (stock.roughness !== undefined) material.roughness = stock.roughness;
@@ -458,6 +498,8 @@ type Part = {
     castShadow: boolean;
     // mesh to its model's frame
     matrix: THREE.Matrix4;
+    // rim or tire, once the wheel is marked (markWheels)
+    part?: string;
 };
 
 // a wheel node's meshes in its model's frame
@@ -472,9 +514,46 @@ const wheelParts = (model: THREE.Object3D, root: THREE.Object3D) => {
             material: mesh.material,
             castShadow: mesh.castShadow,
             matrix: new THREE.Matrix4().multiplyMatrices(toModel, mesh.matrixWorld),
+            part: child.userData.garagePart,
         });
     });
     return parts;
+};
+
+// a wheel node's own parts under swapped rims: all hidden, or all but the
+// tire when the swapped wheel brings none of its own
+const hideOwn = (root: THREE.Object3D, keepTire: boolean) => {
+    root.traverse((child) => {
+        if (child === root || child.userData.garageRim) return;
+        if (!(child as THREE.Mesh).isMesh) return;
+        if (keepTire && child.userData.garagePart === 'tire') return;
+        if (child.userData.garageVisible === undefined)
+            child.userData.garageVisible = child.visible;
+        child.visible = false;
+    });
+    const rootMesh = root as THREE.Mesh;
+    const keepRoot = keepTire && root.userData.garagePart === 'tire';
+    if (rootMesh.isMesh && !root.userData.garageOwnMaterial && !keepRoot) {
+        // hiding the mesh would hide the new rims under it too
+        root.userData.garageOwnMaterial = rootMesh.material;
+        const hidden = (rootMesh.material as THREE.Material).clone();
+        hidden.visible = false;
+        rootMesh.material = hidden;
+    }
+};
+
+const showOwn = (root: THREE.Object3D) => {
+    root.traverse((child) => {
+        if (child === root || child.userData.garageRim) return;
+        if (child.userData.garageVisible !== undefined)
+            child.visible = child.userData.garageVisible;
+    });
+    // a root that's a mesh itself (the e92's) got an invisible material
+    const rootMesh = root as THREE.Mesh;
+    if (rootMesh.isMesh && root.userData.garageOwnMaterial) {
+        rootMesh.material = root.userData.garageOwnMaterial;
+        delete root.userData.garageOwnMaterial;
+    }
 };
 
 const partsBox = (parts: Part[]) => {
@@ -568,28 +647,19 @@ const setWheels = (
     donorId: string
 ) => {
     roots.forEach((root) => {
-        const own = root.children.filter((child) => !child.userData.garageRim);
         const swapped = root.children.filter(
             (child) => child.userData.garageRim
         );
         if (root.userData.garageDonor === donorId) return;
         swapped.forEach((child) => child.removeFromParent());
-        own.forEach((child) => {
-            if (child.userData.garageVisible === undefined)
-                child.userData.garageVisible = child.visible;
-            child.visible = child.userData.garageVisible;
-        });
-        // a root that's a mesh itself (the e92's) got an invisible material
-        const rootMesh = root as THREE.Mesh;
-        if (rootMesh.isMesh && root.userData.garageOwnMaterial) {
-            rootMesh.material = root.userData.garageOwnMaterial;
-            delete root.userData.garageOwnMaterial;
-        }
+        showOwn(root);
         root.userData.garageDonor = 'stock';
     });
     if (!donor) return;
     const donorRoots = wheelRoots(donor);
     if (!donorRoots.length) return;
+    // which of the donor's parts are tire, told in its own frame
+    markWheels(donor, donorRoots);
     model.updateMatrixWorld(true);
     donor.updateMatrixWorld(true);
     const toParent = (m: THREE.Object3D) =>
@@ -612,14 +682,25 @@ const setWheels = (
         }
         const theirBox = partsBox(theirParts);
         if (theirBox.isEmpty()) return;
+        // a donor wheel node can hold only the rim (the e92's): then it's
+        // sized by its real tire and goes inside this car's tire
+        const theirTire = theirParts.some((part) => part.part === 'tire');
         const mySize = myBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model));
         const theirSize = theirBox
             .getSize(new THREE.Vector3())
             .applyMatrix4(toParent(donor));
         // diameter is the larger of the height and length in the parent
-        // frame, width is across the car
-        const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
-        const theirDiameter = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
+        // frame (or the real tire's), width is across the car
+        const myDiameter = Math.max(
+            Math.abs(mySize.y),
+            Math.abs(mySize.z),
+            2 * (Number(model.userData.raceWheelRadius) || 0)
+        );
+        const theirDiameter = Math.max(
+            Math.abs(theirSize.y),
+            Math.abs(theirSize.z),
+            2 * (Number(donor.userData.raceWheelRadius) || 0)
+        );
         if (!(myDiameter > 0 && theirDiameter > 0)) return;
         const k = myDiameter / theirDiameter;
         // the new rim and tyre take this car's tyre width, so they sit in the
@@ -659,23 +740,191 @@ const setWheels = (
                 .multiply(part.matrix);
             copy.castShadow = part.castShadow;
             copy.userData.garageRim = true;
+            copy.userData.garagePart = part.part;
             root.add(copy);
         });
-        root.children.forEach((child) => {
-            if (child.userData.garageRim) return;
-            if (child.userData.garageVisible === undefined)
-                child.userData.garageVisible = child.visible;
-            child.visible = false;
-        });
-        const rootMesh = root as THREE.Mesh;
-        if (rootMesh.isMesh && !root.userData.garageOwnMaterial) {
-            // hiding the mesh would hide the new rims under it too
-            root.userData.garageOwnMaterial = rootMesh.material;
-            const hidden = (rootMesh.material as THREE.Material).clone();
-            hidden.visible = false;
-            rootMesh.material = hidden;
-        }
+        hideOwn(root, !theirTire);
         root.userData.garageDonor = donorId;
+    });
+};
+
+// the model's rotation and scale: x across the car, lengths in meters
+const parentFrame = (model: THREE.Object3D) =>
+    new THREE.Matrix4().compose(new THREE.Vector3(), model.quaternion, model.scale);
+
+type WheelCircle = { y: number; z: number; r: number };
+
+// a wheel's circle in the parent frame: the middle of its own parts, and the
+// tire's radius. a node that comes near the race model's wheel radius has its
+// tire, one well short holds only the rim and the race radius is the tire's
+const wheelCircle = (model: THREE.Object3D, root: THREE.Object3D) => {
+    const cached = root.userData.garageCircle as WheelCircle | undefined;
+    if (cached) return cached;
+    const box = partsBox(wheelParts(model, root));
+    if (box.isEmpty()) return null;
+    box.applyMatrix4(parentFrame(model));
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const own = Math.max(size.y / 2, size.z / 2);
+    const tire = Number(model.userData.raceWheelRadius) || 0;
+    const circle = {
+        y: center.y,
+        z: center.z,
+        r: own >= tire * 0.9 ? own : tire,
+    };
+    root.userData.garageCircle = circle;
+    return circle;
+};
+
+type WheelSplit = {
+    part: 'rim' | 'tire' | 'both';
+    tire?: THREE.BufferGeometry;
+    rim?: THREE.BufferGeometry;
+};
+// per geometry, clones and swapped rims share them
+const wheelSplits = new WeakMap<THREE.BufferGeometry, WheelSplit>();
+
+const subset = (geometry: THREE.BufferGeometry, indices: number[]) => {
+    const part = new THREE.BufferGeometry();
+    Object.entries(geometry.attributes).forEach(([name, attribute]) =>
+        part.setAttribute(name, attribute)
+    );
+    part.setIndex(indices);
+    part.computeBoundingBox();
+    part.computeBoundingSphere();
+    return part;
+};
+
+// the welded piece of each triangle. uv seams split vertices, not surfaces,
+// and a seam's two sides can be a rounding apart
+const piecesOf = (geometry: THREE.BufferGeometry, corners: Uint32Array) => {
+    const position = geometry.getAttribute('position');
+    if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+    const snap = 1e4 / Math.max(geometry.boundingSphere!.radius, 1e-9);
+    const ids = new Map<string, number>();
+    const weld = new Uint32Array(position.count);
+    for (let i = 0; i < position.count; i++) {
+        const key = `${Math.round(position.getX(i) * snap)},${Math.round(
+            position.getY(i) * snap
+        )},${Math.round(position.getZ(i) * snap)}`;
+        let id = ids.get(key);
+        if (id === undefined) {
+            id = ids.size;
+            ids.set(key, id);
+        }
+        weld[i] = id;
+    }
+    const parent = Uint32Array.from({ length: ids.size }, (_, i) => i);
+    const find = (x: number) => {
+        while (parent[x] !== x) x = parent[x] = parent[parent[x]];
+        return x;
+    };
+    for (let i = 0; i < corners.length; i += 3) {
+        const a = find(weld[corners[i]]);
+        parent[find(weld[corners[i + 1]])] = a;
+        parent[find(weld[corners[i + 2]])] = a;
+    }
+    const piece = new Uint32Array(corners.length / 3);
+    for (let t = 0; t < piece.length; t++) piece[t] = find(weld[corners[t * 3]]);
+    return piece;
+};
+
+// rim or tire by where the triangles sit on the wheel. a mesh with both
+// (one textured material for the pair) is cut in two
+const splitOf = (
+    model: THREE.Object3D,
+    circle: WheelCircle,
+    mesh: THREE.Mesh
+): WheelSplit => {
+    const known = wheelSplits.get(mesh.geometry);
+    if (known) return known;
+    const geometry = mesh.geometry;
+    const position = geometry.getAttribute('position');
+    const toFrame = parentFrame(model)
+        .multiply(new THREE.Matrix4().copy(model.matrixWorld).invert())
+        .multiply(mesh.matrixWorld);
+    const v = new THREE.Vector3();
+    const radius = new Float32Array(position.count);
+    let max = 0;
+    for (let i = 0; i < position.count; i++) {
+        v.fromBufferAttribute(position, i).applyMatrix4(toFrame);
+        radius[i] = Math.hypot(v.y - circle.y, v.z - circle.z) / circle.r;
+        max = Math.max(max, radius[i]);
+    }
+    const index = geometry.index;
+    const corners = new Uint32Array(
+        index ? index.count - (index.count % 3) : position.count - (position.count % 3)
+    );
+    for (let i = 0; i < corners.length; i++) corners[i] = index ? index.getX(i) : i;
+    const middle = new Float32Array(corners.length / 3);
+    let outer = 0;
+    for (let t = 0; t < middle.length; t++) {
+        middle[t] =
+            (radius[corners[t * 3]] + radius[corners[t * 3 + 1]] + radius[corners[t * 3 + 2]]) / 3;
+        if (middle[t] >= TIRE_EDGE) outer++;
+    }
+    let split: WheelSplit;
+    if (max < TIRE_REACH) split = { part: 'rim' };
+    else if (outer >= middle.length * 0.9) split = { part: 'tire' };
+    else {
+        const piece = piecesOf(geometry, corners);
+        const pieces = new Map<number, { count: number; outer: number; reach: number }>();
+        for (let t = 0; t < middle.length; t++) {
+            const entry = pieces.get(piece[t]) || { count: 0, outer: 0, reach: 0 };
+            entry.count++;
+            if (middle[t] >= TIRE_EDGE) entry.outer++;
+            for (let k = 0; k < 3; k++)
+                entry.reach = Math.max(entry.reach, radius[corners[t * 3 + k]]);
+            pieces.set(piece[t], entry);
+        }
+        const tire: number[] = [];
+        const rim: number[] = [];
+        for (let t = 0; t < middle.length; t++) {
+            const entry = pieces.get(piece[t])!;
+            const out =
+                entry.reach >= TIRE_REACH &&
+                (entry.outer >= entry.count * 0.6 || middle[t] >= TIRE_BAND);
+            (out ? tire : rim).push(corners[t * 3], corners[t * 3 + 1], corners[t * 3 + 2]);
+        }
+        if (!rim.length) split = { part: 'tire' };
+        else if (!tire.length) split = { part: 'rim' };
+        else {
+            split = { part: 'both', tire: subset(geometry, tire), rim: subset(geometry, rim) };
+            wheelSplits.set(split.tire!, { part: 'tire' });
+            wheelSplits.set(split.rim!, { part: 'rim' });
+        }
+    }
+    wheelSplits.set(geometry, split);
+    return split;
+};
+
+// marks every mesh on the spinning wheels rim or tire, cutting the ones with
+// both: the mesh keeps the tire, a child with the same material takes the rim
+const markWheels = (model: THREE.Object3D, roots: THREE.Object3D[]) => {
+    model.updateMatrixWorld(true);
+    roots.forEach((root) => {
+        const circle = wheelCircle(model, root);
+        const meshes: THREE.Mesh[] = [];
+        root.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.isMesh && !mesh.userData.garagePart && !Array.isArray(mesh.material))
+                meshes.push(mesh);
+        });
+        meshes.forEach((mesh) => {
+            const split = circle ? splitOf(model, circle, mesh) : { part: 'rim' as const };
+            if (split.part !== 'both') {
+                mesh.userData.garagePart = split.part;
+                return;
+            }
+            mesh.geometry = split.tire!;
+            mesh.userData.garagePart = 'tire';
+            const rim = new THREE.Mesh(split.rim!, mesh.material);
+            rim.name = `${mesh.name}-rim`;
+            rim.castShadow = mesh.castShadow;
+            rim.receiveShadow = mesh.receiveShadow;
+            rim.userData = { ...mesh.userData, garagePart: 'rim' };
+            mesh.add(rim);
+        });
     });
 };
 
@@ -713,6 +962,7 @@ export const applyCarLook = (
     const hubs = model.children.filter((child) => child.userData.raceHub);
     const roots = new Set([...rootList, ...hubs]);
     const spinning = new Set(rootList);
+    markWheels(model, rootList);
     setWheels(
         model,
         rootList,
@@ -755,25 +1005,32 @@ export const applyCarLook = (
             material.needsUpdate = true;
             return;
         }
-        if (wheel && !TIRE.test(lower)) {
+        if (wheel && mesh.userData.garagePart === 'rim' && !BRAKE.test(lower)) {
             const m = mesh.material as THREE.MeshStandardMaterial;
-            const rimLike =
-                /wheel|rim|hub/.test(lower) || (m.metalness ?? 0) >= 0.3;
+            const metal = m.metalness ?? m.userData.garageMetalness ?? 0;
+            const rimLike = /wheel|rim|hub/.test(lower) || metal >= 0.3;
             if (!rimLike) return;
+            // swapped rims can arrive in the donor car's own colors
+            const owner = m.userData.garageOwner;
             const material =
-                m.userData.garageOwner === model.uuid
+                owner === model.uuid
                     ? (m as THREE.MeshPhysicalMaterial)
-                    : look.rims
+                    : look.rims || owner
                       ? ownMaterial(model, mesh)
                       : null;
             if (!material) return;
             restore(material);
             if (look.rims) {
-                // rim and tire often share one textured material, dark grey
-                // rim and near black rubber. a brightened tint over the map
-                // colors the rim and leaves the rubber black
                 material.color.set(look.rims);
-                if (material.map) material.color.multiplyScalar(3.2);
+                tintMap(material, Boolean(material.map));
+                if (material.isMeshStandardMaterial) {
+                    material.metalness = RIM_PAINT.metalness;
+                    material.roughness = RIM_PAINT.roughness;
+                }
+                if (material.isMeshPhysicalMaterial) {
+                    material.clearcoat = RIM_PAINT.clearcoat;
+                    material.clearcoatRoughness = 0.06;
+                }
             }
             material.needsUpdate = true;
         }
@@ -800,6 +1057,10 @@ export const copyCarLook = (
     const names = meta.map((entry) => entry.objectName);
     const complete = names.length > 0 && names.every((name) => target.getObjectByName(name));
     target.userData.raceWheelMeta = complete ? meta : [];
+    // the tire's radius, from the race model's frame into this one's
+    const radius = Number(source.userData.raceWheelRadius);
+    if (radius > 0 && source.scale.x > 0)
+        target.userData.raceWheelRadius = (radius * target.scale.x) / source.scale.x;
     applyCarLook(target, carId, {
         ...look,
         wheels: 'stock',
@@ -813,19 +1074,7 @@ export const copyCarLook = (
         const rims = from.children.filter((child) => child.userData.garageRim);
         if (!rims.length) return;
         rims.forEach((rim) => to.add(rim.clone()));
-        to.children.forEach((child) => {
-            if (child.userData.garageRim) return;
-            if (child.userData.garageVisible === undefined)
-                child.userData.garageVisible = child.visible;
-            child.visible = false;
-        });
-        const toMesh = to as THREE.Mesh;
-        if (toMesh.isMesh && !to.userData.garageOwnMaterial) {
-            to.userData.garageOwnMaterial = toMesh.material;
-            const hidden = (toMesh.material as THREE.Material).clone();
-            hidden.visible = false;
-            toMesh.material = hidden;
-        }
+        hideOwn(to, !rims.some((rim) => rim.userData.garagePart === 'tire'));
         to.userData.garageDonor = look.wheels;
     });
     const kit = source.getObjectByName('garage-kit');

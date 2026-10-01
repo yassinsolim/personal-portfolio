@@ -50,7 +50,7 @@ export const toCheapCarMaterial = (
     if (!m.isMeshStandardMaterial) return source;
     const metal = m.metalness ?? 0;
     const rough = m.roughness ?? 1;
-    return new THREE.MeshPhongMaterial({
+    const phong = new THREE.MeshPhongMaterial({
         name: m.name,
         color: m.color,
         map: m.map,
@@ -76,6 +76,9 @@ export const toCheapCarMaterial = (
         polygonOffsetFactor: m.polygonOffsetFactor,
         polygonOffsetUnits: m.polygonOffsetUnits,
     });
+    // the garage tells rims apart by it (Garage/carLook.ts)
+    phong.userData.garageMetalness = metal;
+    return phong;
 };
 
 // a tiny sky cube for those reflections: blue above, dark green below. six 16 px faces, sampled directly (no prefiltering)
