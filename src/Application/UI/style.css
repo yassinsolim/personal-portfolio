@@ -151,100 +151,279 @@ br {
     left: 64px;
 }
 
+/* the room's panel (and race mode's): a dark glass card. sections stack with
+   small caps labels, the render modes are one segmented control, and the
+   race's call to action is the one orange button */
 .look-hint {
     position: fixed;
     top: 18px;
     left: 18px;
-    padding: 6px 10px;
-    background: rgba(0, 0, 0, 0.35);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    color: rgba(255, 255, 255, 0.72);
+    width: 292px;
+    max-height: calc(100vh - 36px);
+    overflow-y: auto;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 14px;
+    background: linear-gradient(180deg, rgba(24, 25, 30, 0.8), rgba(12, 13, 16, 0.8));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    box-shadow:
+        0 14px 34px rgba(0, 0, 0, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    color: rgba(255, 255, 255, 0.92);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
-    letter-spacing: 0.4px;
-    backdrop-filter: blur(4px);
-    border-radius: 6px;
+    line-height: 1.35;
     pointer-events: none;
     user-select: none;
     z-index: 10;
 }
 
-.look-hint a {
-    color: inherit;
-    text-decoration: underline;
+.look-hint.racing {
+    width: 268px;
+}
+
+.look-hint button,
+.look-hint input,
+.look-hint select {
+    font: inherit;
+    box-sizing: border-box;
+}
+
+.look-hint .look-hint-begin {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+}
+
+.look-hint .look-hint-pulse {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff8a16;
+    animation: look-hint-pulse 2.4s ease-out infinite;
+}
+
+@keyframes look-hint-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 138, 22, 0.55);
+    }
+    70%,
+    100% {
+        box-shadow: 0 0 0 8px rgba(255, 138, 22, 0);
+    }
+}
+
+.look-hint .look-hint-os {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: fit-content;
+    margin-top: -6px;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 12.5px;
+    text-decoration: none;
     pointer-events: auto;
+}
+
+.look-hint .look-hint-os strong {
+    color: #fff;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.look-hint .look-hint-os svg {
+    width: 12px;
+    height: 12px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.look-hint .look-hint-os:hover strong,
+.look-hint .look-hint-os:focus-visible strong {
+    color: #ffb35c;
+    border-color: #ff9a3c;
+}
+
+.look-hint label,
+.look-hint .look-hint-label {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
 }
 
 .look-hint .car-switcher {
-    margin-top: 6px;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    gap: 5px;
     pointer-events: auto;
 }
 
-.look-hint .car-switcher label {
-    color: inherit;
+.look-hint select,
+.look-hint input {
+    height: 31px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 13px;
+    outline: none;
+    pointer-events: auto;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
-.look-hint .car-switcher select {
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 2px 6px;
-    pointer-events: auto;
+.look-hint select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 13px;
     cursor: pointer;
+}
+
+.look-hint select option {
+    background: #17181d;
+    color: #fff;
+}
+
+.look-hint input::placeholder {
+    color: rgba(255, 255, 255, 0.32);
+}
+
+.look-hint select:hover,
+.look-hint input:hover {
+    border-color: rgba(255, 255, 255, 0.22);
+    background-color: rgba(255, 255, 255, 0.09);
+}
+
+.look-hint select:focus-visible,
+.look-hint input:focus {
+    border-color: rgba(255, 154, 60, 0.85);
+    box-shadow: 0 0 0 3px rgba(255, 138, 22, 0.18);
 }
 
 .look-hint .render-mode {
-    margin-top: 6px;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 6px 8px;
     pointer-events: auto;
 }
 
-.look-hint .render-mode button {
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 2px 8px;
-    cursor: pointer;
+.look-hint .render-mode .look-hint-label {
+    width: 100%;
 }
 
-.look-hint .render-mode button.active {
-    background: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+.look-hint .look-hint-segment {
+    flex: 1;
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.look-hint .look-hint-segment button {
+    flex: 1;
+    height: 26px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.look-hint .look-hint-segment button:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.look-hint .look-hint-segment button.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.17);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .look-hint .render-mode-scale {
-    opacity: 0.6;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
 }
 
+/* the panel's plain buttons */
+.look-hint .look-hint-chip,
+.look-hint .view-toggle button,
+.look-hint .multiplayer-actions button,
+.look-hint .multiplayer-row button,
+.look-hint .multiplayer-status button,
+.look-hint .race-error button,
+.look-hint .race-actions button {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.look-hint .look-hint-chip:hover,
+.look-hint .view-toggle button:hover,
+.look-hint .multiplayer-actions button:hover,
+.look-hint .multiplayer-row button:hover,
+.look-hint .multiplayer-status button:hover,
+.look-hint .race-error button:hover,
+.look-hint .race-actions button:hover {
+    background: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.24);
+}
+
+.look-hint button:focus-visible {
+    outline: 2px solid rgba(255, 154, 60, 0.9);
+    outline-offset: 2px;
+}
+
+.look-hint .look-hint-chip.active {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.32);
+}
+
 .look-hint .view-toggle {
-    margin-top: 6px;
     display: flex;
-    justify-content: flex-end;
     pointer-events: auto;
 }
 
 .look-hint .view-toggle button {
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 2px 8px;
-    pointer-events: auto;
-    cursor: pointer;
+    flex: 1;
 }
 
 .look-hint .view-toggle button:disabled {
@@ -252,48 +431,71 @@ br {
     cursor: wait;
 }
 
-.look-hint .race-toggle {
-    margin-top: 6px;
+/* race mode: garage and pause side by side, the way out under them */
+.look-hint .race-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    pointer-events: auto;
+}
+
+.look-hint .race-actions button {
     display: flex;
-    justify-content: flex-end;
-    pointer-events: auto;
+    align-items: center;
+    gap: 8px;
+    height: 36px;
+    padding: 0 10px;
+    border-radius: 10px;
 }
 
-.look-hint .race-toggle button {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    border-radius: 4px;
-    color: rgba(0, 0, 0, 0.92);
-    font-family: monospace;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 2px 8px;
-    pointer-events: auto;
-    cursor: pointer;
+.look-hint .race-actions button span {
+    flex: 1;
+    text-align: left;
 }
 
-.look-hint .race-pause-toggle {
-    margin-top: 6px;
-    display: flex;
-    justify-content: flex-end;
-    pointer-events: auto;
+.look-hint .race-actions svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    fill: rgba(255, 255, 255, 0.85);
 }
 
-.look-hint .race-pause-toggle button {
-    background: rgba(0, 0, 0, 0.66);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.94);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 2px 8px;
-    cursor: pointer;
+.look-hint .race-actions kbd {
+    padding: 3px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+    font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.look-hint .race-actions .race-garage {
+    border-color: rgba(255, 154, 60, 0.6);
+    background: linear-gradient(135deg, rgba(70, 38, 12, 0.9), rgba(30, 20, 12, 0.9));
+}
+
+.look-hint .race-actions .race-garage:hover {
+    border-color: #ffb35c;
+    background: linear-gradient(135deg, rgba(96, 52, 16, 0.95), rgba(40, 26, 14, 0.95));
+}
+
+.look-hint .race-actions .race-garage svg {
+    fill: #ff9a3c;
+}
+
+.look-hint .race-actions .race-toggle {
+    grid-column: 1 / -1;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.look-hint .race-actions .race-toggle span {
+    flex: none;
 }
 
 .look-hint .race-lock-hint {
-    margin-top: 6px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11.5px;
 }
 
 body.race-mode-touch {
@@ -338,74 +540,103 @@ body.race-mode-touch #ui-app {
 }
 
 .look-hint .race-error {
-    margin-top: 6px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    font-size: 11px;
-    color: rgba(255, 170, 170, 0.95);
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 110, 110, 0.35);
+    border-radius: 9px;
+    background: rgba(120, 20, 20, 0.25);
+    color: rgba(255, 190, 190, 0.95);
+    font-size: 12px;
 }
 
 .look-hint .multiplayer-menu {
-    margin-top: 8px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.15);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 7px;
+    padding-top: 11px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
     pointer-events: auto;
 }
 
 .look-hint .multiplayer-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
 .look-hint .multiplayer-row label {
-    min-width: 76px;
-    color: inherit;
-    font-size: 11px;
+    flex: none;
+    width: 50px;
 }
 
 .look-hint .multiplayer-row input {
     flex: 1;
     min-width: 0;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-family: monospace;
-    font-size: 12px;
-    padding: 2px 6px;
 }
 
-.look-hint .multiplayer-row button,
-.look-hint .multiplayer-actions button,
-.look-hint .multiplayer-status button,
-.look-hint .multiplayer-secondary-actions button,
-.look-hint .race-error button {
-    background: rgba(255, 255, 255, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    border-radius: 4px;
-    color: rgba(0, 0, 0, 0.92);
-    font-family: monospace;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 2px 8px;
-    cursor: pointer;
+.look-hint #multiplayer-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 2px;
+    text-transform: uppercase;
 }
 
 .look-hint .multiplayer-actions {
+    display: grid;
+    grid-template-columns: 1.25fr 1fr;
+    gap: 8px;
+}
+
+.look-hint .multiplayer-actions .look-hint-primary {
     display: flex;
-    gap: 6px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    height: 36px;
+    border-color: rgba(255, 176, 100, 0.9);
+    background: linear-gradient(180deg, #ff9d33, #ff7b00);
+    color: #1c1105;
+    font-weight: 700;
+    box-shadow: 0 6px 16px rgba(255, 122, 0, 0.28);
+}
+
+.look-hint .multiplayer-actions .look-hint-primary:hover {
+    border-color: #ffc285;
+    background: linear-gradient(180deg, #ffad55, #ff8a16);
+    transform: translateY(-1px);
+}
+
+.look-hint .multiplayer-actions .look-hint-primary svg {
+    width: 12px;
+    height: 12px;
+    fill: currentColor;
+}
+
+.look-hint .multiplayer-actions button:not(.look-hint-primary) {
+    height: 36px;
 }
 
 .look-hint .multiplayer-secondary-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 6px;
+}
+
+.look-hint .multiplayer-secondary-actions .look-hint-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 12px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.look-hint .multiplayer-secondary-actions .look-hint-link:hover {
+    color: #fff;
 }
 
 .look-hint .multiplayer-status {
@@ -413,8 +644,15 @@ body.race-mode-touch #ui-app {
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
+}
+
+.look-hint .multiplayer-status button,
+.look-hint .race-error button {
+    height: 28px;
+    padding: 0 9px;
+    font-size: 12px;
 }
 
 .look-hint .multiplayer-row button:disabled,
@@ -424,6 +662,7 @@ body.race-mode-touch #ui-app {
 .look-hint .race-error button:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+    transform: none;
 }
 
 .race-menu-overlay {
@@ -433,33 +672,45 @@ body.race-mode-touch #ui-app {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(6px);
+    background: rgba(6, 7, 9, 0.55);
+    backdrop-filter: blur(8px);
     pointer-events: auto;
 }
 
+/* the pause menu, in the room panel's look */
 .race-menu-panel {
-    width: min(460px, calc(100vw - 32px));
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    background: rgba(13, 14, 18, 0.92);
+    width: min(480px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: linear-gradient(180deg, rgba(27, 28, 33, 0.95), rgba(14, 15, 18, 0.95));
     color: rgba(255, 255, 255, 0.9);
-    border-radius: 8px;
-    padding: 16px;
-    font-family: monospace;
+    border-radius: 16px;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.06);
     box-sizing: border-box;
 }
 
 .race-menu-panel h3 {
     margin: 0;
-    font-size: 15px;
-    letter-spacing: 0.3px;
+    color: #fff;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.1px;
 }
 
 .race-menu-panel p {
-    margin-top: 8px;
-    margin-bottom: 14px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
+    margin-top: 6px;
+    margin-bottom: 16px;
+    color: rgba(255, 255, 255, 0.55);
+    font-family: inherit;
+    font-size: 12.5px;
 }
 
 .race-menu-row {
@@ -468,28 +719,73 @@ body.race-mode-touch #ui-app {
     justify-content: space-between;
     gap: 10px;
     margin-bottom: 10px;
+    color: rgba(255, 255, 255, 0.78);
 }
 
 .race-menu-row input[type='range'] {
     flex: 1;
+    accent-color: #ff8a16;
 }
 
 .race-menu-row select,
 .race-menu-row button,
 .race-menu-actions button {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    color: rgba(255, 255, 255, 0.9);
-    border-radius: 4px;
-    font-family: monospace;
-    font-size: 12px;
-    padding: 6px 8px;
+    height: 32px;
+    padding: 0 12px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    color: #fff;
+    border-radius: 9px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.race-menu-row select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 30px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 13px;
+}
+
+.race-menu-row select option {
+    background: #17181d;
+    color: #fff;
+}
+
+.race-menu-row select:hover,
+.race-menu-row button:hover,
+.race-menu-actions button:hover {
+    background-color: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.24);
 }
 
 .race-quality-buttons {
     display: flex;
-    gap: 8px;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.race-menu-row .race-quality-buttons button {
+    height: 26px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.62);
+}
+
+.race-menu-row .race-quality-buttons button:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
 }
 
 .race-quality-scale {
@@ -498,16 +794,29 @@ body.race-mode-touch #ui-app {
     font-variant-numeric: tabular-nums;
 }
 
-.race-quality-buttons button.active {
-    background: rgba(255, 255, 255, 0.22);
-    border-color: rgba(255, 255, 255, 0.55);
+.race-menu-row .race-quality-buttons button.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.17);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .race-menu-actions {
-    margin-top: 14px;
+    margin-top: 16px;
     display: flex;
     gap: 8px;
     justify-content: flex-end;
+}
+
+.race-menu-actions .race-menu-primary {
+    border-color: rgba(255, 176, 100, 0.9);
+    background: linear-gradient(180deg, #ff9d33, #ff7b00);
+    color: #1c1105;
+    font-weight: 700;
+}
+
+.race-menu-actions .race-menu-primary:hover {
+    border-color: #ffc285;
+    background: linear-gradient(180deg, #ffad55, #ff8a16);
 }
 
 .race-hud {
@@ -774,36 +1083,37 @@ body.race-mode-touch #ui-app {
         width: min(280px, calc(100vw - 20px));
         max-height: min(48dvh, 320px);
         overflow: auto;
-        padding: 6px 8px;
-        font-size: 11px;
+        gap: 10px;
+        padding: 12px;
+        font-size: 12.5px;
+        border-radius: 12px;
         box-sizing: border-box;
     }
 
+    .look-hint.racing {
+        width: min(250px, calc(100vw - 20px));
+    }
+
     .look-hint .multiplayer-menu {
-        gap: 5px;
+        gap: 7px;
     }
 
     .look-hint .multiplayer-row {
-        gap: 5px;
+        gap: 7px;
     }
 
     .look-hint .multiplayer-row label {
-        min-width: 58px;
-        font-size: 10px;
+        width: 44px;
     }
 
     .look-hint .multiplayer-row input,
     .look-hint .car-switcher select,
-    .look-hint .render-mode button,
+    .look-hint .look-hint-chip,
     .look-hint .view-toggle button,
-    .look-hint .race-toggle button,
-    .look-hint .race-pause-toggle button,
     .look-hint .multiplayer-row button,
     .look-hint .multiplayer-actions button,
-    .look-hint .multiplayer-status button,
-    .look-hint .multiplayer-secondary-actions button {
-        font-size: 11px;
-        padding: 3px 6px;
+    .look-hint .multiplayer-status button {
+        font-size: 12px;
     }
 
     .race-hud {
@@ -854,12 +1164,10 @@ body.race-mode-touch #ui-app {
 
     body.race-mode-active .look-hint {
         width: auto;
-        max-width: 190px;
+        max-width: 240px;
     }
 
-    body.race-mode-active
-        .look-hint
-        > div:not(.race-toggle):not(.race-pause-toggle) {
+    body.race-mode-active .look-hint > :not(.race-actions) {
         display: none;
     }
 
@@ -903,15 +1211,18 @@ body.race-mode-touch #ui-app {
 
 .race-menu-controls {
     margin: 4px 0 12px;
-    font-size: 11px;
-    line-height: 1.5;
-    opacity: 0.72;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.race-menu-panel .race-menu-controls {
+    color: rgba(255, 255, 255, 0.72);
 }
 
 .race-menu-credits {
     margin: -6px 0 12px;
-    font-size: 10px;
-    opacity: 0.5;
+    font-size: 10.5px;
+    opacity: 0.55;
 }
 
 .race-menu-credits a {
@@ -1798,7 +2109,8 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 .look-hint.room-desk:not(:hover):not(:focus-within) {
     width: auto;
     min-width: 0;
-    padding: 7px 12px;
+    padding: 8px 14px;
+    border-radius: 999px;
 }
 
 .look-hint.room-desk:not(:hover):not(:focus-within) > * {
@@ -1815,33 +2127,37 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 /* small screens: the panel folds to its menu button and the hint, clear of
    the car, and opens over the scene on tap */
 .look-hint .look-hint-menu {
-    float: right;
-    margin: 0 0 6px 10px;
-    min-height: 30px;
-    padding: 4px 12px;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.9);
-    font-family: monospace;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
     font-size: 12px;
+    font-weight: 600;
     pointer-events: auto;
     cursor: pointer;
 }
 
+.look-hint.compact:not(.folded) .look-hint-begin {
+    padding-right: 70px;
+}
+
 .look-hint.folded {
-    display: flex;
+    flex-direction: row;
     align-items: center;
     gap: 10px;
     width: auto;
     max-height: none;
     overflow: visible;
-    padding: 5px 10px 5px 5px;
+    padding: 6px 12px 6px 6px;
 }
 
 .look-hint.folded .look-hint-menu {
-    float: none;
-    margin: 0;
+    position: static;
 }
 
 .look-hint.folded > :not(.look-hint-menu):not(.look-hint-begin) {
@@ -1857,6 +2173,11 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     .look-hint.compact select,
     .look-hint.compact input {
         min-height: 30px;
+    }
+
+    /* no keyboard to press them on */
+    .look-hint .race-actions kbd {
+        display: none;
     }
 }
 
@@ -1875,7 +2196,8 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     border-radius: 999px;
     background: linear-gradient(135deg, rgba(34, 22, 12, 0.88), rgba(14, 15, 18, 0.88));
     color: #fff;
-    font: inherit;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
     text-align: left;
     cursor: pointer;
     pointer-events: auto;
@@ -1963,6 +2285,82 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 
 @media (prefers-reduced-motion: reduce) {
     .garage-launch {
+        animation: none;
+    }
+}
+
+/* the room's nudge toward its car: a tag riding the roof on screen
+   (World/CarTag.ts), pointing down at it */
+.car-tag {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 6;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    will-change: transform;
+}
+
+.car-tag.on {
+    opacity: 1;
+}
+
+.car-tag span {
+    position: absolute;
+    left: 0;
+    bottom: 16px;
+    display: block;
+    padding: 9px 15px;
+    border: 1px solid rgba(255, 154, 60, 0.65);
+    border-radius: 999px;
+    background: #141318;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+    color: #fff;
+    font: 600 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    animation: car-tag-float 2.6s ease-in-out infinite;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.car-tag span::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: -6px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    border-right: 1px solid rgba(255, 154, 60, 0.65);
+    border-bottom: 1px solid rgba(255, 154, 60, 0.65);
+    background: inherit;
+    transform: rotate(45deg);
+}
+
+.car-tag b {
+    color: #ff9a3c;
+}
+
+.car-tag.hover span {
+    border-color: #ffb35c;
+    background: #2c1d10;
+}
+
+@keyframes car-tag-float {
+    0%,
+    100% {
+        transform: translate(-50%, 0);
+    }
+    50% {
+        transform: translate(-50%, -6px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .car-tag span {
         animation: none;
     }
 }

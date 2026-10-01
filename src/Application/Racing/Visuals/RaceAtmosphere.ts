@@ -14,6 +14,17 @@ const SHADOW_DISTANCE = 220;
 const FOG_COLOR = new THREE.Color(0xa9b7c6);
 const FOG_DENSITY = 0.00042;
 
+// the sun disc is tens of thousands bright, which floods the bloom over the
+// whole frame, and the haze around it reflects off the car and the road as
+// glare. the sky stays under a cap and only the disc itself runs hot
+const capSky = (material: THREE.ShaderMaterial, max: string) => {
+    material.fragmentShader = material.fragmentShader.replace(
+        'gl_FragColor = vec4( texColor, 1.0 );',
+        'gl_FragColor = vec4( min( texColor, vec3( SKY_MAX + sundisc * 10.0 ) ), 1.0 );'
+    );
+    material.defines = { ...material.defines, SKY_MAX: max };
+};
+
 export default class RaceAtmosphere {
     root: THREE.Group;
     sky: Sky;
@@ -43,22 +54,11 @@ export default class RaceAtmosphere {
         this.sky.scale.setScalar(SKY_SCALE);
         this.sky.frustumCulled = false;
         this.sky.renderOrder = -10;
-        // the sun disc is tens of thousands bright, which floods the bloom
-        // over the whole frame. the sky stays under the bloom threshold and
-        // only the disc itself runs hot
-        this.sky.material.fragmentShader =
-            this.sky.material.fragmentShader.replace(
-                'gl_FragColor = vec4( texColor, 1.0 );',
-                'gl_FragColor = vec4( min( texColor, vec3( SKY_MAX + sundisc * 10.0 ) ), 1.0 );'
-            );
-        this.sky.material.defines = {
-            ...this.sky.material.defines,
-            SKY_MAX: '2.0',
-        };
+        capSky(this.sky.material, '1.5');
         const uniforms = this.sky.material.uniforms;
         uniforms.turbidity.value = 6.5;
         uniforms.rayleigh.value = 1.6;
-        uniforms.mieCoefficient.value = 0.004;
+        uniforms.mieCoefficient.value = 0.003;
         uniforms.mieDirectionalG.value = 0.8;
         uniforms.sunPosition.value.copy(this.sunDirection);
         this.root.add(this.sky);
@@ -140,6 +140,8 @@ export default class RaceAtmosphere {
         const skyScene = new THREE.Scene();
         const sky = new Sky();
         sky.scale.setScalar(1000);
+        // a little more than the visible sky, it's most of the fill light
+        capSky(sky.material, '3.0');
         Object.entries(this.sky.material.uniforms).forEach(([key, uniform]) => {
             const target = sky.material.uniforms[key];
             if (!target) return;

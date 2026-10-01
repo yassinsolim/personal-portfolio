@@ -35,8 +35,9 @@ import { afterFrame, drain, slice, type Steps } from '../slicing';
 // sparks and skid marks, and the post chain it all renders through. the room
 // scene is untouched, this swaps renderer settings in on enter and out on exit
 const EXPOSURE = 0.95;
-// the sky probe is bright, at full strength it washes the woods out
-const ENVIRONMENT_INTENSITY = 0.6;
+// the sky probe is bright, at full strength it washes the woods out. its sun
+// haze is capped (glare off the car), so it runs a little higher than it did
+const ENVIRONMENT_INTENSITY = 0.75;
 // streaming the race world's uploads: a spare layer (1 is the collider, 3
 // the trees' shadow casters) and meshes per frame
 const UPLOAD_LAYER = 6;
