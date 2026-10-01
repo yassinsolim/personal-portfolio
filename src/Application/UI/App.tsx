@@ -1382,8 +1382,9 @@ const App = () => {
                         <p className="race-menu-controls">
                             Drifting: turn in and tap Space, then feather W to
                             hold the slide. Steer into the corner for more angle
-                            and a tighter line. Flick the other way on the
-                            throttle to swing it into a drift the other way, lift
+                            and a tighter line. Tap the other way to trim the
+                            angle and widen the line, hold it there on the
+                            throttle to swing into a drift the other way, lift
                             off to straighten up. Off assists leave it all to
                             you, the garage's drift build helps there.
                         </p>
