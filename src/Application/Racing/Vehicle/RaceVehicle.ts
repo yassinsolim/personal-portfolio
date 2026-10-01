@@ -3944,6 +3944,16 @@ export default class RaceVehicle {
         }
     }
 
+    // onto another lap (the drift park, or back to the ring), at its start
+    setTrack(track: NordschleifeTrack) {
+        if (track === this.track) return;
+        this.track = track;
+        this.colliderMesh = track.getColliderMesh();
+        this.trackFrame = track.createFrame();
+        this.wheelFrame = track.createFrame();
+        this.resetToStart();
+    }
+
     resetToStart() {
         this.startResets += 1;
         const curve = this.track.getCurve();

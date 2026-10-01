@@ -448,6 +448,8 @@ export default class RaceTracksideExtras {
         const parts: THREE.BufferGeometry[] = [];
         let cell = 0;
         GRAFFITI_SPOTS.forEach(([from, to, count]) => {
+            // the spots are the ring's, past the end of a shorter lap
+            if (to * track.distanceScale > track.length) return;
             for (let k = 0; k < count; k++) {
                 const start =
                     from + ((to - from) * (k + random() * 0.6)) / count;

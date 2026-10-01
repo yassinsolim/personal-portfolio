@@ -1,5 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import LocalLeaderboard, { LeaderboardEntry } from './LocalLeaderboard';
+import LocalDriftBoard, { byScore, type DriftEntry } from './LocalDriftBoard';
 import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
@@ -9,10 +10,17 @@ type SupabaseConfig = {
     supabaseAnonKey: string;
     leaderboardTable?: string;
     ghostReplayTable?: string;
+    driftTable?: string;
 };
 
 const DEFAULT_TABLE = 'nordschleife_leaderboard';
 const DEFAULT_GHOST_REPLAY_TABLE = 'nordschleife_ghost_replays';
+const DEFAULT_DRIFT_TABLE = 'drift_park_scores';
+// the drift park's own season tag, bumped when scores stop being comparable
+const DRIFT_TAG = '@d1';
+// a run's score can't beat this many points a second (DriftScore's ceiling
+// is about 1230)
+const DRIFT_MAX_RATE = 1.3;
 const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
@@ -39,11 +47,22 @@ type RemoteGhostReplayRow = {
     created_at?: string;
 };
 
+type RemoteDriftRow = {
+    id: string;
+    name: string;
+    score: number;
+    lap_time_ms: number;
+    car_id: string;
+    created_at: string;
+};
+
 export default class LeaderboardService {
     local: LocalLeaderboard;
+    drifts: LocalDriftBoard;
     supabase: SupabaseClient | null;
     tableName: string;
     ghostReplayTableName: string;
+    driftTableName: string;
     initialized: boolean;
     initPromise: Promise<void> | null;
     missingConfigLogged: boolean;
@@ -54,9 +73,11 @@ export default class LeaderboardService {
 
     constructor(local: LocalLeaderboard) {
         this.local = local;
+        this.drifts = new LocalDriftBoard();
         this.supabase = null;
         this.tableName = DEFAULT_TABLE;
         this.ghostReplayTableName = DEFAULT_GHOST_REPLAY_TABLE;
+        this.driftTableName = DEFAULT_DRIFT_TABLE;
         this.initialized = false;
         this.initPromise = null;
         this.missingConfigLogged = false;
@@ -109,6 +130,7 @@ export default class LeaderboardService {
             this.tableName = config.leaderboardTable || DEFAULT_TABLE;
             this.ghostReplayTableName =
                 config.ghostReplayTable || DEFAULT_GHOST_REPLAY_TABLE;
+            this.driftTableName = config.driftTable || DEFAULT_DRIFT_TABLE;
             const { createClient } = await import('@supabase/supabase-js');
             this.supabase = createClient(
                 config.supabaseUrl,
@@ -553,5 +575,85 @@ export default class LeaderboardService {
 
         merged.sort((a, b) => a.lapTimeMs - b.lapTimeMs);
         return merged;
+    }
+
+    sanitizeDrift(score: number, lapTimeMs: number) {
+        const time = this.sanitizeLapTime(lapTimeMs);
+        const points = Math.floor(Number(score));
+        const ceiling = Math.floor(time * DRIFT_MAX_RATE);
+        return {
+            score: Number.isFinite(points) ? Math.min(ceiling, Math.max(0, points)) : 0,
+            lapTimeMs: time,
+        };
+    }
+
+    fromDriftRow(row: RemoteDriftRow): DriftEntry {
+        const safe = this.sanitizeDrift(row.score, row.lap_time_ms);
+        return {
+            id: String(row.id || '').slice(0, 80),
+            name: this.sanitizeName(row.name),
+            score: safe.score,
+            lapTimeMs: safe.lapTimeMs,
+            carId: this.sanitizeCarId(row.car_id),
+            createdAt: row.created_at || new Date().toISOString(),
+            source: 'remote',
+        };
+    }
+
+    // the drift park's board: best runs first, this device's and everyone's
+    async getDriftBoard(limit = 10) {
+        const localEntries = this.drifts.getTop(limit);
+        await this.initialize();
+        if (!this.supabase) return localEntries;
+        try {
+            const { data, error } = await this.supabase
+                .from(this.driftTableName)
+                .select('id,name,score,lap_time_ms,car_id,created_at')
+                .like('car_id', `%${DRIFT_TAG}%`)
+                .order('score', { ascending: false })
+                .limit(limit);
+            if (error || !data) return localEntries;
+            const remote = (data as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));
+            const seen = new Set(remote.map((e) => `${e.name}:${e.score}:${e.lapTimeMs}`));
+            return [
+                ...remote,
+                ...localEntries.filter((e) => !seen.has(`${e.name}:${e.score}:${e.lapTimeMs}`)),
+            ]
+                .sort(byScore)
+                .slice(0, limit);
+        } catch {
+            return localEntries;
+        }
+    }
+
+    async submitDrift(name: string, score: number, lapTimeMs: number, carId: string, tune?: string) {
+        const safeTune = tune && /^[0-9a-z]{1,16}$/.test(tune) ? tune : undefined;
+        const safeName = this.sanitizeName(name);
+        const safeCarId = this.sanitizeCarId(carId);
+        const safe = this.sanitizeDrift(score, lapTimeMs);
+        const localEntry = this.drifts.add({
+            name: safeName,
+            score: safe.score,
+            lapTimeMs: safe.lapTimeMs,
+            carId: safeCarId,
+        });
+        await this.initialize();
+        if (!this.supabase) return localEntry;
+        try {
+            const { data, error } = await this.supabase
+                .from(this.driftTableName)
+                .insert({
+                    name: safeName,
+                    score: safe.score,
+                    lap_time_ms: safe.lapTimeMs,
+                    car_id: `${safeCarId}${DRIFT_TAG}${safeTune ? TUNE_TAG + safeTune : ''}`,
+                })
+                .select('id,name,score,lap_time_ms,car_id,created_at')
+                .single();
+            if (error || !data) return localEntry;
+            return this.fromDriftRow(data as RemoteDriftRow);
+        } catch {
+            return localEntry;
+        }
     }
 }

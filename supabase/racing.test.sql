@@ -183,6 +183,44 @@ begin
   delete from public.nordschleife_rate_events;
 end $$;
 
+-- the drift park's runs: a real one goes in, scores the game can't make don't,
+-- and anon can't change or remove them
+select set_config('request.headers', '{"sb-forwarded-for": "203.0.113.77"}', false);
+do $$
+declare
+  ok boolean;
+  bad record;
+begin
+  delete from public.nordschleife_rate_events;
+  set local role anon;
+  insert into public.drift_park_scores (name, score, lap_time_ms, car_id) values ('QA drifter', 42000, 82000, 'bmw-e92-m3@d1');
+  insert into public.drift_park_scores (name, score, lap_time_ms, car_id) values ('QA tuned', 60000, 75000, 'amg-one@d1~t0a1b2');
+  for bad in
+    select * from (values
+      ('QA', 0, 82000, 'bmw-e92-m3@d1', 'a run with no score'),
+      ('QA', 120000, 82000, 'bmw-e92-m3@d1', 'more than 1.3 points a millisecond'),
+      ('QA', 1000, 29999, 'bmw-e92-m3@d1', 'a park lap under 30 s'),
+      ('QA', 1000, 82000, 'bmw-e92-m3@v6', 'the ring season tag'),
+      ('QA', 1000, 82000, 'gt3rs@d1', 'an unknown car'),
+      ('   ', 1000, 82000, 'bmw-e92-m3@d1', 'a blank name')
+    ) as t(name, score, ms, car, what)
+  loop
+    begin
+      insert into public.drift_park_scores (name, score, lap_time_ms, car_id) values (bad.name, bad.score, bad.ms, bad.car);
+      ok := true;
+    exception when check_violation or insufficient_privilege then ok := false;
+    end;
+    if ok then raise exception '% was accepted', bad.what; end if;
+  end loop;
+  begin delete from public.drift_park_scores; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon deleted drift runs'; end if;
+  begin update public.drift_park_scores set score = 2000000; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon updated a drift run'; end if;
+  reset role;
+  if (select count(*) from public.drift_park_scores) <> 2 then raise exception 'drift runs went missing'; end if;
+  delete from public.nordschleife_rate_events;
+end $$;
+
 -- the sql editor (no request headers) isn't limited
 select set_config('request.headers', '', false);
 insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('Admin', 400000, 'bmw-e92-m3@v3');

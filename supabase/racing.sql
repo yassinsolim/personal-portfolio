@@ -1,4 +1,5 @@
--- Nordschleife racing: lap leaderboard and ghost replays.
+-- Nordschleife racing: lap leaderboard, ghost replays and the drift park's
+-- scoreboard.
 --
 -- Runs in the SQL editor of the racing Supabase project (see docs/RACING_SUPABASE.md).
 -- Safe to run again: everything is create-if-missing or create-or-replace.
@@ -187,6 +188,60 @@ create trigger nordschleife_limit_lap_inserts
   before insert on public.nordschleife_leaderboard
   for each row execute function public.nordschleife_limit_lap_inserts();
 
+-- ---------------------------------------------------------------- drift park
+
+-- a run is a lap of the drift park: its drift score and lap time. the car id
+-- carries the park's own season tag ("bmw-e92-m3@d1", tuned "amg-one@d1~t0a1b2")
+create table if not exists public.drift_park_scores (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 16),
+  score integer not null check (score between 0 and 3000000),
+  lap_time_ms integer not null check (lap_time_ms between 1000 and 7200000),
+  car_id text not null check (char_length(car_id) between 1 and 64),
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_drift_park_scores_score
+  on public.drift_park_scores (score desc);
+
+create or replace function public.drift_park_valid_car_id(p_car_id text)
+returns boolean
+language sql
+immutable
+as $$
+  select p_car_id ~ ('^(amg-one|bmw-e92-m3|amg-c63-507|amg-c63s-coupe|bmw-f82-m4|'
+    || 'bmw-f90-m5-competition|bmw-m8-competition-coupe|mercedes-gt63s-edition-one|'
+    || 'toyota-crown-platinum)@d[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
+$$;
+
+alter table public.drift_park_scores enable row level security;
+
+drop policy if exists "public read drift runs" on public.drift_park_scores;
+create policy "public read drift runs"
+  on public.drift_park_scores for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "public insert drift runs" on public.drift_park_scores;
+create policy "public insert drift runs"
+  on public.drift_park_scores for insert
+  to anon, authenticated
+  with check (
+    char_length(name) between 1 and 16
+    and btrim(name) <> ''
+    and name !~ '[[:cntrl:]]'
+    -- the client never counts a park lap under 30 s (DRIFT_MIN_LAP_MS), and
+    -- its scoring can't pass 1.3 points a millisecond (DRIFT_MAX_RATE)
+    and lap_time_ms between 30000 and 1800000
+    and score between 1 and lap_time_ms * 13 / 10
+    and public.drift_park_valid_car_id(car_id)
+  );
+
+-- runs share the laps' per client and global caps
+drop trigger if exists drift_park_limit_inserts on public.drift_park_scores;
+create trigger drift_park_limit_inserts
+  before insert on public.drift_park_scores
+  for each row execute function public.nordschleife_limit_lap_inserts();
+
 -- ---------------------------------------------------------------- realtime
 
 -- the board listens for new laps (postgres changes on insert)
@@ -208,9 +263,13 @@ revoke all on public.nordschleife_leaderboard, public.nordschleife_ghost_replays
   from anon, authenticated;
 grant select, insert on public.nordschleife_leaderboard to anon, authenticated;
 grant select, insert, update on public.nordschleife_ghost_replays to anon, authenticated;
+revoke all on public.drift_park_scores from anon, authenticated;
+grant select, insert on public.drift_park_scores to anon, authenticated;
 
 revoke all on function public.nordschleife_limit_lap_inserts() from public, anon, authenticated;
 revoke all on function public.nordschleife_ghost_matches_lap(uuid, integer, text) from public;
 grant execute on function public.nordschleife_ghost_matches_lap(uuid, integer, text) to anon, authenticated;
 revoke all on function public.nordschleife_valid_car_id(text) from public;
 grant execute on function public.nordschleife_valid_car_id(text) to anon, authenticated;
+revoke all on function public.drift_park_valid_car_id(text) from public;
+grant execute on function public.drift_park_valid_car_id(text) to anon, authenticated;

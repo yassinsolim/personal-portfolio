@@ -22,6 +22,8 @@ export type GarageState = {
     look: CarLook;
     tune: CarTune;
     calipers: boolean;
+    // the rear spoilers this car's boot takes
+    spoilers: Spoiler[];
     // the factory speed limiter in km/h, null when the car has none
     speedLimiter: number | null;
     tuned: boolean;
@@ -378,19 +380,32 @@ const Garage = ({ state, onClose, onHome }: Props) => {
                         <>
                             <h4>Rear spoiler</h4>
                             <div className="garage-options column">
-                                {SPOILERS.map(([spoiler, label, hint]) => (
-                                    <button
-                                        type="button"
-                                        key={spoiler}
-                                        className={
-                                            look.spoiler === spoiler ? 'on' : ''
-                                        }
-                                        onClick={() => setL({ spoiler })}
-                                    >
-                                        <strong>{label}</strong>
-                                        <small>{hint}</small>
-                                    </button>
-                                ))}
+                                {SPOILERS.map(([spoiler, label, hint]) => {
+                                    const fits =
+                                        spoiler === 'none' ||
+                                        !state ||
+                                        state.spoilers.includes(spoiler);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={spoiler}
+                                            className={
+                                                look.spoiler === spoiler
+                                                    ? 'on'
+                                                    : ''
+                                            }
+                                            disabled={!fits}
+                                            onClick={() => setL({ spoiler })}
+                                        >
+                                            <strong>{label}</strong>
+                                            <small>
+                                                {fits
+                                                    ? hint
+                                                    : "This car's tail has no lid to fit one"}
+                                            </small>
+                                        </button>
+                                    );
+                                })}
                             </div>
                             <Slider
                                 label="Ride height"

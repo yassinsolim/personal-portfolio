@@ -24,10 +24,13 @@ export default class SectorTimer {
     last: number[];
     best: number[];
     carId: string;
+    // which lap the saved bests are for, the ring's are under no name
+    trackKey: string;
 
-    constructor(bounds: number[], names: string[]) {
+    constructor(bounds: number[], names: string[], trackKey = '') {
         this.bounds = bounds;
         this.names = names;
+        this.trackKey = trackKey;
         this.index = 0;
         this.sectorStartMs = 0;
         this.current = [];
@@ -99,7 +102,7 @@ export default class SectorTimer {
     load(): number[] {
         try {
             const raw = window.localStorage.getItem(
-                STORAGE_PREFIX + this.carId
+                STORAGE_PREFIX + this.trackKey + this.carId
             );
             const parsed = raw ? JSON.parse(raw) : null;
             if (Array.isArray(parsed))
@@ -113,7 +116,7 @@ export default class SectorTimer {
     save() {
         try {
             window.localStorage.setItem(
-                STORAGE_PREFIX + this.carId,
+                STORAGE_PREFIX + this.trackKey + this.carId,
                 JSON.stringify(this.best)
             );
         } catch {

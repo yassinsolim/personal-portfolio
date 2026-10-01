@@ -38,9 +38,11 @@ export default class LapTimer {
     // at the start with the clock at 0, waiting for the car to move
     armed: boolean;
     armOrigin: THREE.Vector3;
+    minLapMs: number;
 
-    constructor(curve: THREE.CatmullRomCurve3, sampleCount = 2200) {
+    constructor(curve: THREE.CatmullRomCurve3, sampleCount = 2200, minLapMs = MIN_LAP_TIME_MS) {
         this.curve = curve;
+        this.minLapMs = minLapMs;
         this.samplePoints = [];
         for (let i = 0; i <= sampleCount; i++) {
             this.samplePoints.push(this.curve.getPointAt(i / sampleCount));
@@ -219,7 +221,7 @@ export default class LapTimer {
 
             const lapTimeMs = nowMs - this.lapStartMs;
             const isValidLap =
-                lapTimeMs >= MIN_LAP_TIME_MS &&
+                lapTimeMs >= this.minLapMs &&
                 this.maxProgress >= PROGRESS_VALID_THRESHOLD;
 
             this.lapStartMs = nowMs;
