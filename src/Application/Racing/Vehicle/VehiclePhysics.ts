@@ -141,11 +141,32 @@ export const DRIFT_TUNING = {
     liftTarget: 0.6,
     // seconds the drift throttle takes to follow the pedal
     driveTime: 0.4,
+    // and the quicker read of it a transition goes by
+    pedalTime: 0.12,
     // share of the build-up grip drop that stays with the throttle off
     buildFloor: 0.6,
     // and per rad/s the angle is falling away under the target, which
     // catches a slide that's snapping back while the throttle is feathered
     catchGripDrop: 0.6,
+    // a transition: steer this far the other way with at least this much
+    // (smoothed) throttle, and it has this long to reach the other side
+    switchSteer: 0.6,
+    switchDrive: 0.35,
+    switchTime: 1.1,
+    // the steer has to get there this quickly, a flick not a held countersteer
+    switchFlick: 0.35,
+    // and has to start from the wheel at rest or into the drift this long
+    switchSettle: 0.15,
+    // a steer the other way this soon after the drift begins is a catch
+    switchAge: 0.6,
+    // share of the throttle floor given up on a big overshoot
+    overLift: 0.7,
+    // seconds of slip rate it looks ahead, and the yaw acceleration (rad/s2)
+    // it catches a predicted overshoot with
+    catchLead: 0.25,
+    catchAccel: 3,
+    // m/s2 the path bends toward the inside with the steer full into it
+    pathAccel: 3,
     gearRpm: DRIFT_GEAR_RPM,
     downshiftRpm: DRIFT_DOWNSHIFT_RPM,
 };
@@ -277,8 +298,23 @@ export default class VehiclePhysics {
     driftThrottle: number;
     driftSteer: number;
     driftTuning: typeof DRIFT_TUNING;
-    private driftAngle: number;
     private driftShortfall = 0;
+    // which way the held drift goes (1 left), the body slip last step, and
+    // how long a transition to the other side has left to land
+    driftSide = 1;
+    private driftBeta = 0;
+    driftSwitch = 0;
+    // seconds the steer has been pushed against the drift, and before that
+    // how long it sat at rest or into it
+    private driftFlick = 0;
+    private driftCalm = 0;
+    private driftSettled = false;
+    // seconds since the drift (or its last transition) began
+    private driftAge = 0;
+    // -1..1 yaw moment the hold catches an overshoot with
+    private driftCatch = 0;
+    // m/s2 across the velocity, toward the inside of the drift
+    private driftPath = 0;
     // rad/s the slip angle is shrinking by under the target
     private driftFalling = 0;
     // the handbrake asks for a slide: standard's stability and traction
@@ -287,6 +323,8 @@ export default class VehiclePhysics {
     private straightTime = 0;
     // the throttle smoothed, so taps on a key feather the slide
     driftDrive = 0;
+    // and barely smoothed, for whether the foot is on it right now
+    private driftPedal = 0;
     limiterActive: boolean;
     engineTorqueNow: number;
     manualShiftRequest: number;
@@ -332,7 +370,6 @@ export default class VehiclePhysics {
         this.driftThrottle = 1;
         this.driftSteer = 0;
         this.driftTuning = { ...DRIFT_TUNING };
-        this.driftAngle = 0;
         this.engineTorqueNow = 0;
         this.manualShiftRequest = 0;
         this.handbrakeInput = 0;
@@ -384,7 +421,9 @@ export default class VehiclePhysics {
         this.manualShiftRequest = 0;
         this.driftActive = false;
         this.driftWindow = false;
+        this.driftSwitch = 0;
         this.driftDrive = 0;
+        this.driftPedal = 0;
         this.gear = speed > 0.5 ? this.gearForSpeed(speed) : 1;
         this.pendingGear = this.gear;
         this.engineRpm = Math.max(
@@ -631,8 +670,9 @@ export default class VehiclePhysics {
     }
 
     // drift assist: once the rear is out, the steering picks the slip angle
-    // (straight ~26 degrees, into the corner up to ~35, out of it winds the
-    // slide down) and the throttle scales it (lifting winds it down too). the
+    // (straight ~26 degrees, into the corner up to ~35 and a tighter line)
+    // and the throttle scales it (lifting winds it down). flicking the steer
+    // the other way on the power swings it into a drift the other way. the
     // front wheels are aimed where the front axle is going plus a correction
     // toward that angle, and the throttle is eased when the angle overshoots,
     // so the car doesn't swap ends
@@ -652,23 +692,69 @@ export default class VehiclePhysics {
             return false;
         }
         const tuning = this.driftTuning;
-        const angle = Math.abs(beta);
-        const angleRate = dt > 0 ? (angle - this.driftAngle) / dt : 0;
-        this.driftAngle = angle;
         if (!this.driftActive) {
-            if (!(oversteer && angle > tuning.startSlip && speed > 7)) {
+            const start = Math.abs(beta);
+            this.driftBeta = beta;
+            if (!(oversteer && start > tuning.startSlip && speed > 7)) {
                 return false;
             }
             this.driftActive = true;
-        } else if (angle < tuning.endSlip) {
+            // a left drift has the velocity to the right of the nose, beta < 0
+            this.driftSide = -Math.sign(beta) || 1;
+            this.driftSwitch = 0;
+            // a steer the other way held from before it began isn't a flick
+            this.driftFlick = steerInput * this.driftSide < -0.2 ? 1 : 0;
+            this.driftCalm = tuning.switchSettle;
+            this.driftSettled = false;
+            this.driftAge = 0;
+        }
+        this.driftAge += dt;
+        // flicking the wheel hard the other way on the power swings the slide
+        // over to that side (a transition). it has to come from the wheel at
+        // rest or into the drift: off the power, or the quick corrections of
+        // someone countersteering it themselves, it straightens up instead
+        let side = this.driftSide;
+        const against = -steerInput * side;
+        if (against < 0.2) {
+            this.driftCalm += dt;
+            this.driftFlick = 0;
+        } else {
+            if (this.driftFlick === 0) {
+                this.driftSettled = this.driftCalm >= tuning.switchSettle;
+            }
+            this.driftFlick += dt;
+            this.driftCalm = 0;
+        }
+        if (
+            this.driftSwitch <= 0 &&
+            this.driftAge > tuning.switchAge &&
+            against > tuning.switchSteer &&
+            this.driftFlick < tuning.switchFlick &&
+            this.driftSettled &&
+            this.driftPedal > tuning.switchDrive
+        ) {
+            side = this.driftSide = -side;
+            this.driftSwitch = tuning.switchTime;
+            this.driftFlick = 0;
+            this.driftCalm = 0;
+            this.driftAge = 0;
+        }
+        this.driftSwitch = Math.max(0, this.driftSwitch - dt);
+        // the slip angle on the drift's side, negative while it swings over
+        const angle = -beta * side;
+        const angleRate =
+            dt > 0 ? (-(beta - this.driftBeta) * side) / dt : 0;
+        this.driftBeta = beta;
+        if (this.driftSwitch <= 0 && angle < tuning.endSlip) {
             this.driftActive = false;
             return false;
         }
-        // the corner the car is drifting through: a left drift has the
-        // velocity to the right of the nose, so beta < 0
-        const turn = -Math.sign(beta) || 1;
+        const turn = side;
         const into = Math.max(0, steerInput * turn);
-        const out = Math.max(0, -steerInput * turn);
+        const out =
+            this.driftSwitch > 0 ? 0 : Math.max(0, -steerInput * turn);
+        this.driftPath =
+            this.driftSwitch > 0 ? 0 : turn * tuning.pathAccel * into;
         const targetAngle =
             clamp(
                 tuning.baseAngle +
@@ -679,7 +765,16 @@ export default class VehiclePhysics {
             ) * lerp(tuning.liftTarget, 1, this.driftDrive);
         this.driftTarget = targetAngle * -turn;
         const error = targetAngle - angle;
-        this.driftShortfall = Math.max(0, error);
+        // where the angle is headed a moment from now. headed past the target
+        // it lifts and catches the swing with a yaw moment, the way a
+        // driver's countersteer would, so a transition lands on the other
+        // side instead of spinning
+        const ahead = Math.min(
+            error,
+            targetAngle - (angle + angleRate * tuning.catchLead)
+        );
+        this.driftCatch = -turn * clamp((-ahead - 0.05) / 0.25, 0, 1);
+        this.driftShortfall = Math.max(0, ahead);
         this.driftFalling = error > 0 ? Math.max(0, -angleRate) : 0;
         const correction = clamp(
             tuning.steerGain * error - tuning.steerDamping * angleRate,
@@ -689,10 +784,12 @@ export default class VehiclePhysics {
         const steer = frontTravel + correction * turn;
         this.driftSteer = clamp(steer, -this.spec.maxSteer, this.spec.maxSteer);
         // too much angle: ease off. too little: full throttle keeps the rear
-        // spinning
+        // spinning. a big overshoot, like the swing out of a transition,
+        // lifts further
+        const over = clamp((-ahead - 0.1) / 0.2, 0, 1);
         this.driftThrottle = clamp(
-            1 + error * tuning.throttleGain,
-            tuning.throttleFloor,
+            1 + ahead * tuning.throttleGain,
+            tuning.throttleFloor * (1 - tuning.overLift * over),
             1
         );
         return true;
@@ -861,13 +958,18 @@ export default class VehiclePhysics {
             this.straightTime = 0;
         } else if (this.driftWindow) {
             const straight =
-                Math.abs(this.getBodySlip()) < 0.07 || speed < 4;
+                (Math.abs(this.getBodySlip()) < 0.07 &&
+                    this.driftSwitch <= 0) ||
+                speed < 4;
             this.straightTime = straight ? this.straightTime + dt : 0;
             if (this.straightTime > 0.6) this.driftWindow = false;
         }
         this.driftDrive +=
             (clamp(controls.throttle, 0, 1) - this.driftDrive) *
             clamp(dt / this.driftTuning.driveTime, 0, 1);
+        this.driftPedal +=
+            (clamp(controls.throttle, 0, 1) - this.driftPedal) *
+            clamp(dt / this.driftTuning.pedalTime, 0, 1);
     }
 
     substep(dt: number, controls: PhysicsControls, surface: PhysicsSurface) {
@@ -996,7 +1098,11 @@ export default class VehiclePhysics {
 
         let forceX = 0;
         let forceY = 0;
-        let moment = stabilityMoment;
+        let moment =
+            stabilityMoment +
+            (this.driftActive
+                ? this.driftCatch * spec.yawInertia * tuning.catchAccel
+                : 0);
         this.absActive = false;
         const radius = spec.wheelRadius;
         // the handbrake fades out at speed, so a stray press at 200 km/h
@@ -1131,6 +1237,14 @@ export default class VehiclePhysics {
         if (surface.grounded) {
             forceX += spec.massKg * surface.slopeForward;
             forceY += spec.massKg * surface.slopeLeft;
+        }
+        // steering into a held drift bends the path toward the inside, a
+        // force across the velocity so it costs no speed
+        const speedNow = Math.hypot(this.vx, this.vy);
+        if (this.driftActive && surface.grounded && speedNow > 3) {
+            const push = this.driftPath * spec.massKg;
+            forceX -= (this.vy / speedNow) * push;
+            forceY += (this.vx / speedNow) * push;
         }
 
         const ax = forceX / spec.massKg;

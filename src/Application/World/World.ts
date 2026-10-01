@@ -8,6 +8,7 @@ import Cursor from './Cursor';
 import Hitboxes from './Hitboxes';
 import Car from './Car';
 import RaceTransition from './RaceTransition';
+import CarTag from './CarTag';
 import Flipper from './Flipper';
 import UIEventBus from '../UI/EventBus';
 import { raceSources } from '../sources';
@@ -43,6 +44,7 @@ export default class World {
     cursor: Cursor;
     car: Car;
     raceTransition: RaceTransition;
+    carTag: CarTag | null = null;
     flipper: Flipper;
     raceManager: RaceManager | null;
     raceManagerLoading: Promise<RaceManager> | null;
@@ -76,6 +78,7 @@ export default class World {
             this.coffeeSteam = new CoffeeSteam();
             this.car = new Car();
             this.raceTransition = new RaceTransition();
+            this.carTag = new CarTag(this.raceTransition);
             this.flipper = new Flipper();
             if (this.room.pc) {
                 this.screens.addTarget('pc', this.room.pc, () => this.room.pcPose());
@@ -249,6 +252,7 @@ export default class World {
         this.screens.update();
         if (this.coffeeSteam) this.coffeeSteam.update();
         if (this.flipper) this.flipper.update();
+        if (this.carTag) this.carTag.update();
         if (this.raceManager) this.raceManager.update();
     }
 }

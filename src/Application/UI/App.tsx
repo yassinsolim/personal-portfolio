@@ -327,6 +327,12 @@ const App = () => {
         });
     }, []);
     const closeLobbyChoice = useCallback(() => setLobbyChoiceOpen(false), []);
+    // the race panel's garage button and its G key. a locked mouse is let go
+    // so the garage can be clicked, and the lobby card comes back after it
+    const openGarageFromRace = useCallback(() => {
+        if (document.pointerLockElement) document.exitPointerLock();
+        openGarage(lobbyChoiceOpen);
+    }, [openGarage, lobbyChoiceOpen]);
     // the black cut in and out of the garage from the homepage button
     const [garageFade, setGarageFade] = useState<'' | 'open' | 'home'>('');
     const openGarageFromHome = useCallback(() => {
@@ -766,6 +772,22 @@ const App = () => {
     const panelMenu = compactPanel && !raceModeActive && !deskView;
     const panelFolded = panelMenu && !panelOpen;
 
+    useEffect(() => {
+        if (!raceModeActive || garageOpen || racePaused) return undefined;
+        const onKey = (event: KeyboardEvent) => {
+            if (event.code !== 'KeyG' || event.repeat) return;
+            if (event.metaKey || event.ctrlKey || event.altKey) return;
+            const target = event.target as HTMLElement | null;
+            if (target?.closest('input, textarea, select, [contenteditable]')) return;
+            // not while the camera flies in from the room
+            if (document.body.classList.contains('race-transition')) return;
+            event.preventDefault();
+            openGarageFromRace();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [raceModeActive, garageOpen, racePaused, openGarageFromRace]);
+
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <Loader />
@@ -773,6 +795,7 @@ const App = () => {
                 <div
                     className={[
                         'look-hint',
+                        raceModeActive && 'racing',
                         roomFocus && 'room-focused',
                         deskView && !roomFocus && 'room-desk',
                         panelMenu && 'compact',
@@ -780,7 +803,7 @@ const App = () => {
                     ]
                         .filter(Boolean)
                         .join(' ')}
-                    data-label="Controls"
+                    data-label="Menu"
                     data-prevent-click
                     tabIndex={deskView ? 0 : -1}
                 >
@@ -795,18 +818,24 @@ const App = () => {
                         </button>
                     )}
                     <div className="look-hint-begin">
-                        {tapToBegin ? 'Tap' : 'Click'} anywhere to begin.
+                        <span className="look-hint-pulse" aria-hidden="true" />
+                        {raceModeActive
+                            ? 'Nordschleife'
+                            : `${tapToBegin ? 'Tap' : 'Click'} anywhere to begin`}
                     </div>
-                    <div>
-                        Visit the inner OS{' '}
+                    {!raceModeActive && (
                         <a
+                            className="look-hint-os"
                             href="https://os.yassin.app"
                             rel="noreferrer noopener"
                             target="_blank"
                         >
-                            yassinOS!
+                            Visit the inner OS <strong>yassinOS</strong>
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M7 17 17 7M9 7h8v8" />
+                            </svg>
                         </a>
-                    </div>
+                    )}
                     <div className="car-switcher" data-prevent-click>
                         <label htmlFor="car-switcher">Car</label>
                         <select
@@ -823,11 +852,13 @@ const App = () => {
                     </div>
                     {!raceModeActive && (
                         <div className="render-mode" data-prevent-click>
-                            <span>Render</span>
-                            <RenderModeButtons
-                                mode={qualityMode}
-                                onChange={handleQualityChange}
-                            />
+                            <span className="look-hint-label">Render</span>
+                            <div className="look-hint-segment" role="group" aria-label="Render mode">
+                                <RenderModeButtons
+                                    mode={qualityMode}
+                                    onChange={handleQualityChange}
+                                />
+                            </div>
                             {qualityMode === 'auto' && renderScale ? (
                                 <span className="render-mode-scale">
                                     {renderScale.toFixed(2)}x
@@ -835,7 +866,7 @@ const App = () => {
                             ) : null}
                             <button
                                 type="button"
-                                className={graphicsInfoOpen ? 'active' : ''}
+                                className={`look-hint-chip ${graphicsInfoOpen ? 'active' : ''}`}
                                 onClick={() => setGraphicsInfoOpen((v) => !v)}
                             >
                                 Info
@@ -860,8 +891,9 @@ const App = () => {
                     )}
                     {!raceModeActive && (
                         <div className="multiplayer-menu" data-prevent-click>
+                            <span className="look-hint-label">Race the Nordschleife</span>
                             <div className="multiplayer-row">
-                                <label htmlFor="multiplayer-name">Driver Name</label>
+                                <label htmlFor="multiplayer-name">Driver</label>
                                 <input
                                     id="multiplayer-name"
                                     value={playerName}
@@ -873,9 +905,13 @@ const App = () => {
                             <div className="multiplayer-actions">
                                 <button
                                     type="button"
+                                    className="look-hint-primary"
                                     onClick={handlePlaySolo}
                                     disabled={multiplayerBusy}
                                 >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 4.5v15l12.5-7.5z" />
+                                    </svg>
                                     Play Solo
                                 </button>
                                 <button
@@ -909,6 +945,7 @@ const App = () => {
                             <div className="multiplayer-secondary-actions">
                                 <button
                                     type="button"
+                                    className="look-hint-link"
                                     onClick={handleRejoinLastLobby}
                                     disabled={multiplayerBusy || !hasJoinCode}
                                 >
@@ -957,22 +994,46 @@ const App = () => {
                         </div>
                     )}
                     {raceModeActive && (
-                        <div className="race-toggle" data-prevent-click>
-                            <button type="button" onClick={handleRaceToggle}>
-                                Exit race mode
+                        <div className="race-actions" data-prevent-click>
+                            <button
+                                type="button"
+                                className="race-garage"
+                                onClick={openGarageFromRace}
+                            >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M21.7 7.1a6 6 0 0 1-7.9 6.7l-7.4 7.4a2.1 2.1 0 0 1-3-3l7.4-7.4a6 6 0 0 1 6.7-7.9l-3.6 3.6 1 2.9 2.9 1z" />
+                                </svg>
+                                <span>Garage</span>
+                                <kbd>G</kbd>
                             </button>
-                        </div>
-                    )}
-                    {raceModeActive && !racePaused && (
-                        <div className="race-pause-toggle" data-prevent-click>
-                            <button type="button" onClick={handlePauseMenu}>
-                                Pause / Settings
+                            {!racePaused && (
+                                <button
+                                    type="button"
+                                    className="race-pause-toggle"
+                                    onClick={handlePauseMenu}
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                                        <path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" />
+                                    </svg>
+                                    <span>Pause</span>
+                                    <kbd>Esc</kbd>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                className="race-toggle"
+                                onClick={handleRaceToggle}
+                            >
+                                <svg viewBox="0 0 24 24" aria-hidden="true">
+                                    <path d="M10.5 5 4 12l6.5 7v-4.5H20v-5h-9.5z" />
+                                </svg>
+                                <span>Exit race mode</span>
                             </button>
                         </div>
                     )}
                     {raceModeActive && !racePaused && !pointerLocked && !touchRaceDevice && (
                         <div className="race-lock-hint">
-                            Click the scene to lock mouse. Press Esc to pause.
+                            Click the scene to lock the mouse. Esc pauses.
                         </div>
                     )}
                 </div>
@@ -1315,14 +1376,16 @@ const App = () => {
                         <p className="race-menu-controls">
                             W / S or arrows: throttle, brake (hold S to reverse).
                             A / D: steer. Space: handbrake. R: back on track. T:
-                            restart lap. Gamepad: triggers, left stick, A handbrake,
-                            Y reset.
+                            restart lap. G: garage. Gamepad: triggers, left
+                            stick, A handbrake, Y reset.
                         </p>
                         <p className="race-menu-controls">
                             Drifting: turn in and tap Space, then feather W to
-                            hold the slide. Steer into the corner for more angle,
-                            out of it to straighten up. Off assists leave it all
-                            to you, the garage's drift build helps there.
+                            hold the slide. Steer into the corner for more angle
+                            and a tighter line. Flick the other way on the
+                            throttle to swing it into a drift the other way, lift
+                            off to straighten up. Off assists leave it all to
+                            you, the garage's drift build helps there.
                         </p>
 
                         <p className="race-menu-credits">
@@ -1333,7 +1396,11 @@ const App = () => {
                         <ModelCredits />
 
                         <div className="race-menu-actions">
-                            <button type="button" onClick={handleResumeRace}>
+                            <button
+                                type="button"
+                                className="race-menu-primary"
+                                onClick={handleResumeRace}
+                            >
                                 Resume Race
                             </button>
                             <button

@@ -1,7 +1,8 @@
 // drifting on the keyboard: a handbrake flick under the standard assists
-// starts a slide that taps on the throttle key hold, lifting ends it, and the
-// drift build's parts reach the driving model. flat asphalt, the plain
-// driving model, keys ramped like DrivingInput
+// starts a slide that taps on the throttle key hold, steering the other way on
+// the power swings it over, lifting ends it, and the drift build's parts reach
+// the driving model. flat asphalt, the plain driving model, keys ramped like
+// DrivingInput
 //
 //   npm test
 import test from 'node:test';
@@ -68,7 +69,8 @@ const keyboard = () => {
 };
 
 // 80 km/h, turn in and flick the handbrake, then the hold inputs for 8 s.
-// returns seconds spent sideways (10 to 70 degrees) and whether it spun
+// returns seconds spent sideways (10 to 70 degrees) each way, how often it
+// changed sides, how far the path turned (degrees), and whether it spun
 const flick = (car, hold) => {
     const keys = keyboard();
     while (car.getSpeed() * 3.6 < 80) {
@@ -80,16 +82,40 @@ const flick = (car, hold) => {
         car.step(DT, c, FLAT, c.steer);
         if (t > 0.4 && -car.getBodySlip() > 0.31) break;
     }
+    const travel = () => car.yaw + Math.atan2(car.vy, car.vx);
+    let heading = travel();
+    let turned = 0;
     let sideways = 0;
+    let right = 0;
+    let flips = 0;
+    let side = 1;
     let spun = false;
+    let wild = false;
     for (let t = 0; t < 8; t += DT) {
         const c = keys(hold(t));
         car.step(DT, c, FLAT, c.steer);
         const angle = (-car.getBodySlip() * 180) / Math.PI;
-        if (angle > 10 && angle < 70 && car.getSpeed() > 6) sideways += DT;
+        const now = travel();
+        turned += now - heading;
+        heading = now;
+        const moving = car.getSpeed() > 6;
+        if (angle > 10 && angle < 70 && moving) sideways += DT;
+        if (angle < -10 && angle > -70 && moving) right += DT;
+        if (Math.abs(angle) > 8 && Math.sign(angle) !== side) {
+            flips++;
+            side = Math.sign(angle);
+        }
         if (angle > 100 || angle < -25) spun = true;
+        if (Math.abs(angle) > 100) wild = true;
     }
-    return { sideways, spun };
+    return {
+        sideways,
+        right,
+        flips,
+        turned: (turned * 180) / Math.PI,
+        spun,
+        wild,
+    };
 };
 
 for (const id of ['bmw-f82-m4', 'bmw-e92-m3', 'amg-one']) {
@@ -106,6 +132,52 @@ for (const id of ['bmw-f82-m4', 'bmw-e92-m3', 'amg-one']) {
         assert.equal(into.spun, false);
     });
 }
+
+for (const id of ['bmw-f82-m4', 'bmw-e92-m3', 'amg-one']) {
+    test(`${id}: the other way on the power swings it into the other drift`, () => {
+        const swing = flick(makeCar(id, 'standard'), (t) => ({
+            a: t < 3,
+            d: t >= 3,
+            w: t % 0.5 < 0.3,
+        }));
+        assert.ok(swing.right > 3, `right side ${swing.right.toFixed(2)} s`);
+        assert.equal(swing.wild, false);
+        // and back and forth on a held throttle, a slalom of drifts
+        const slalom = flick(makeCar(id, 'standard'), (t) => {
+            const left = Math.floor(t / 2) % 2 === 0;
+            return { a: left, d: !left, w: true };
+        });
+        assert.ok(slalom.flips >= 3, `changed sides ${slalom.flips} times`);
+        assert.ok(slalom.right > 2, `right side ${slalom.right.toFixed(2)} s`);
+        assert.equal(slalom.wild, false);
+    });
+}
+
+test('the other way off the power straightens up instead', () => {
+    const car = makeCar('bmw-f82-m4', 'standard');
+    const lift = flick(car, (t) => ({
+        a: t < 3,
+        d: t >= 3,
+        w: t < 3 && t % 0.5 < 0.3,
+    }));
+    assert.ok(lift.right < 0.3, `right side ${lift.right.toFixed(2)} s`);
+    assert.equal(lift.wild, false);
+});
+
+test('steering into the drift tightens the line', () => {
+    const taps = (t) => t % 0.5 < 0.25;
+    const neutral = flick(makeCar('bmw-f82-m4', 'standard'), (t) => ({
+        w: taps(t),
+    }));
+    const into = flick(makeCar('bmw-f82-m4', 'standard'), (t) => ({
+        a: true,
+        w: taps(t),
+    }));
+    assert.ok(
+        into.turned > neutral.turned + 30,
+        `into ${into.turned.toFixed(0)} vs ${neutral.turned.toFixed(0)} degrees`
+    );
+});
 
 test('lifting off ends the drift without a spin', () => {
     const car = makeCar('bmw-f82-m4', 'standard');

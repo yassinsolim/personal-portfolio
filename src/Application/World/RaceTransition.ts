@@ -9,6 +9,8 @@ import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { copyCarLook, finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
 import { reportStage } from '../Utils/loadStages';
+import { HYBRID } from '../UI/loaders/hybridConfig';
+import { prefersReducedMotion } from '../UI/loaders/variant';
 
 // click the car in the room: it rocks on its springs and the camera swings
 // round behind it, landing exactly where the race camera will start, with its
@@ -27,6 +29,9 @@ const COMPILE_WAIT_MS = 2500;
 const JOIN_WAIT_MS = 4000;
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
+// leaving the race: the startup's pull-back off the terminal screen again
+const RETURN_MS = 1300;
+const RETURN_EASE = BezierEasing(0.45, 0, 0.2, 1);
 
 type Pose = {
     position: THREE.Vector3;
@@ -97,6 +102,11 @@ export default class RaceTransition {
 
     // the homepage garage button's start: skips the fly, opens the garage
     toGarage = false;
+    // race mode was on, so its end goes back to the room the long way
+    private racing = false;
+    // how long the camera holds on the terminal before pulling back
+    private returnHold = 0;
+    private returning: Promise<void> | null = null;
 
     constructor() {
         this.application = new Application();
@@ -124,9 +134,21 @@ export default class RaceTransition {
         // straight into the garage. back from it lands on the room again
         UIEventBus.on('garage:fromHome', () => void this.startGarage());
         UIEventBus.on('garage:backHome', () => void this.backHome());
-        // the room's car wears the garage look once the race manager has it
+        // the room's car wears the garage look once the race manager has it,
+        // and leaving the race replays the startup's pull-back onto it
         UIEventBus.on('raceMode:changed', (state: { active?: boolean } | undefined) => {
-            if (!state?.active) void this.dressRoomCar();
+            if (state?.active) {
+                this.racing = true;
+                return;
+            }
+            if (!this.racing) {
+                void this.dressRoomCar();
+                return;
+            }
+            this.racing = false;
+            const hold = this.returnHold;
+            this.returnHold = 0;
+            this.returning = this.returnHome(hold);
         });
         UIEventBus.on('carChange', () => window.setTimeout(() => void this.dressRoomCar(), 0));
 
@@ -937,16 +959,43 @@ export default class RaceTransition {
         }
     }
 
-    // out of race mode onto the room's first view, the car dressed
+    // out of race mode onto the room, the car dressed. the camera holds on
+    // the terminal while the black cut clears, then pulls back
     async backHome() {
         const manager = this.application.world.raceManager;
-        if (manager?.active) manager.exitRaceMode();
+        if (manager?.active) {
+            this.returnHold = 320;
+            manager.exitRaceMode();
+        }
+        if (this.returning) await this.returning;
+        else await this.returnHome(0);
+        UIEventBus.dispatch('garage:home', {});
+    }
+
+    // back from the race the way the site starts: the camera on the
+    // terminal screen, pulling back to the room and the car in its new look.
+    // resolves once the car is dressed, the pull-back runs after holdMs
+    async returnHome(holdMs: number) {
         const camera = this.application.camera;
         camera.externalControl = null;
         camera.currentKeyframe = undefined;
-        camera.transition(CameraKey.IDLE, 0);
+        camera.targetKeyframe = undefined;
+        const screens = this.application.world?.screens;
+        const docked = Boolean(screens?.get(HYBRID.dockTarget)) && !prefersReducedMotion();
+        if (screens && docked) {
+            const pose = screens.dockPose(camera.getAspect());
+            camera.position.copy(pose.position);
+            camera.focalPoint.copy(pose.focal);
+        }
         await this.dressRoomCar();
-        UIEventBus.dispatch('garage:home', {});
+        const pull = () => {
+            this.returning = null;
+            // raced again in the meantime
+            if (camera.raceModeActive || this.busy) return;
+            camera.transition(CameraKey.IDLE, docked ? RETURN_MS : 0, RETURN_EASE);
+        };
+        if (holdMs > 0) window.setTimeout(pull, holdMs);
+        else pull();
     }
 
     // the room car takes the saved look off the race's prepared model of

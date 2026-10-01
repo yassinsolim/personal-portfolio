@@ -147,6 +147,16 @@ export default class RacePostProcessing {
             0.45,
             2.6
         );
+        // the low sun glinting off a rear window or a chrome tip is hundreds
+        // bright, and bloomed as is it hazes over the whole car. the bloom
+        // takes at most BLOOM_CLAMP of any pixel
+        const highPass = this.bloom.materialHighPassFilter;
+        highPass.fragmentShader = highPass.fragmentShader.replace(
+            'gl_FragColor = mix( outputColor, texel, alpha );',
+            'gl_FragColor = mix( outputColor, vec4( texel.rgb * min( 1.0, BLOOM_CLAMP / max( v, 1e-4 ) ), texel.a ), alpha );'
+        );
+        highPass.defines = { ...highPass.defines, BLOOM_CLAMP: '4.0' };
+        highPass.needsUpdate = true;
         this.grade = new ShaderPass(GradeShader);
         // the reveal's own uniform objects, so its updates land here too
         Object.assign(this.grade.uniforms, plate);
