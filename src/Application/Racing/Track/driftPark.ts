@@ -93,7 +93,7 @@ const walk = () => {
 const toBase64 = (bytes: Uint8Array) => {
     let text = '';
     for (let i = 0; i < bytes.length; i += 4096)
-        text += String.fromCharCode(...bytes.subarray(i, i + 4096));
+        text += String.fromCodePoint(...bytes.subarray(i, i + 4096));
     return btoa(text);
 };
 

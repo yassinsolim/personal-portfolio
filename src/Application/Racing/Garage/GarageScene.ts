@@ -121,7 +121,9 @@ const hexGrid = () => {
     const seen = new Set<string>();
     const key = (x: number, z: number) => `${Math.round(x * 100)},${Math.round(z * 100)}`;
     const tube = (ax: number, az: number, bx: number, bz: number) => {
-        const id = [key(ax, az), key(bx, bz)].sort().join('|');
+        const a = key(ax, az);
+        const b = key(bx, bz);
+        const id = a < b ? `${a}|${b}` : `${b}|${a}`;
         if (seen.has(id)) return;
         seen.add(id);
         const length = Math.hypot(bx - ax, bz - az);
