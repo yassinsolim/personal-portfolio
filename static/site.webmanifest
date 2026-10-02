@@ -1,0 +1,14 @@
+{
+    "name": "yassin",
+    "short_name": "yassin",
+    "description": "Yassin Soliman's interactive personal site.",
+    "start_url": "/",
+    "display": "browser",
+    "background_color": "#0e0f12",
+    "theme_color": "#0e0f12",
+    "icons": [
+        { "src": "/images/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png" },
+        { "src": "/images/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png" },
+        { "src": "/images/maskable-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}

@@ -6,7 +6,7 @@ This project is built as a Three.js experience with a scene authored in Blender,
 
 ## Preview
 
-![yassin.app preview](yassin-app.png)
+![yassin.app preview](static/images/og-image.jpg)
 
 ## Play the Nordschleife
 
