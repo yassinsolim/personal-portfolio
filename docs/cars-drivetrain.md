@@ -79,6 +79,12 @@ The mean is 0.970. Rolling radius = circumference / 2 pi. Sizes used by the cars
 | LaFerrari | 345/30 ZR20 | 0.3468 m | D: 0.970 x 715.0 mm / 2 |
 | P1 | 315/30 R20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
 | 918 Spyder | 325/30 ZR21 | 0.3533 m | D: 0.970 x 728.4 mm / 2 |
+| Chiron Super Sport | 355/25 R21 | 0.3448 m | D: 0.970 x 710.9 mm / 2 |
+| Jesko Attack | 325/30 R21 | 0.3533 m | D: 0.970 x 728.4 mm / 2 |
+| Huayra | 335/30 ZR20 | 0.3439 m | D: 0.970 x 709.0 mm / 2 |
+| Senna | 315/30 R20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
+| SF90 Stradale | 315/30 ZR20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
+| Valkyrie | 325/30 ZR21 | 0.3533 m | D: 0.970 x 728.4 mm / 2 |
 
 The model based radius the physics used before was 0.328 to 0.360 m, up to 7% off (the C63 507's
 model wheels gave 0.331 m, the real tyre rolls at 0.308 m).
@@ -367,6 +373,134 @@ Estimated: the system curve's shape (the motors carry the low end), the 25% fron
 drag area (1.0 m2, fitted to the top speed and 0-300; the real car also loses its front motor past
 265 km/h, which the sim doesn't model).
 
+### Bugatti Chiron Super Sport (2021 to 2022)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 8.0 W16, four turbos, two of them only above 3,800 rpm | P | [Bugatti technical data](https://bugatti-newsroom.imgix.net/6673edce31d99cf64fc74087/211122_BU_Chiron%20Super%20Sport_ENG.pdf) |
+| Transmission | 7-speed DSG dual clutch | P | Bugatti; Ricardo builds it ([Car and Driver](https://www.caranddriver.com/reviews/a35353692/2021-bugatti-chiron-sport-by-the-numbers/)) |
+| Speed in each gear at the limiter | 100, 160, 210, 280, 340, 415 km/h, 7th "deactivated" | P | Bugatti technical data |
+| Overall ratios, 1st to 6th | 9.229, 5.768, 4.395, 3.296, 2.714, 2.224 | D | 7,100 / 60 x 2 pi x 0.3448 m / (gear speed / 3.6) |
+| Overall ratio, 7th | 1.882 | E | Bugatti only says 7th is 3.6% longer than the Chiron's ([press release](https://newsroom.bugatti.com/press-releases/the-bugatti-chiron-super-sport-the-quintessence-of-luxury-and-speed)); this assumes the 300+'s 490.48 km/h was at 7,100 rpm in the same gear |
+| Tyres | 285/30 R20, 355/25 R21 (Michelin Pilot Sport Cup 2) | P | Bugatti |
+| Redline, limiter | about 7,100 rpm | P | Bugatti press release |
+| Power | 1,177 kW (1,600 PS) at 7,050 rpm | P | Bugatti |
+| Torque | 1,600 Nm from 2,250 to 7,000 rpm | P | Bugatti technical data (the press release says from 2,000) |
+| Top speed | 440 km/h, electronically limited, with the top speed key (380 without) | P | Bugatti |
+| 0-100 / 0-200 / 0-300 / 0-400 | 2.4 / 5.8 / 12.1 / 28.6 s | P | Bugatti technical data (the press release says 5.5 s to 200) |
+| Mass | 1,995 kg DIN, the Chiron's homologated figure; the Super Sport is 23 kg lighter | P | Bugatti |
+
+Estimated: idle (900 rpm), the torque below 2,250 rpm, the 30% front share, the drag area
+(0.855 m2) and the mass the sim uses (2,110 kg, the DIN figure plus a driver and test kit). The
+last two are fitted together: Bugatti's 300 to 400 km/h takes 16.5 s, longer than any drag that
+still lets the car reach 440 allows, so the extra mass slows that stretch without lowering the top
+speed. With the limiter out the sim tops out at 436 km/h on drag, short of the 490.48 km/h the
+300+ did.
+
+### Koenigsegg Jesko Attack (2022)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 5.0 twin turbo flat-plane V8 | P | [Koenigsegg](https://www.koenigsegg.com/technical-specifications-jesko-attack) |
+| Transmission | 9-speed Light Speed Transmission: seven wet clutches, two 3-speed sets in series, any gear to any gear | P | Koenigsegg, [Car and Driver](https://www.caranddriver.com/features/a28927301/koenigsegg-new-transmission-promises-ultraquick-shifts/) |
+| Ratio, 9th | 0.66 | P | Car and Driver |
+| Ratios, 1st to 8th | 4.62, 3.62, 2.84, 2.23, 1.75, 1.37, 1.07, 0.84 | E | an even spread down to 9th |
+| Final drive | 3.33 | E | puts the Absolut's claimed 531 km/h at 8,500 rpm in 9th on the tyre's nominal size, assuming the two share their gearing (on the loaded radius 9th tops out at 515) |
+| Tyres | 265/35 R20, 325/30 R21 (Michelin Pilot Sport Cup 2) | P | Koenigsegg |
+| Redline, limiter | 8,500 rpm | P | Koenigsegg |
+| Power | 1,280 hp on petrol, 1,600 hp (1,195 kW) on E85, at 7,800 rpm | P | Koenigsegg |
+| Torque | 1,500 Nm at 5,100 rpm, over 1,000 Nm from 2,700 to 6,170 | P | Koenigsegg |
+| Downforce | 700 kg at 250 km/h, 1,000 kg at 290, 1,400 kg at most | P | Koenigsegg |
+| Top speed, times | not published for the Attack | | |
+| Mass | 1,420 kg kerb (1,320 kg dry) | P | Koenigsegg |
+
+The sim runs the E85 figures. Estimated: all the gearing but 9th, idle (950 rpm), the torque
+curve's shape and the aero. The drag area (1.0 m2) is a guess from the downforce, at about a third
+of the lift like other high downforce road cars; the downforce area (2.0 m2) is cut back like the
+other cars'. The top speed (413 km/h) and 0-100 (2.5 s) in carOptions are the sim's, with nothing
+published to check them against.
+
+### Pagani Huayra (2012 to 2017)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | Mercedes-AMG M158 6.0 twin turbo V12 | P | [Pagani](https://web.archive.org/web/20140118005046/http://www.pagani.com/huayra/default.aspx) |
+| Transmission | 7-speed Xtrac sequential, single clutch, transverse | P | Pagani |
+| Overall ratios | 8.870, 6.019, 4.555, 3.586, 2.957, 2.515, 2.161 | E | not published; set for 95, 140, 185, 235, 285, 335 and 390 km/h at 6,500 rpm |
+| Tyres | 255/35 ZR19, 335/30 ZR20 (Pirelli P Zero) | E | the sizes usually quoted; Pagani only names Pirelli |
+| Redline, limiter | 6,500 rpm | E | |
+| Power | 537 kW (730 hp) | P | Pagani; the 5,800 rpm is the figure usually quoted |
+| Torque | 1,000 Nm | P | Pagani; the 2,250 to 4,500 rpm plateau is the figure usually quoted |
+| Top speed | over 370 km/h (230 mph) | P | as quoted by [Top Gear](https://www.topgear.com/car-reviews/pagani/huayra) |
+| 0-100 | under 3.5 s | P | Top Gear |
+| Mass | 1,350 kg dry, 44 / 56 split | P | Pagani |
+
+Estimated: the gearing and redline, the torque curve's shape, the mass the sim uses (1,440 kg, dry
+plus fluids) and the drag area (0.7 m2, set for the 370 km/h drag limit). The sim's 0-100 is
+3.35 s, inside Top Gear's "under 3.5".
+
+### McLaren Senna (2018)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | M840TR 4.0 twin turbo flat-plane V8 | P | [McLaren](https://cms-assets-production.mclaren.com/1628/McLaren-Senna-Technical-Specification.pdf) |
+| Transmission | 7-speed SSG dual clutch | P | McLaren |
+| Ratios | 3.981, 2.613, 1.905, 1.479, 1.161, 0.906, 0.686, R 3.981, final drive 3.308 | E | not published; the P1's, from the same SSG family |
+| Tyres | 245/35 R19, 315/30 R20 (Pirelli P Zero Trofeo R) | P | McLaren |
+| Redline, limiter | 8,500 rpm | P | McLaren |
+| Power | 588 kW (800 PS) at 7,250 rpm | P | McLaren |
+| Torque | 800 Nm from 5,500 to 6,700 rpm | P | McLaren |
+| Top speed | 335 km/h, drag limited | P | McLaren |
+| 0-100 / 0-200 | 2.8 / 6.8 s | P | McLaren |
+| 0-60 / 0-100 / 0-160 mph | 2.8 / 5.1 / 12.5 s (+0.3 s rollout) | T | [Car and Driver](https://www.caranddriver.com/reviews/a25293693/2019-mclaren-senna-supercar-drive/) |
+| Mass | 1,309 kg DIN (1,198 kg lightest dry) | P | McLaren |
+
+Car and Driver's run is left out of the check: it is about 15% behind McLaren's own figures, and
+no car can meet both. Estimated: the gearing, the torque outside the plateau and the drag area
+(1.0 m2, set for the 335 km/h drag limit).
+
+### Ferrari SF90 Stradale (2020)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 4.0 twin turbo flat-plane V8 with three motors: one between engine and gearbox, one per front wheel | P | [Ferrari](https://cdn.ferrari.com/cms/network/media/pdf/pr_ferrari_sf90_stradale_gbr.pdf) |
+| Transmission | 8-speed dual clutch, no reverse gear (the front motors back it up) | P | Ferrari |
+| Overall ratios | 11.328, 7.842, 5.927, 4.742, 3.921, 3.289, 2.832, 2.427 | E | not published; set for 90, 130, 172, 215, 260, 310, 360 and 420 km/h at 8,000 rpm, top speed in 7th |
+| Tyres | 255/35 ZR20, 315/30 ZR20 | P | Ferrari |
+| Redline, limiter | 8,000 rpm | P | Ferrari |
+| Power | 574 kW (780 cv) at 7,500 rpm (V8), 735 kW (1,000 cv) system | P | Ferrari |
+| Torque | 800 Nm at 6,000 rpm (V8); system not published | P | Ferrari |
+| Top speed | 340 km/h | P | Ferrari |
+| 0-100 / 0-200 | 2.5 / 6.7 s | P | Ferrari |
+| 0-60 mph | 2.0 s (+0.3 s rollout) | T | [Car and Driver](https://www.caranddriver.com/news/a37066187/2021-ferrari-sf90-stradale-60-mph-acceleration/) (Assetto Fiorano) |
+| Mass | 1,570 kg dry with options, 45 / 55 split | P | Ferrari |
+| Mass, measured | 1,741 kg (Assetto Fiorano) | T | [Motor Trend](https://www.motortrend.com/reviews/2021-ferrari-sf90-stradale-assetto-fiorano-first-test-review) |
+
+Estimated: the gearing, what the motors add to the curve, the 25% front share (Car and Driver puts
+the front motors at about 27% of peak power) and the drag area (1.22 m2, set for the 340 km/h drag
+limit).
+
+### Aston Martin Valkyrie (2021)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | Cosworth 6.5 V12, naturally aspirated, with a motor between engine and gearbox | P | [Aston Martin](https://www.astonmartin.com/en/models/valkyrie) |
+| Transmission | 7-speed sequential, single clutch, no reverse gear (the motor backs it up) | P | Aston Martin |
+| Overall ratios | 14.783, 10.195, 7.781, 6.291, 5.280, 4.549, 3.995 | E | not published; set for 100, 145, 190, 235, 280, 325 and 370 km/h at 11,100 rpm |
+| Tyres | 265/35 ZR20, 325/30 ZR21 (Michelin Pilot Sport Cup 2) | P | Aston Martin |
+| Idle | 1,200 rpm | P | Aston Martin |
+| Redline, limiter | 11,100 rpm | P | Aston Martin |
+| Power | 1,000 bhp at 10,500 rpm (V12), 1,160 bhp system | P | [Aston Martin, 2019](https://media.astonmartin.com/aston-martin-valkyrie-the-ultimate-hybrid-powertrain-for-the-ultimate-hypercar/) |
+| Torque | 740 Nm at 7,000 rpm (V12), 900 Nm at 6,000 rpm system | P | Aston Martin, 2019 |
+| Top speed | 354 km/h (220 mph) | P | Aston Martin |
+| Mass | 1,270 kg "overall weight" | P | Aston Martin |
+
+The current site gives the V12 as 1,001 bhp at 10,600 rpm and 780 Nm; the sim uses the 2019
+system figures. Aston doesn't say what holds the car at 354 km/h, so the sim holds it there like
+the LaFerrari. Estimated: the gearing, the torque curve's shape, the mass (1,355 kg, the kerb
+weight usually quoted), the aero (drag area 1.1 m2, downforce area 1.3 m2) and so the sim's 0-100
+of 2.7 s.
+
 ## Transmissions
 
 Estimated from the gearbox type, not measured on these cars:
@@ -383,6 +517,11 @@ Estimated from the gearbox type, not measured on these cars:
 | Dual clutch | Huracán | 0.10 s | 70% | 4,200 (T) |
 | Dual clutch with a motor filling the gap | LaFerrari, P1, 918 | 0.10 s | 80% | 3,000 to 3,500 |
 | ISR, single clutch | Aventador S | 0.10 s | 0 | 5,500 |
+| Dual clutch | Chiron Super Sport, Senna | 0.10 s | 70% | 3,500 |
+| Light Speed Transmission, seven clutches | Jesko | 0.05 s | 80% | 4,000 |
+| Sequential, single clutch | Huayra | 0.15 s | 0 | 3,500 |
+| Dual clutch with motors filling the gap | SF90 Stradale | 0.08 s | 80% | 3,000 |
+| Sequential, single clutch, with a motor | Valkyrie | 0.08 s | 30% | 6,000 |
 
 ## Tolerances
 
@@ -425,6 +564,12 @@ top speeds to the hundredth. Road test times include the 0.3 s rollout.
 | LaFerrari | 2.78 / 3.0 | 6.48 / 7.0 | 349.6 / 350 | 2,322 / 2,319 | |
 | P1 | 2.83 / 2.8 | 6.63 / 6.8 | 349.3 / 350 | 1,783 / 1,781 | 0-300: 15.07 / 16.5 |
 | 918 Spyder | 2.47 / 2.6 | 7.23 / 7.3 | 341.8 / 345 | 1,557 / 1,554 | 0-300: 19.00 / 20.9 |
+| Chiron Super Sport | 2.35 / 2.4 | 5.52 / 5.8 | 435.3 / 440 | 1,449 / 1,448 | 0-300: 11.58 / 12.1, 0-400: 25.87 / 28.6 |
+| Jesko Attack | 2.47 / - | 4.82 / - | 412.8 / 413 E | 1,653 / 1,650 | |
+| Huayra | 3.35 / - | 8.07 / - | 367.8 / 370 | 1,669 / 1,667 | |
+| Senna | 2.67 / 2.8 | 6.53 / 6.8 | 337.4 / 335 | 1,784 / 1,781 | |
+| SF90 Stradale | 2.40 / 2.5 | 6.45 / 6.7 | 341.1 / 340 | 1,907 / 1,904 | 0-97: 2.30 / 2.3 T |
+| Valkyrie | 2.73 / - | 5.85 / - | 353.2 / 354 | 3,005 / 3,000 | |
 
 Max speed per gear at the limiter, km/h (road speed in game / from the published gearing). The
 driven wheels match the published figure within 1 km/h in every gear; road speed is a little lower
@@ -446,6 +591,12 @@ in the low gears because the wheels slip. A dash is a gear the car can't reach t
 | LaFerrari | 87/90, 123/127, 166/170, 210/215, 264/269, 324/329, -/399 |
 | P1 | 80/82, 122/125, 168/172, 217/221, 277/282, 357/361, -/477 |
 | 918 Spyder | 99/101, 169/172, 246/250, 328/331, -/407, -/475, -/589 |
+| Chiron Super Sport | 97/100, 157/160, 207/210, 276/280, 336/340, 411/415, -/490 |
+| Jesko Attack | 72/74, 90/94, 113/120, 142/152, 187/194, 241/248, 311/318, 399/405, -/515 |
+| Huayra | 91/95, 136/140, 181/185, 230/235, 280/285, 330/335, -/390 |
+| Senna | 80/82, 122/125, 168/172, 217/221, 277/282, -/361, -/477 |
+| SF90 Stradale | 88/90, 127/130, 169/172, 211/215, 256/260, 306/310, -/360, -/420 |
+| Valkyrie | 97/100, 140/145, 185/190, 229/235, 274/280, 319/325, -/370 |
 
 The per gear runs take the speed limiter out, so the gears above the stock limit show where drag
 stops them.
@@ -479,6 +630,8 @@ Top speed with the limiter out, km/h, in game (drag and gearing prediction):
 | M8 Competition | 339.2 (340.3 drag) | 356.5 | 333.0 |
 | GT 63 S | 342.4 (343.3 drag) | 358.6 | 335.3 |
 | Crown Platinum | 264.9 (267.3 drag) | 278.8 | 261.0 |
+| Chiron Super Sport | 436.1 (436.2 drag) | 467.7 | 423.9 |
+| Valkyrie | 364.3 (370.1, 7th gear redline) | 363.4 (redline) | 363.8 |
 
 None of these have a real reference; they follow from the published power and the drag areas above
 (several of which are estimated). The prediction counts aero drag only: in this tire model rolling

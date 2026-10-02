@@ -34,6 +34,12 @@ export const ENGINES: Record<string, EngineDef> = {
     f140: { label: 'Ferrari V12 hybrid', detail: '6.3 L V12 with HY-KERS, 9,250 rpm', sound: 'ferrari-laferrari', turbo: false, massKg: 245, car: 'ferrari-laferrari' },
     m838: { label: 'McLaren V8 hybrid', detail: '3.8 L twin turbo flat-plane with IPAS', sound: 'mclaren-p1', turbo: true, massKg: 230, car: 'mclaren-p1' },
     v918: { label: 'Porsche 918 V8 hybrid', detail: '4.6 L flat-plane with two motors, 9,150 rpm', sound: 'porsche-918-spyder', turbo: false, massKg: 250, car: 'porsche-918-spyder' },
+    w16: { label: 'Bugatti W16', detail: '8.0 L, four turbos, 1,600 PS', sound: 'bugatti-chiron-super-sport', turbo: true, massKg: 420, car: 'bugatti-chiron-super-sport' },
+    kv8: { label: 'Koenigsegg V8', detail: '5.0 L twin turbo flat-plane, 1,600 hp on E85', sound: 'koenigsegg-jesko', turbo: true, massKg: 200, car: 'koenigsegg-jesko' },
+    m158: { label: 'AMG M158 V12', detail: '6.0 L twin turbo, built for Pagani', sound: 'pagani-huayra', turbo: true, massKg: 260, car: 'pagani-huayra' },
+    m840: { label: 'McLaren M840TR V8', detail: '4.0 L twin turbo flat-plane', sound: 'mclaren-senna', turbo: true, massKg: 200, car: 'mclaren-senna' },
+    f154: { label: 'Ferrari V8 hybrid', detail: '4.0 L twin turbo flat-plane with three motors', sound: 'ferrari-sf90-stradale', turbo: true, massKg: 300, car: 'ferrari-sf90-stradale' },
+    cv12: { label: 'Cosworth V12 hybrid', detail: '6.5 L, naturally aspirated, 11,100 rpm', sound: 'aston-martin-valkyrie', turbo: false, massKg: 240, car: 'aston-martin-valkyrie' },
 };
 
 export const ENGINE_IDS = Object.keys(ENGINES);
@@ -54,6 +60,12 @@ export const STOCK_ENGINE: Record<string, string> = {
     'porsche-918-spyder': 'v918',
     'lamborghini-aventador-s': 'l539',
     'lamborghini-huracan': 'v10',
+    'bugatti-chiron-super-sport': 'w16',
+    'koenigsegg-jesko': 'kv8',
+    'pagani-huayra': 'm158',
+    'mclaren-senna': 'm840',
+    'ferrari-sf90-stradale': 'f154',
+    'aston-martin-valkyrie': 'cv12',
 };
 
 const engineOf = (carId: string, engine: string) =>

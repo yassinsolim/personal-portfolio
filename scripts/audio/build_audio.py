@@ -320,6 +320,30 @@ def car_crown():
                      idle_rpm=850, muffle=0.8, pops=False, turbo=True, seed=100)
 
 
+def car_chiron():
+    sp = specs.bugatti_w16()
+    return synth_car(sp, [1400, 2300, 3200, 4100, 5000, 5900, 6800], off_rpms=[1400, 2800, 4400, 6000],
+                     idle_rpm=900, muffle=0.6, pops=False, turbo=True, seed=160)
+
+
+def car_jesko():
+    sp = specs.koenigsegg_v8()
+    return synth_car(sp, [1500, 2500, 3500, 4500, 5500, 6500, 7500, 8300], off_rpms=[1500, 3200, 5000, 6800, 8300],
+                     idle_rpm=950, muffle=0.25, turbo=True, seed=170)
+
+
+def car_huayra():
+    sp = specs.amg_m158()
+    return synth_car(sp, [1300, 2100, 2900, 3700, 4500, 5300, 6100], off_rpms=[1300, 2800, 4300, 5800],
+                     idle_rpm=850, muffle=0.35, turbo=True, seed=158)
+
+
+def car_valkyrie():
+    sp = specs.cosworth_v12()
+    return synth_car(sp, [2000, 3300, 4600, 5900, 7200, 8500, 9800, 10800], off_rpms=[2000, 4400, 6800, 9200, 10800],
+                     idle_rpm=1200, muffle=0.1, seed=650)
+
+
 def car_s63(variant):
     sp = specs.s63_m5_m8(variant)
     rec = ("flysound-bmw-x5m/exhaust_start_idle_stop.wav", 5, 26, 950, 1200, "v8x", "mix")
@@ -482,6 +506,10 @@ CARS = {
     "bmw-m8-competition-coupe": lambda: car_s63("m8"),
     "mercedes-gt63s-edition-one": lambda: car_gtr_based("gt63s"),
     "toyota-crown-platinum": car_crown,
+    "bugatti-chiron-super-sport": car_chiron,
+    "koenigsegg-jesko": car_jesko,
+    "pagani-huayra": car_huayra,
+    "aston-martin-valkyrie": car_valkyrie,
 }
 
 

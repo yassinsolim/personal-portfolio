@@ -123,6 +123,12 @@ const WHEELS = [
     'ferrari-laferrari',
     'mclaren-p1',
     'porsche-918-spyder',
+    'bugatti-chiron-super-sport',
+    'koenigsegg-jesko',
+    'pagani-huayra',
+    'mclaren-senna',
+    'ferrari-sf90-stradale',
+    'aston-martin-valkyrie',
 ];
 const carName = (id: string) =>
     carOptions.find((car) => car.id === id)?.label || id;

@@ -172,6 +172,45 @@ original downloads, unmodified, are in `models-src/`.
   - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
   - Changes: as the Huracán
   - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Bugatti Chiron Super Sport (`static/models/Cars/bugatti_chiron_super_sport/`)
+  - Title: "2022 Bugatti Chiron Super Sport"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2022-bugatti-chiron-super-sport-6a7520f6853f433eb200ed10fef96f94
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: as the Huracán
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Koenigsegg Jesko Attack (`static/models/Cars/koenigsegg_jesko/`)
+  - Title: "2020 Koenigsegg Jesko"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2020-koenigsegg-jesko-c657f51fb0db43e38fea172dfa385287
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Huracán
+- Pagani Huayra (`static/models/Cars/pagani_huayra/`)
+  - Title: "Pagani Huayra [Free]"
+  - Author: Black Snow (https://sketchfab.com/BlackSnow02)
+  - Source: https://sketchfab.com/3d-models/pagani-huayra-free-c2d61a9f53a54a229547bb76e4b71e25
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Huracán; the rims and brakes came as one mesh for all four wheels and are
+    cut apart per corner
+- McLaren Senna (`static/models/Cars/mclaren_senna/`)
+  - Title: "2019 McLaren Senna"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2019-mclaren-senna-6924eb7b4dde44b19d87c8c31edc74b4
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Huracán
+- Ferrari SF90 Stradale (`static/models/Cars/ferrari_sf90_stradale/`)
+  - Title: "2020 Ferrari SF90 Stradale"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2020-ferrari-sf90-stradale-b98147fea0da42d29a2e41a4aba0fc20
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: as the Huracán
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Aston Martin Valkyrie (`static/models/Cars/aston_martin_valkyrie/`)
+  - Title: "2021 | Aston Martin Valkyrie"
+  - Author: kevin (ケビン) (https://sketchfab.com/sohyalebret)
+  - Source: https://sketchfab.com/3d-models/2021-aston-martin-valkyrie-0ad5999a62be459c8f883ea0b58cf876
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Pagani Huayra
 
 The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has
 no ads, sales or sponsorship.
@@ -317,8 +356,8 @@ https://ftpmirror.your.org/pub/misc/ (exact URLs in `scripts/audio/sources.json`
 | Lamborghini V10 (garage engine, Huracan): idle, free-rev and pass-by loops from 2,000 to 7,200 rpm, start-up | Lamborghini Huracan 2014, `lamborghini_huracan_t12_ext_start_idle_blips_off_XY_RSM191.wav` and `lamborghini_huracan_t10_ext_bys_gearshifts_left_turn_point_XY_MKH8040.wav` | Pole Position Production | GDC 2019 |
 | Lamborghini V12 (garage engine, Aventador): idle and loops to 3,600 rpm, start-up | Lamborghini Aventador 2014, `lamborghini_aventador_t14_onbrd_start_drive_ramps_stop_off_exhaust_right_DPA4062.wav` | Pole Position Production | GDC 2020 |
 | Ferrari V12 hybrid (garage engine, LaFerrari): idle and loops to 3,100 rpm, start-up | Ferrari 812 Superfast 2018 and F12 2016 (F140 V12, the LaFerrari's family), `Ferrari, 812, t7, Onbrd, Start, Idle, Steady, Blips, Off, Engine, Mix.wav` and `Ferrari_F12_t2_Onbrd_Start_Medium_Drive_Stop_Reverse_Stop_Drive_Stop_Off_Engine_Left_DPA4061.wav` | Pole Position Production | GDC 2020 |
-| McLaren V8 hybrid (garage engine, P1): idle and loops to 7,400 rpm, start-up | McLaren 570S 2016 (M838TE, the P1's M838T family), `McLaren_570S_t7_Onbrd_Start_Idle_Steady_in_Neutral_Blips_Off_Interior_Mix.wav` and `McLaren_570S_t10_Onbrd_Fast_Various_Exhaust_Right_DPA4062.wav` | Pole Position Production | GDC 2020 |
-| Porsche 918 V8 hybrid (garage engine): idle and loops to 9,000 rpm | Ferrari 458 2013 (4.5 flat-plane V8, the closest licensed match to the 918's 4.6 flat-plane V8), `ferrari_458_t8_onbrd_drive_ramps_stop_off_intake_left_DPA4062.wav` | Pole Position Production | GDC 2020 |
+| McLaren V8 hybrid (garage engine, P1) and the McLaren Senna's M840TR: idle and loops to 7,400 rpm, start-up | McLaren 570S 2016 (M838TE, the P1's M838T family), `McLaren_570S_t7_Onbrd_Start_Idle_Steady_in_Neutral_Blips_Off_Interior_Mix.wav` and `McLaren_570S_t10_Onbrd_Fast_Various_Exhaust_Right_DPA4062.wav` | Pole Position Production | GDC 2020 |
+| Porsche 918 V8 hybrid (garage engine), and the Ferrari SF90 Stradale with turbos and motors added live: idle and loops to 9,000 rpm | Ferrari 458 2013 (4.5 flat-plane V8, the closest licensed match to the 918's 4.6 flat-plane V8), `ferrari_458_t8_onbrd_drive_ramps_stop_off_intake_left_DPA4062.wav` | Pole Position Production | GDC 2020 |
 | Tire squeal and scrub (all cars) | Skids & Screeches Tarmac, `Skids_Tarmac_t4_exterior_skidding_in_circles_MKH8060_stand.wav` | Pole Position Production | GDC 2018 |
 | Impacts and bumps (all cars) | Car Debris, Impacts & Crashes, `mercedes_benz_dropped_1m_on_concrete_ls-5_2.wav`, `peugeot_106_dropped_5m_on_metal_plates_zaxcom_holophone_1.wav` | Pole Position Production | GDC 2017 |
 
@@ -326,8 +365,9 @@ https://ftpmirror.your.org/pub/misc/ (exact URLs in `scripts/audio/sources.json`
 
 - `scripts/audio/enginesynth.py` renders loops from each engine's real layout (firing order,
   crank, which cylinders share an exhaust path or turbo scroll, runner and pipe lengths):
-  - BMW E92 M3 (S65), Mercedes-AMG One (PU106B-derived V6), Toyota Crown Platinum (T24A-FTS):
-    every engine loop.
+  - BMW E92 M3 (S65), Mercedes-AMG One (PU106B-derived V6), Toyota Crown Platinum (T24A-FTS),
+    Bugatti Chiron Super Sport (W16), Koenigsegg Jesko (V8), Pagani Huayra (M158 V12), Aston
+    Martin Valkyrie (Cosworth V12): every engine loop.
   - BMW M5 / M8 Competition (S63B44T4 with the cross-bank manifold): driving loops, eq'd toward
     the X5 M exhaust recording.
   - C63 507, C63 S, GT63 S: only the loops below about 3,700 rpm that the recordings don't cover,
@@ -379,3 +419,16 @@ Used to check order structure and tone by spectrum analysis. Nothing from them i
   (https://toyota-club.net/files/faq/21-09-20_faq_t24-engine_en.htm), 264 hp at 6,000 rpm and a
   6-speed automatic (Toyota Canada 2025 Crown product information). Firing order 1-3-4-2 is
   assumed (the usual inline-4 order); Toyota doesn't publish it.
+- Bugatti W16 (Chiron Super Sport): 7,993 cc W16 with four turbos, two of them only above
+  3,800 rpm, 1,600 PS at 7,050 rpm, limit about 7,100 rpm (Bugatti Chiron Super Sport technical
+  data and press release, see carOptions.ts). It fires evenly every 45 degrees; the firing order
+  used, 1-14-9-4-7-12-15-6-13-8-3-16-11-2-5-10, and which cylinders feed which turbo are
+  assumptions, Bugatti doesn't publish them.
+- Koenigsegg V8 (Jesko): 5.0 twin-turbo flat-plane V8, 8,500 rpm (Koenigsegg Jesko Attack
+  technical specifications). Firing order assumed to be the usual flat-plane 1-5-3-7-4-8-2-6.
+- Mercedes-AMG M158 (Pagani Huayra): 5,980 cc twin-turbo 60 degree V12, a turbo per bank
+  (pagani.com, archived). The firing order is taken from Mercedes' other V12s
+  (1-12-5-8-3-10-6-7-2-11-4-9) and the 6,500 rpm limit is an estimate.
+- Cosworth V12 (Aston Martin Valkyrie): 6.5 na 65 degree V12, 1,200 rpm idle, 11,100 rpm limit
+  (astonmartin.com Valkyrie specifications). Even 60 degree firing; the firing order isn't
+  published, the synth uses 1-7-5-11-3-9-6-12-2-8-4-10.

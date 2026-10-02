@@ -39,7 +39,9 @@ as $$
   select p_car_id ~ ('^(amg-one|bmw-e92-m3|amg-c63-507|amg-c63s-coupe|bmw-f82-m4|'
     || 'bmw-f90-m5-competition|bmw-m8-competition-coupe|mercedes-gt63s-edition-one|'
     || 'toyota-crown-platinum|lamborghini-huracan|lamborghini-aventador-s|'
-    || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder)@v[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
+    || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder|bugatti-chiron-super-sport|'
+    || 'koenigsegg-jesko|pagani-huayra|mclaren-senna|ferrari-sf90-stradale|'
+    || 'aston-martin-valkyrie)@v[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
 $$;
 
 alter table public.nordschleife_leaderboard enable row level security;
@@ -212,7 +214,9 @@ as $$
   select p_car_id ~ ('^(amg-one|bmw-e92-m3|amg-c63-507|amg-c63s-coupe|bmw-f82-m4|'
     || 'bmw-f90-m5-competition|bmw-m8-competition-coupe|mercedes-gt63s-edition-one|'
     || 'toyota-crown-platinum|lamborghini-huracan|lamborghini-aventador-s|'
-    || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder)@d[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
+    || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder|bugatti-chiron-super-sport|'
+    || 'koenigsegg-jesko|pagani-huayra|mclaren-senna|ferrari-sf90-stradale|'
+    || 'aston-martin-valkyrie)@d[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
 $$;
 
 alter table public.drift_park_scores enable row level security;

@@ -81,6 +81,7 @@ begin
   -- the edges and a tuned lap are fine
   insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('QA', 180000, 'toyota-crown-platinum@v3');
   insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('QA hyper', 180000, 'porsche-918-spyder@v4~t0a1b2c3d4ex4');
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('QA w16', 180000, 'bugatti-chiron-super-sport@v4~t0a1b2c3d4exj21');
   insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('QA tuned', 400000, 'amg-one@v3~t0a1b2c3d4e') returning id into lap;
 
   -- ghosts: every sample an object, and a size cap

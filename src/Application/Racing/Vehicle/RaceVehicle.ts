@@ -2512,6 +2512,9 @@ export default class RaceVehicle {
                     mappedRadius <= WHEEL_RADIUS_PLAUSIBLE_MAX * 2;
                 const canUseMappedWheelGroup =
                     mappedName.includes('arm4_vt_wheel') ||
+                    // built by scripts/lib/wheel-groups.mjs: only the
+                    // spinning parts, centred on the hub
+                    /^wheel_[fr][lr]$/.test(mappedName) ||
                     (this.currentCarId === BMW_M8_COMPETITION_COUPE_ID &&
                         (mappedName.includes('3dwheel front') ||
                             mappedName.includes('3dwheel rear') ||

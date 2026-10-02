@@ -2,7 +2,7 @@ import AudioBank, { type AudioBankData, RACE_AUDIO_BASE } from './AudioBank';
 import EngineVoice from './EngineVoice';
 import DriveSounds from './DriveSounds';
 import DerivedDrivetrain from './derivedDrivetrain';
-import { engineProfile, getCarAudioProfile } from './carAudioProfiles';
+import { bankOf, engineProfile, getCarAudioProfile } from './carAudioProfiles';
 import { carOptionsById } from '../../carOptions';
 import type { EngineSound } from '../Garage/engines';
 
@@ -359,7 +359,7 @@ export default class CarAudio {
         if (!context || !this.engineBus) return;
         if (this.voiceKey === key && this.voice) return;
         const serial = ++this.loadSerial;
-        const bank = await this.banks.load(context, wanted.sound);
+        const bank = await this.banks.load(context, bankOf(wanted.sound));
         if (serial !== this.loadSerial || !bank || !this.engineBus) {
             if (!bank) this.lastError = `no audio for ${wanted.sound}`;
             return;
@@ -619,7 +619,7 @@ export default class CarAudio {
             missing: 0,
         };
         this.remotes.set(car.id, remote);
-        void this.banks.load(context, car.carId).then((bank) => {
+        void this.banks.load(context, bankOf(car.carId)).then((bank) => {
             remote.loading = false;
             if (!bank || this.remotes.get(car.id) !== remote) return;
             const race = carOptionsById[car.carId]?.race;

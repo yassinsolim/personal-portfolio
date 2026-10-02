@@ -1,0 +1,174 @@
+{
+ "version": 1,
+ "carId": "aston-martin-valkyrie",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "cosworth-v12",
+ "files": {
+  "opus": "aston-martin-valkyrie.webm",
+  "aac": "aston-martin-valkyrie.m4a"
+ },
+ "bytes": {
+  "opus": 128812,
+  "aac": 176981
+ },
+ "duration": 21.447,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 1200.0,
+   "start": 0.08,
+   "dur": 1.6,
+   "db": -21.95
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 2000.0,
+   "start": 1.8,
+   "dur": 1.08,
+   "db": -5.68
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 3300.86,
+   "start": 3.0,
+   "dur": 1.090625,
+   "db": -2.61
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 4600.64,
+   "start": 4.210625,
+   "dur": 1.0955,
+   "db": -3.51
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 5901.64,
+   "start": 5.426125,
+   "dur": 1.098,
+   "db": -3.23
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 7200.0,
+   "start": 6.644125,
+   "dur": 1.1,
+   "db": -2.66
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 8495.58,
+   "start": 7.864125,
+   "dur": 1.10175,
+   "db": -0.51
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 9795.92,
+   "start": 9.085875,
+   "dur": 1.1025,
+   "db": -0.37
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 10806.75,
+   "start": 10.308375,
+   "dur": 1.099312,
+   "db": 0.0
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 2000.0,
+   "start": 11.527688,
+   "dur": 1.08,
+   "db": -25.31
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 4400.31,
+   "start": 12.727688,
+   "dur": 1.090833,
+   "db": -21.48
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 6800.47,
+   "start": 13.938521,
+   "dur": 1.094042,
+   "db": -17.5
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 9201.28,
+   "start": 15.152563,
+   "dur": 1.0955,
+   "db": -13.98
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 10806.75,
+   "start": 16.368063,
+   "dur": 1.099312,
+   "db": -11.94
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 17.597375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 18.067375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 18.537375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 19.007375,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 19.477375,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 20.197375,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 21.017375,
+   "dur": 0.37
+  }
+ ]
+}

@@ -1,0 +1,180 @@
+{
+ "version": 1,
+ "carId": "koenigsegg-jesko",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "koenigsegg-v8",
+ "files": {
+  "opus": "koenigsegg-jesko.webm",
+  "aac": "koenigsegg-jesko.m4a"
+ },
+ "bytes": {
+  "opus": 141419,
+  "aac": 182745
+ },
+ "duration": 22.152,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 950.02,
+   "start": 0.08,
+   "dur": 1.642062,
+   "db": -23.17
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1500.0,
+   "start": 1.842062,
+   "dur": 1.12,
+   "db": -6.89
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2500.0,
+   "start": 3.082063,
+   "dur": 1.104,
+   "db": -4.41
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3499.39,
+   "start": 4.306063,
+   "dur": 1.097333,
+   "db": -5.72
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 4500.0,
+   "start": 5.523396,
+   "dur": 1.093333,
+   "db": -3.41
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 5501.43,
+   "start": 6.736729,
+   "dur": 1.090625,
+   "db": 0.0
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 6501.13,
+   "start": 7.947354,
+   "dur": 1.1075,
+   "db": -3.91
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 7500.0,
+   "start": 9.174854,
+   "dur": 1.104,
+   "db": -5.03
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 8299.71,
+   "start": 10.398854,
+   "dur": 1.098833,
+   "db": -3.89
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1500.0,
+   "start": 11.617688,
+   "dur": 1.12,
+   "db": -26.9
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 3200.0,
+   "start": 12.857688,
+   "dur": 1.0875,
+   "db": -26.26
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 5000.0,
+   "start": 14.065188,
+   "dur": 1.104,
+   "db": -21.06
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 6800.47,
+   "start": 15.289188,
+   "dur": 1.094042,
+   "db": -25.28
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 8299.71,
+   "start": 16.503229,
+   "dur": 1.098833,
+   "db": -24.59
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 17.732063,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 18.202063,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 18.672062,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 19.142063,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 19.612063,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 20.332062,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 21.152062,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 21.642063,
+   "dur": 0.45
+  }
+ ]
+}
