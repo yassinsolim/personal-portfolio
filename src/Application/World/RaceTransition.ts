@@ -8,6 +8,9 @@ import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { copyCarLook, finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
+import { loadLook } from '../Racing/Garage/garage';
+import { getStoredCarId } from '../carOptions';
+import { isLowPowerDevice } from '../Utils/Device';
 import { reportStage } from '../Utils/loadStages';
 import { HYBRID } from '../UI/loaders/hybridConfig';
 import { prefersReducedMotion } from '../UI/loaders/variant';
@@ -28,6 +31,8 @@ const FLY_EASE = BezierEasing(0.45, 0, 0.12, 1);
 const COMPILE_WAIT_MS = 2500;
 const JOIN_WAIT_MS = 4000;
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
+// after the intro, so the build doesn't cost the first frames
+const ROOM_DRESS_DELAY_MS = 2500;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 // leaving the race: the startup's pull-back off the terminal screen again
 const RETURN_MS = 1300;
@@ -151,6 +156,25 @@ export default class RaceTransition {
             this.returning = this.returnHome(hold);
         });
         UIEventBus.on('carChange', () => window.setTimeout(() => void this.dressRoomCar(), 0));
+        // a returning visitor's saved rims, kit and ride height need the race's
+        // prepared car: capable devices build it once the room is up, phones
+        // show them after their first visit to the race
+        UIEventBus.on('loadingScreenDone', () => {
+            const look = loadLook(getStoredCarId());
+            const fitted =
+                look.wheels !== 'stock' || look.spoiler !== 'none' || look.ride !== 0 || look.rims;
+            if (!fitted || isLowPowerDevice()) return;
+            const dress = () =>
+                void this.application.world
+                    .ensureRaceManager()
+                    .then(() => this.dressRoomCar())
+                    .catch(() => undefined);
+            window.setTimeout(() => {
+                if (typeof window.requestIdleCallback === 'function')
+                    window.requestIdleCallback(dress, { timeout: 5000 });
+                else dress();
+            }, ROOM_DRESS_DELAY_MS);
+        });
 
         // capture phase, ahead of the camera's own click handler
         document.addEventListener(

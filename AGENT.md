@@ -897,6 +897,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `carLook.ts`, `WHEELS` in `Garage.tsx`, `STOCK_ENGINE`/`ENGINES`, a sound bank, credits in
   `modelCredits.ts` and `CREDITS.md`, and the two car id regexes in `supabase/racing.sql` (then
   run it on the live project).
+- Saved setups (`yassinverse:garageLook:<car>`, `garageTune:<car>`, written on every change)
+  show on the room car at load: paint at once (`World/Car.ts` swapCar), and rims, kit and ride
+  height once the race car is built, which capable devices do when idle after the intro if the
+  saved look needs it (`RaceTransition`, `loadingScreenDone`). The race merges each wheel from
+  many meshes; the wheel meta keeps their names (`parts`) so `copyCarLook` hides them on the room
+  car too (the M5's spokes and tyre showed through swapped rims there and looked oversized).
+- Low speed orientation: the surface normal, forward and body slerp rates used to drop to 1.2 /
+  4.5 / 5 per second near rest, so the body trailed the road's pitch and caught up while pulling
+  away (a bob). They're 8 / 8 / 10 now.
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling
