@@ -101,12 +101,14 @@ const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MIN = 0.7;
 const HIGH_SPEED_PREDICTIVE_LOOKAHEAD_MAX = 4.8;
 const SUSPENSION_TRAVEL_METERS = 0.42;
 const SURFACE_NORMAL_BLEND_SPEED_MPS = 16;
-const SURFACE_NORMAL_LERP_MIN = 1.2;
+// slow low speed blends left the body trailing the road's pitch from rest,
+// then catching up as the car gathered speed: a bob on every pull away
+const SURFACE_NORMAL_LERP_MIN = 8;
 // the normal blend and the body slerp stack, so both need to be quick at speed
 // or the body trails the road's pitch and wheels sink or lift on grade changes
 const SURFACE_NORMAL_LERP_MAX = 12;
 const SURFACE_FORWARD_BLEND_SPEED_MPS = 18;
-const SURFACE_FORWARD_LERP_MIN = 4.5;
+const SURFACE_FORWARD_LERP_MIN = 8;
 const SURFACE_FORWARD_LERP_MAX = 9.5;
 const GRADE_PITCH_HALF_WHEELBASE_MIN = 0.85;
 const GRADE_PITCH_HALF_WHEELBASE_MAX = 2.15;
@@ -274,6 +276,9 @@ export type WheelVisualMeta = {
     spinAxis: [number, number, number];
     spinSign: number;
     linkedVisuals: LinkedWheelVisualMeta[];
+    // the meshes the wheel was made of before merging, by name: the room's
+    // copy of the car keeps them apart
+    parts?: string[];
 };
 
 type WheelNodeMap = NonNullable<CarRaceConfig['wheelNodeMap']>;
@@ -885,6 +890,7 @@ export default class RaceVehicle {
                     linked.baseQuaternion.w,
                 ],
             })),
+            parts: wheel.object.userData.raceParts || [],
         }));
     }
 
@@ -3164,7 +3170,14 @@ export default class RaceVehicle {
         });
         const roots = new Set<THREE.Object3D>();
         this.groupHubParts(model, wheelRig).forEach((hub) => roots.add(hub));
-        wheelRig.forEach((wheel) => roots.add(wheel.object));
+        wheelRig.forEach((wheel) => {
+            roots.add(wheel.object);
+            const names: string[] = [];
+            wheel.object.traverse((child) => {
+                if ((child as THREE.Mesh).isMesh && child.name) names.push(child.name);
+            });
+            wheel.object.userData.raceParts = names;
+        });
         model.updateMatrixWorld(true);
         this.mergeUnder(model, roots);
         roots.forEach((root) => this.mergeUnder(root, roots));
@@ -5368,7 +5381,7 @@ export default class RaceVehicle {
             1
         );
         const rotLerp = THREE.MathUtils.clamp(
-            deltaSeconds * THREE.MathUtils.lerp(5, 16, rotationSpeedFactor),
+            deltaSeconds * THREE.MathUtils.lerp(10, 16, rotationSpeedFactor),
             0,
             1
         );

@@ -8,6 +8,8 @@ import { addContactShadow } from './CarContactShadow';
 import { CAR_GROUND_Y, FLOOR_Y, OLD_DESK_CENTER } from './screens/layout';
 import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
+import { applyCarLook } from '../Racing/Garage/carLook';
+import { loadLook } from '../Racing/Garage/garage';
 import {
     LEGACY_LIGHT_SCALE,
     legacyColor,
@@ -104,6 +106,14 @@ export default class Car {
 
         this.model = car;
         this.scene.add(car);
+        // the saved paint straight away; rims and the kit need the race's
+        // prepared car (RaceTransition.dressRoomCar)
+        applyCarLook(car, this.currentCarId, {
+            ...loadLook(this.currentCarId),
+            wheels: 'stock',
+            spoiler: 'none',
+            ride: 0,
+        });
     }
 
     swapCarIfCurrent(carId: string, car: THREE.Group) {

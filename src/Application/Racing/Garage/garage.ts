@@ -319,9 +319,16 @@ const read = (key: string) => {
     }
 };
 
+let persistAsked = false;
 const write = (key: string, value: unknown) => {
     try {
         window.localStorage.setItem(key, JSON.stringify(value));
+        // a saved setup asks the browser to keep the site's storage when it
+        // clears space (safari can drop it after a week without a visit)
+        if (!persistAsked) {
+            persistAsked = true;
+            void navigator.storage?.persist?.().catch(() => undefined);
+        }
     } catch {
         // storage full or blocked
     }

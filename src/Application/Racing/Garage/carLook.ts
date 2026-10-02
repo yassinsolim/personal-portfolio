@@ -1100,7 +1100,10 @@ export const copyCarLook = (
     carId: string,
     look: CarLook
 ) => {
-    const meta = (source.userData.raceWheelMeta || []) as Array<{ objectName: string }>;
+    const meta = (source.userData.raceWheelMeta || []) as Array<{
+        objectName: string;
+        parts?: string[];
+    }>;
     const names = meta.map((entry) => entry.objectName);
     const complete = names.length > 0 && names.every((name) => target.getObjectByName(name));
     target.userData.raceWheelMeta = complete ? meta : [];
@@ -1108,6 +1111,11 @@ export const copyCarLook = (
     const radius = Number(source.userData.raceWheelRadius);
     if (radius > 0 && source.scale.x > 0)
         target.userData.raceWheelRadius = (radius * target.scale.x) / source.scale.x;
+    target.traverse((child) => {
+        if (!child.userData.garageHiddenPart) return;
+        child.visible = true;
+        delete child.userData.garageHiddenPart;
+    });
     applyCarLook(target, carId, {
         ...look,
         wheels: 'stock',
@@ -1115,14 +1123,29 @@ export const copyCarLook = (
         ride: complete ? look.ride : 0,
     });
     if (!complete) return;
-    names.forEach((name) => {
-        const from = source.getObjectByName(name)!;
-        const to = target.getObjectByName(name)!;
+    const related = (a: THREE.Object3D, b: THREE.Object3D) => {
+        for (let node: THREE.Object3D | null = a; node; node = node.parent) if (node === b) return true;
+        for (let node: THREE.Object3D | null = b; node; node = node.parent) if (node === a) return true;
+        return false;
+    };
+    meta.forEach((entry) => {
+        const from = source.getObjectByName(entry.objectName)!;
+        const to = target.getObjectByName(entry.objectName)!;
         const rims = from.children.filter((child) => child.userData.garageRim);
         if (!rims.length) return;
         rims.forEach((rim) => to.add(rim.clone()));
-        hideOwn(to, !rims.some((rim) => rim.userData.garagePart === 'tire'));
+        const withTire = rims.some((rim) => rim.userData.garagePart === 'tire');
+        hideOwn(to, !withTire);
         to.userData.garageDonor = look.wheels;
+        if (!withTire) return;
+        // the race merged its wheel from parts this copy keeps apart (the
+        // m5's tire and spokes), which would show through the new wheel
+        (entry.parts || []).forEach((name) => {
+            const part = target.getObjectByName(name);
+            if (!part || !part.visible || related(part, to)) return;
+            part.visible = false;
+            part.userData.garageHiddenPart = true;
+        });
     });
     const kit = source.getObjectByName('garage-kit');
     if (kit) target.add(kit.clone());
