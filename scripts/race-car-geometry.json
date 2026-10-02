@@ -52,5 +52,35 @@
         "trackFront": 1.5808,
         "trackRear": 1.5808,
         "modelWheelRadius": 0.3603
+    },
+    "lamborghini-huracan": {
+        "wheelbase": 2.623,
+        "trackFront": 1.658,
+        "trackRear": 1.604,
+        "modelWheelRadius": 0.34
+    },
+    "lamborghini-aventador-s": {
+        "wheelbase": 2.707,
+        "trackFront": 1.688,
+        "trackRear": 1.66,
+        "modelWheelRadius": 0.345
+    },
+    "ferrari-laferrari": {
+        "wheelbase": 2.639,
+        "trackFront": 1.686,
+        "trackRear": 1.616,
+        "modelWheelRadius": 0.34
+    },
+    "mclaren-p1": {
+        "wheelbase": 2.669,
+        "trackFront": 1.646,
+        "trackRear": 1.586,
+        "modelWheelRadius": 0.335
+    },
+    "porsche-918-spyder": {
+        "wheelbase": 2.732,
+        "trackFront": 1.642,
+        "trackRear": 1.608,
+        "modelWheelRadius": 0.36
     }
 }

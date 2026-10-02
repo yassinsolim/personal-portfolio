@@ -16,14 +16,10 @@ export type EngineDef = {
     // comes with turbos (or a turbo) from the factory
     turbo: boolean;
     massKg: number;
-    // an engine from one of the game's cars reads its curve off that car
-    car?: string;
-    curve?: [number, number][];
-    idleRpm?: number;
-    redlineRpm?: number;
+    // the car it comes in, whose curve, idle and redline it brings
+    car: string;
 };
 
-// published peaks, the curves shaped like the cars' own (docs/cars-drivetrain.md).
 // the hybrids are the whole package, engine and motors together
 export const ENGINES: Record<string, EngineDef> = {
     s65: { label: 'BMW S65 V8', detail: '4.0 L V8, 8,400 rpm', sound: 'bmw-e92-m3', turbo: false, massKg: 202, car: 'bmw-e92-m3' },
@@ -33,61 +29,11 @@ export const ENGINES: Record<string, EngineDef> = {
     m177: { label: 'AMG M177 V8', detail: '4.0 L twin turbo', sound: 'amg-c63s-coupe', turbo: true, massKg: 209, car: 'amg-c63s-coupe' },
     pu106: { label: 'AMG One F1 V6', detail: '1.6 L turbo hybrid, 11,000 rpm', sound: 'amg-one', turbo: true, massKg: 260, car: 'amg-one' },
     t24a: { label: 'Toyota T24A four', detail: '2.4 L turbo hybrid', sound: 'toyota-crown-platinum', turbo: true, massKg: 160, car: 'toyota-crown-platinum' },
-    v10: {
-        label: 'Lamborghini V10',
-        detail: '5.2 L, naturally aspirated, 8,500 rpm',
-        sound: 'lamborghini-huracan',
-        turbo: false,
-        massKg: 220,
-        // huracan lp610-4: 449 kW at 8,250, 560 Nm at 6,500
-        curve: [[1000, 330], [2000, 400], [3000, 450], [4000, 490], [5000, 520], [6500, 560], [7500, 545], [8250, 520], [8500, 505]],
-        idleRpm: 1000,
-        redlineRpm: 8500,
-    },
-    l539: {
-        label: 'Lamborghini V12',
-        detail: '6.5 L, naturally aspirated, 8,500 rpm',
-        sound: 'lamborghini-aventador-s',
-        turbo: false,
-        massKg: 235,
-        // aventador s: 544 kW at 8,400, 690 Nm at 5,500
-        curve: [[1000, 400], [2000, 480], [3000, 560], [4000, 630], [5500, 690], [6500, 680], [7500, 650], [8400, 618], [8500, 610]],
-        idleRpm: 1000,
-        redlineRpm: 8500,
-    },
-    f140: {
-        label: 'Ferrari V12 hybrid',
-        detail: '6.3 L V12 with HY-KERS, 9,250 rpm',
-        sound: 'ferrari-laferrari',
-        turbo: false,
-        massKg: 245,
-        // laferrari: 708 kW at 9,000 and over 900 Nm, engine and motor
-        curve: [[1000, 600], [2000, 760], [3000, 820], [4000, 860], [5000, 880], [6750, 900], [8000, 830], [9000, 751], [9250, 720]],
-        idleRpm: 1000,
-        redlineRpm: 9250,
-    },
-    m838: {
-        label: 'McLaren V8 hybrid',
-        detail: '3.8 L twin turbo flat-plane with IPAS',
-        sound: 'mclaren-p1',
-        turbo: true,
-        massKg: 230,
-        // p1: 674 kW at 7,500 and 900 Nm, engine and motor
-        curve: [[1000, 600], [2000, 800], [3000, 880], [4000, 900], [5000, 900], [6000, 880], [7000, 860], [7500, 858], [8500, 760]],
-        idleRpm: 850,
-        redlineRpm: 8500,
-    },
-    v918: {
-        label: 'Porsche 918 V8 hybrid',
-        detail: '4.6 L flat-plane with two motors, 9,150 rpm',
-        sound: 'porsche-918-spyder',
-        turbo: false,
-        massKg: 250,
-        // 918 spyder: 652 kW at 8,700 and 1,280 Nm, mostly the motors down low
-        curve: [[1000, 1100], [2000, 1280], [3000, 1250], [4000, 1150], [5000, 1000], [6000, 880], [7000, 800], [8700, 716], [9150, 680]],
-        idleRpm: 950,
-        redlineRpm: 9150,
-    },
+    v10: { label: 'Lamborghini V10', detail: '5.2 L, naturally aspirated, 8,500 rpm', sound: 'lamborghini-huracan', turbo: false, massKg: 220, car: 'lamborghini-huracan' },
+    l539: { label: 'Lamborghini V12', detail: '6.5 L, naturally aspirated, 8,500 rpm', sound: 'lamborghini-aventador-s', turbo: false, massKg: 235, car: 'lamborghini-aventador-s' },
+    f140: { label: 'Ferrari V12 hybrid', detail: '6.3 L V12 with HY-KERS, 9,250 rpm', sound: 'ferrari-laferrari', turbo: false, massKg: 245, car: 'ferrari-laferrari' },
+    m838: { label: 'McLaren V8 hybrid', detail: '3.8 L twin turbo flat-plane with IPAS', sound: 'mclaren-p1', turbo: true, massKg: 230, car: 'mclaren-p1' },
+    v918: { label: 'Porsche 918 V8 hybrid', detail: '4.6 L flat-plane with two motors, 9,150 rpm', sound: 'porsche-918-spyder', turbo: false, massKg: 250, car: 'porsche-918-spyder' },
 };
 
 export const ENGINE_IDS = Object.keys(ENGINES);
@@ -114,11 +60,11 @@ const engineOf = (carId: string, engine: string) =>
     engine !== 'stock' && ENGINES[engine] ? engine : STOCK_ENGINE[carId] || 's65';
 
 const shapeOf = (def: EngineDef) => {
-    const race = def.car ? carOptionsById[def.car]?.race : undefined;
+    const race = carOptionsById[def.car]?.race;
     return {
-        curve: def.curve || race?.physics.torqueCurve || [],
-        idleRpm: def.idleRpm || race?.idleRpm || 800,
-        redlineRpm: def.redlineRpm || race?.redlineRpm || 7000,
+        curve: race?.physics.torqueCurve || [],
+        idleRpm: race?.idleRpm || 800,
+        redlineRpm: race?.redlineRpm || 7000,
     };
 };
 

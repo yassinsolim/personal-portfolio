@@ -884,6 +884,19 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `split_runs`; tops without recordings are synthesized (`synth_fill`). Needs the venv with
   numpy, scipy and soundfile. The 918 uses a 458 recording, the P1 a 570S, the LaFerrari an
   F12/812 (credits list them).
+- October 2026 cars: Huracán, Aventador S, LaFerrari, P1, 918 Spyder. Their originals are in
+  `models-src/` unmodified; `optimize-models.mjs` first drops COLOR_0 sets that are game-rip masks
+  (alpha 0 throughout) and runs `scripts/lib/wheel-groups.mjs`, which regroups wheel and caliper
+  parts into `wheel_fl/fr/rl/rr` and `caliper_*` nodes (merged by material, empty leftovers
+  removed: an empty `WHEEL_RR` once matched the rig's `wheel_rr` lookup). A garage repaint turns
+  vertex colours off (Ddiaz paint masks tinted the Huracán's door). The room car skips its name
+  based restyling for these (`KEEP_EXPORT_MATERIALS` in `World/Car.ts`). Every engine in
+  `engines.ts` now reads its curve, idle and redline from its car.
+- Adding a car: carOptions entry, `race-drivetrain-reference.mjs` and `docs/cars-drivetrain.md`
+  (the drivetrain test runs every reference car), `race-car-geometry.json`, `PAINT` in
+  `carLook.ts`, `WHEELS` in `Garage.tsx`, `STOCK_ENGINE`/`ENGINES`, a sound bank, credits in
+  `modelCredits.ts` and `CREDITS.md`, and the two car id regexes in `supabase/racing.sql` (then
+  run it on the live project).
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling

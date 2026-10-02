@@ -118,6 +118,11 @@ const WHEELS = [
     'amg-c63s-coupe',
     'bmw-e92-m3',
     'toyota-crown-platinum',
+    'lamborghini-huracan',
+    'lamborghini-aventador-s',
+    'ferrari-laferrari',
+    'mclaren-p1',
+    'porsche-918-spyder',
 ];
 const carName = (id: string) =>
     carOptions.find((car) => car.id === id)?.label || id;
