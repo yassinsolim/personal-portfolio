@@ -1,0 +1,236 @@
+{
+ "version": 1,
+ "carId": "lamborghini-aventador-s",
+ "sampleRate": 48000,
+ "source": "recorded+synth-top",
+ "notes": "pole position lamborghini aventador 2014 (6.5 v12), synth l539 above 4,000 rpm",
+ "files": {
+  "opus": "lamborghini-aventador-s.webm",
+  "aac": "lamborghini-aventador-s.m4a"
+ },
+ "bytes": {
+  "opus": 200778,
+  "aac": 276192
+ },
+ "duration": 33.578,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 988.67,
+   "start": 0.08,
+   "dur": 1.942,
+   "db": 0.0
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1299.93,
+   "start": 2.142,
+   "dur": 1.10775,
+   "db": -2.13
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 1800.0,
+   "start": 3.36975,
+   "dur": 1.133333,
+   "db": -1.41
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 2400.0,
+   "start": 4.623083,
+   "dur": 1.1,
+   "db": -3.0
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 3000.0,
+   "start": 5.843083,
+   "dur": 1.12,
+   "db": -2.49
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 3600.0,
+   "start": 7.083083,
+   "dur": 1.1,
+   "db": -2.99
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1299.93,
+   "start": 8.303083,
+   "dur": 1.10775,
+   "db": -3.17
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2200.15,
+   "start": 9.530833,
+   "dur": 1.090833,
+   "db": -1.25
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 3000.0,
+   "start": 10.741667,
+   "dur": 1.12,
+   "db": -1.44
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 4298.51,
+   "start": 11.981667,
+   "dur": 1.08875,
+   "db": -8.82
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 4298.51,
+   "start": 13.190417,
+   "dur": 1.08875,
+   "db": -30.0
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 5101.86,
+   "start": 14.399167,
+   "dur": 1.105479,
+   "db": -9.69
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 5101.86,
+   "start": 15.624646,
+   "dur": 1.105479,
+   "db": -29.57
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 5901.64,
+   "start": 16.850125,
+   "dur": 1.098,
+   "db": -5.81
+  },
+  {
+   "id": "off5",
+   "kind": "off",
+   "rpm": 5901.64,
+   "start": 18.068125,
+   "dur": 1.098,
+   "db": -26.98
+  },
+  {
+   "id": "on8",
+   "kind": "on",
+   "rpm": 6697.67,
+   "start": 19.286125,
+   "dur": 1.092917,
+   "db": -10.39
+  },
+  {
+   "id": "off6",
+   "kind": "off",
+   "rpm": 6697.67,
+   "start": 20.499042,
+   "dur": 1.092917,
+   "db": -27.77
+  },
+  {
+   "id": "on9",
+   "kind": "on",
+   "rpm": 7500.0,
+   "start": 21.711958,
+   "dur": 1.104,
+   "db": -9.58
+  },
+  {
+   "id": "off7",
+   "kind": "off",
+   "rpm": 7500.0,
+   "start": 22.935958,
+   "dur": 1.104,
+   "db": -26.49
+  },
+  {
+   "id": "on10",
+   "kind": "on",
+   "rpm": 8299.71,
+   "start": 24.159958,
+   "dur": 1.098833,
+   "db": -6.34
+  },
+  {
+   "id": "off8",
+   "kind": "off",
+   "rpm": 8299.71,
+   "start": 25.378792,
+   "dur": 1.098833,
+   "db": -24.58
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 26.607625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 27.077625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 27.547625,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 28.017625,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 28.487625,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 29.207625,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 30.027625,
+   "dur": 0.37
+  },
+  {
+   "id": "start7",
+   "kind": "start",
+   "start": 30.517625,
+   "dur": 3.0
+  }
+ ]
+}

@@ -70,6 +70,9 @@ export type PhysicsSpec = {
     maxSteer: number;
     // electronic top speed limiter, m/s, Infinity when there's none
     speedLimit: number;
+    // turbos or a supercharger from the garage: share of extra torque at full
+    // boost, the rpm where it starts and is all there, and the spool time (s)
+    boost?: { gain: number; spoolStart: number; spoolFull: number; time: number };
 };
 
 export type PhysicsControls = {
@@ -218,21 +221,33 @@ const moveToward = (value: number, target: number, maxDelta: number) =>
         ? Math.min(target, value + maxDelta)
         : Math.max(target, value - maxDelta);
 
-// full load torque at an rpm, from the sampled curve
-export const torqueAt = (spec: PhysicsSpec, rpm: number) => {
+// full load torque at an rpm without any garage boost, from the sampled curve
+const tableTorqueAt = (spec: PhysicsSpec, rpm: number) => {
     const table = spec.torqueTable;
     const x = clamp(rpm, spec.idleRpm, spec.redlineRpm) / spec.torqueStep;
     const i = Math.min(table.length - 2, Math.floor(x));
     return lerp(table[i], table[i + 1], x - i);
 };
 
+const boostShare = (spec: PhysicsSpec, rpm: number) => {
+    const b = spec.boost;
+    if (!b) return 0;
+    const t = clamp((rpm - b.spoolStart) / Math.max(1, b.spoolFull - b.spoolStart), 0, 1);
+    return t * t * (3 - 2 * t);
+};
+
+// full load torque at an rpm once any boost has built, from the sampled curve
+export const torqueAt = (spec: PhysicsSpec, rpm: number) =>
+    tableTorqueAt(spec, rpm) * (1 + (spec.boost ? spec.boost.gain * boostShare(spec, rpm) : 0));
+
 // peak torque and power of the curve the car actually drives with
 export const peakOutput = (spec: PhysicsSpec) => {
     let torqueNm = 0;
     let powerW = 0;
-    spec.torqueTable.forEach((torque, i) => {
+    spec.torqueTable.forEach((_, i) => {
         const rpm = i * spec.torqueStep;
         if (rpm < spec.idleRpm || rpm > spec.redlineRpm) return;
+        const torque = torqueAt(spec, rpm);
         torqueNm = Math.max(torqueNm, torque);
         powerW = Math.max(powerW, (torque * rpm) / RAD_PER_S_TO_RPM);
     });
@@ -348,6 +363,8 @@ export default class VehiclePhysics {
     driftDrive = 0;
     limiterActive: boolean;
     engineTorqueNow: number;
+    // 0 to 1, how much of the garage turbos' boost has built
+    boost = 0;
     manualShiftRequest: number;
     handbrakeInput: number;
     onShift: ((gear: number, previous: number) => void) | null;
@@ -438,6 +455,7 @@ export default class VehiclePhysics {
         this.shiftCooldown = 0;
         this.reverseTimer = 0;
         this.limiterTimer = 0;
+        this.boost = 0;
         this.tcsScale = 1;
         this.absScale = [1, 1, 1, 1];
         this.manualShiftRequest = 0;
@@ -490,9 +508,24 @@ export default class VehiclePhysics {
         return spec.gearRatios.length;
     }
 
-    // full throttle engine torque at an rpm, from the car's torque curve
+    // full throttle engine torque at an rpm, from the car's torque curve and
+    // the boost built so far
     engineTorque(rpm: number) {
-        return torqueAt(this.spec, rpm);
+        const b = this.spec.boost;
+        if (!b) return torqueAt(this.spec, rpm);
+        return tableTorqueAt(this.spec, rpm) * (1 + b.gain * this.boost);
+    }
+
+    // turbos spool toward what the pedal and revs ask for, and dump it fast
+    updateBoost(dt: number, throttle: number) {
+        const b = this.spec.boost;
+        if (!b) {
+            this.boost = 0;
+            return;
+        }
+        const target = throttle * boostShare(this.spec, this.engineRpm);
+        const tau = target > this.boost ? b.time : b.time * 0.35;
+        this.boost += (target - this.boost) * (1 - Math.exp(-dt / Math.max(0.01, tau)));
     }
 
     engineBraking(rpm: number) {
@@ -877,6 +910,7 @@ export default class VehiclePhysics {
         const wheelRpm = Math.abs(drivenOmega * ratio) * RAD_PER_S_TO_RPM;
         let torque: number;
         this.limiterTimer = Math.max(0, this.limiterTimer - dt);
+        this.updateBoost(dt, throttle);
 
         if (this.shiftTimer > 0) {
             // revs swing to the new gear while it changes. a dual clutch

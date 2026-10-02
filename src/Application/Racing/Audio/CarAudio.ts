@@ -2,11 +2,12 @@ import AudioBank, { type AudioBankData, RACE_AUDIO_BASE } from './AudioBank';
 import EngineVoice from './EngineVoice';
 import DriveSounds from './DriveSounds';
 import DerivedDrivetrain from './derivedDrivetrain';
-import { getCarAudioProfile } from './carAudioProfiles';
+import { engineProfile, getCarAudioProfile } from './carAudioProfiles';
 import { carOptionsById } from '../../carOptions';
+import type { EngineSound } from '../Garage/engines';
 
 // race audio entry point. small surface on purpose:
-//   carAudio.setCar(carId)
+//   carAudio.setCar(carId, engine?)
 //   carAudio.update({ rpm, throttle, speedKph, gear, slip, boost }, dt)
 //   carAudio.impact(strength)
 //   carAudio.setListener(position, forward, up)
@@ -33,6 +34,8 @@ export type CarAudioState = {
     scrape?: number;
     kerb?: boolean;
     grass?: boolean;
+    // the garage's engine, turbos and exhaust; the car's own when left out
+    engine?: EngineSound;
 };
 
 export type Vec3 = { x: number; y: number; z: number };
@@ -76,6 +79,22 @@ const UNLOCK_EVENTS = ['pointerdown', 'touchend', 'keydown', 'mousedown'];
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+const stockEngine = (carId: string): EngineSound => {
+    const race = carOptionsById[carId]?.race;
+    return {
+        sound: carId,
+        idleRpm: race?.idleRpm || 900,
+        redlineRpm: race?.redlineRpm || 7000,
+        turbo: 'stock',
+        supercharger: false,
+        exhaust: 'stock',
+    };
+};
+const keyOf = (engine: EngineSound | null) =>
+    engine
+        ? [engine.sound, engine.turbo, engine.supercharger ? 's' : '', engine.exhaust, engine.idleRpm, engine.redlineRpm].join('|')
+        : '';
+
 const setParam = (param: AudioParam | undefined, value: number, time: number, tau = 0.05) => {
     if (!param) return;
     param.setTargetAtTime(value, time, tau);
@@ -94,7 +113,9 @@ export default class CarAudio {
     remoteBus: GainNode | null;
     voice: EngineVoice | null;
     voiceCarId: string;
+    voiceKey: string;
     wantedCarId: string;
+    wantedEngine: EngineSound | null;
     loadSerial: number;
     drive: DriveSounds | null;
     common: AudioBankData | null;
@@ -130,7 +151,9 @@ export default class CarAudio {
         this.remoteBus = null;
         this.voice = null;
         this.voiceCarId = '';
+        this.voiceKey = '';
         this.wantedCarId = '';
+        this.wantedEngine = null;
         this.loadSerial = 0;
         this.drive = null;
         this.common = null;
@@ -211,7 +234,7 @@ export default class CarAudio {
             context.suspend().catch(() => undefined);
         }
         if (this.wantedCarId) {
-            void this.setCar(this.wantedCarId);
+            void this.setCar(this.wantedCarId, this.wantedEngine || undefined);
         }
         return context;
     }
@@ -326,25 +349,28 @@ export default class CarAudio {
 
     // ------------------------------------------------------------ cars
 
-    async setCar(carId: string) {
+    async setCar(carId: string, engine?: EngineSound) {
         if (!carId) return;
+        const wanted = engine || stockEngine(carId);
+        const key = keyOf(wanted);
         this.wantedCarId = carId;
+        this.wantedEngine = wanted;
         const context = this.context;
         if (!context || !this.engineBus) return;
-        if (this.voiceCarId === carId && this.voice) return;
+        if (this.voiceKey === key && this.voice) return;
         const serial = ++this.loadSerial;
-        const bank = await this.banks.load(context, carId);
+        const bank = await this.banks.load(context, wanted.sound);
         if (serial !== this.loadSerial || !bank || !this.engineBus) {
-            if (!bank) this.lastError = `no audio for ${carId}`;
+            if (!bank) this.lastError = `no audio for ${wanted.sound}`;
             return;
         }
-        const race = carOptionsById[carId]?.race;
         const old = this.voice;
-        this.voice = new EngineVoice(context, bank, getCarAudioProfile(carId), this.engineBus, {
-            gameIdleRpm: race?.idleRpm || 900,
-            gameRedlineRpm: race?.redlineRpm || 7000,
+        this.voice = new EngineVoice(context, bank, engineProfile(wanted), this.engineBus, {
+            gameIdleRpm: wanted.idleRpm,
+            gameRedlineRpm: wanted.redlineRpm,
         }, this.random);
         this.voiceCarId = carId;
+        this.voiceKey = key;
         old?.dispose(0.3);
         if (this.active && !this.offline && this.voice.hasShot('start')) {
             this.voice.fadeTo(0, 0.05);
@@ -354,7 +380,7 @@ export default class CarAudio {
     }
 
     isReady() {
-        return Boolean(this.voice && this.voiceCarId === this.wantedCarId && this.common);
+        return Boolean(this.voice && this.voiceKey === keyOf(this.wantedEngine) && this.common);
     }
 
     // ------------------------------------------------------------ per frame
@@ -362,8 +388,12 @@ export default class CarAudio {
     update(state: CarAudioState, dt: number) {
         const step = clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1);
         this.time += step;
-        if (state.carId && state.carId !== this.wantedCarId) {
-            void this.setCar(state.carId);
+        if (
+            state.carId &&
+            (state.carId !== this.wantedCarId ||
+                (state.engine && keyOf(state.engine) !== keyOf(this.wantedEngine)))
+        ) {
+            void this.setCar(state.carId, state.engine);
         }
         const context = this.context;
         const voice = this.voice;

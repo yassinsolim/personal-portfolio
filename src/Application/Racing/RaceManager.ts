@@ -4,7 +4,7 @@ import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack from './Track/NordschleifeTrack';
 import { buildDriftParkData, DRIFT_PARK_SPLITS } from './Track/driftPark';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
-import { peakOutput, predictTopSpeed, rpmAtSpeed } from './Vehicle/VehiclePhysics';
+import { peakOutput, predictTopSpeed, rpmAtSpeed, torqueAt } from './Vehicle/VehiclePhysics';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
@@ -116,6 +116,8 @@ export default class RaceManager {
     // so it sits exactly where the room's last frame shows it
     transitionHold = false;
     garageSetupAtOpen = '';
+    // the engine revved in neutral on the garage stand
+    garageRev = { held: false, throttle: 0, rpm: 0, cutUntil: 0 };
     leaderboardBoard: 'stock' | 'tuned' = 'stock';
     lastLapTimeMs = 0;
     localLeaderboard: LocalLeaderboard;
@@ -442,6 +444,10 @@ export default class RaceManager {
             this.chaseCamera.garage = open;
             if (open) this.showGarageScene();
             else this.hideGarageScene();
+            this.garageRev.held = false;
+            this.garageRev.rpm = this.vehicle.physics.spec.idleRpm;
+            // the engine is heard on the stand even when the race is paused
+            this.engineAudio.setPaused(open ? false : this.paused);
             if (open) {
                 this.garageSetupAtOpen = JSON.stringify([this.vehicle.look, this.vehicle.tune]);
                 this.dispatchGarage();
@@ -450,6 +456,10 @@ export default class RaceManager {
                 this.startLapTimer();
             }
             UIEventBus.dispatch('race:inputReset', { source: 'garage' });
+        });
+
+        UIEventBus.on('race:garageRev', (state: { on?: boolean } | undefined) => {
+            this.garageRev.held = this.garageOpen && Boolean(state?.on);
         });
 
         UIEventBus.on(
@@ -803,6 +813,45 @@ export default class RaceManager {
         this.multiplayer.setLocalLook(look, !isStockSetup(tune, look));
     }
 
+    // the engine free revving in neutral: it climbs with the torque it makes
+    // there against its inertia, falls on friction and pumping, and the
+    // limiter cuts it at the redline
+    updateGarageRev(telemetry: ReturnType<RaceVehicle['getTelemetry']>, dt: number) {
+        const spec = this.vehicle.physics.spec;
+        const rev = this.garageRev;
+        const want = rev.held ? 1 : 0;
+        rev.throttle += (want - rev.throttle) * Math.min(1, dt * (want > rev.throttle ? 25 : 18));
+        rev.rpm = Math.max(rev.rpm, spec.idleRpm);
+        const now = this.application.time.elapsed / 1000;
+        const cut = now < rev.cutUntil;
+        if (rev.throttle > 0.05 && !cut) {
+            const share = torqueAt(spec, rev.rpm) / Math.max(1, spec.torqueNm);
+            const light = Math.sqrt(0.2 / Math.max(0.05, spec.engineInertia));
+            rev.rpm += rev.throttle * 9000 * share * light * dt;
+        } else {
+            rev.rpm -= (2200 + 3200 * (rev.rpm / spec.redlineRpm)) * dt;
+        }
+        if (rev.rpm >= spec.redlineRpm) {
+            rev.rpm = spec.redlineRpm;
+            rev.cutUntil = now + 0.06;
+        }
+        rev.rpm = THREE.MathUtils.clamp(rev.rpm, spec.idleRpm, spec.redlineRpm);
+        return {
+            ...telemetry,
+            rpm: rev.rpm,
+            throttle: rev.throttle,
+            gear: 0,
+            speedMps: 0,
+            slipRatio: 0,
+            driftIntensity: 0,
+            limiter: rev.held && now < rev.cutUntil,
+            shifting: false,
+            boost: undefined,
+            impact: 0,
+            barrierContact: 0,
+        };
+    }
+
     // the garage is its own room far under the track: the race world is
     // hidden, the car moves onto the garage's stand with its lights and
     // reflections, and the orbit camera circles the stand
@@ -868,7 +917,7 @@ export default class RaceManager {
             tune,
             calipers: carHasCalipers(this.vehicle.currentCarId),
             spoilers: this.vehicle.carModel
-                ? kitsThatFit(this.vehicle.carModel, this.vehicle.currentCarId)
+                ? kitsThatFit(this.vehicle.carModel)
                 : ['ducktail', 'wing'],
             speedLimiter: this.vehicle.currentTuning.speedLimitKph,
             tuned: !isStockSetup(tune, look),
@@ -1628,10 +1677,14 @@ export default class RaceManager {
             }
         } else {
             const telemetry = this.vehicle.getTelemetry();
-            this.engineAudio.update(
-                { ...telemetry, throttle: 0, driftIntensity: 0 },
-                delta
-            );
+            if (this.garageOpen) {
+                this.engineAudio.update(this.updateGarageRev(telemetry, delta), delta);
+            } else {
+                this.engineAudio.update(
+                    { ...telemetry, throttle: 0, driftIntensity: 0 },
+                    delta
+                );
+            }
         }
         this.track.update();
         this.ghostReplay.update(delta);

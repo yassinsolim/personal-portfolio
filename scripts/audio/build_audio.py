@@ -33,7 +33,10 @@ SR = ek.SR
 
 I6 = ([1.5, 3, 4.5, 6, 7.5, 9], [1.0, 1.2, 0.8, 1.0, 0.5, 0.6])
 V8X = ([0.5 * k for k in range(1, 17)], [1.0 + (0.8 if k in (4, 8) else 0.0) for k in range(1, 17)])
-FAMILIES = {"i6": I6, "v8x": V8X}
+V12 = ([3, 6, 9, 12, 18], [0.6, 1.0, 0.5, 0.7, 0.4])
+V10 = ([2.5, 5, 7.5, 10, 15], [0.6, 1.0, 0.5, 0.7, 0.4])
+V8F = ([2, 4, 6, 8, 12], [0.6, 1.0, 0.5, 0.7, 0.4])
+FAMILIES = {"i6": I6, "v8x": V8X, "v12": V12, "v10": V10, "v8f": V8F}
 
 LOOP_RMS_DB = -20.0
 MARGIN_S = 0.05
@@ -69,11 +72,11 @@ def tracked(rel, t0, t1, lo, hi, family, channel="mix", nfft=4096):
     return x, t, rpm
 
 
-def recorded_loop(pieces, r0, seconds, delta=0.06, seed=0, min_corr=0.15):
+def recorded_loop(pieces, r0, seconds, delta=0.06, seed=0, min_corr=0.15, min_cycles=3):
     """cycle loop at r0 from every stretch of the recordings near that rpm.
     returns None when there isn't enough material or the cycles don't line
     up (a sign the rpm track was off there)."""
-    y = ek.gather(pieces, r0, delta=delta)
+    y = ek.gather(pieces, r0, delta=delta, min_cycles=min_cycles)
     if y is None or len(y) < 4 * 120.0 / r0 * SR:
         return None
     rng = np.random.default_rng(seed + int(r0))
@@ -86,13 +89,15 @@ def recorded_loop(pieces, r0, seconds, delta=0.06, seed=0, min_corr=0.15):
     return loop, info
 
 
-def synth_fill(spec, rpms, match_on, match_off, seconds=1.1):
+def synth_fill(spec, rpms, match_on, match_off, seconds=1.1, above=False):
     """synth loops for rpm the recordings don't cover, eq'd so their tone
-    lines up with the lowest recorded loop they crossfade into."""
+    lines up with the recorded loop they crossfade into (the lowest one, or
+    the highest when filling above)."""
     on = [es.render_loop(spec, r, 1.0, seconds) for r in rpms]
     off = [es.render_loop(spec, r, 0.0, seconds, variant=2) for r in rpms]
-    c_on, d_on = match_eq([on[-1][0]], match_on, max_db=14)
-    c_off, d_off = match_eq([off[-1][0]], match_off, max_db=14)
+    edge = 0 if above else -1
+    c_on, d_on = match_eq([on[edge][0]], match_on, max_db=14)
+    c_off, d_off = match_eq([off[edge][0]], match_off, max_db=14)
     out = []
     for (l, r), (lo, ro) in zip(on, off):
         out.append(("on", r, es.circular_eq(l, c_on, d_on), f"synth {spec.name} matched to the recording"))
@@ -331,7 +336,143 @@ def car_s63(variant):
     return car
 
 
+def split_runs(rel, t0, t1, lo, hi, family, channel="mix", min_db=-42.0, rate=150.0, min_s=0.15):
+    """a stretch of a recording tracked once and cut into its loud runs where
+    the revs climb (on throttle) and where they fall (overrun)."""
+    x, t, rpm = tracked(rel, t0, t1, lo, hi, family, channel)
+    half = int(0.04 * SR)
+    level = np.array([
+        20 * np.log10(np.sqrt(np.mean(x[max(0, int(tk * SR) - half):int(tk * SR) + half] ** 2)) + 1e-12)
+        for tk in t
+    ])
+    # the track wobbles frame to frame, the trend over a fifth of a second
+    # says which way the revs are going
+    k = max(1, int(0.2 / (t[1] - t[0])))
+    slope = np.gradient(np.convolve(rpm, np.ones(k) / k, mode="same"), t)
+
+    def runs(mask):
+        out = []
+        edges = np.flatnonzero(np.diff(np.concatenate([[0], mask.astype(np.int8), [0]])))
+        for a, b in zip(edges[::2], edges[1::2]):
+            if t[b - 1] - t[a] < min_s:
+                continue
+            s0, s1 = int(t[a] * SR), int(t[b - 1] * SR)
+            out.append((x[s0:s1], t[a:b] - t[a], rpm[a:b]))
+        return out
+
+    loud = level > min_db
+    return runs(loud & (slope > rate)), runs(loud & (slope < -rate))
+
+
+def car_recorded(idle, spans, spec, on_rpms, off_rpms, synth_below=(), synth_above=(), start=None,
+                 muffle=0.3, pops=True, turbo=False, seed=0, notes="", delta=0.06, min_cycles=3):
+    """recorded idle, on loops from the climbing runs and off loops from the
+    falling ones, synth past either end of what was recorded."""
+    loops = []
+    rel, a, b, lo, hi, fam, ch = idle
+    p = [tracked(rel, a, b, lo, hi, fam, channel=ch, nfft=16384)]
+    l, info = recorded_loop(p, float(np.median(p[0][2])), 2.0)
+    loops.append(("idle", info["rpm"], l, "recorded idle"))
+    rising, falling = [], []
+    for span in spans:
+        up, down = split_runs(*span)
+        rising += up
+        falling += down
+    # a free rev blip only spends a cycle or two near each rpm, so blips
+    # take a wider band and shorter stretches
+    on = [(r, g) for r in on_rpms for g in [recorded_loop(rising, r, 1.1, delta=delta, min_cycles=min_cycles)] if g]
+    off = [(r, g) for r in off_rpms for g in [recorded_loop(falling, r, 1.1, delta=delta, min_cycles=min_cycles)] if g]
+    on_blend = envelope_blend([g[0] for _, g in on], 0.5)
+    for (r, (l, info)), lb in zip(on, on_blend):
+        loops.append(("on", info["rpm"], lb, "recorded climb"))
+    if off:
+        for (r, (l, info)), lb in zip(off, envelope_blend([g[0] for _, g in off], 0.5)):
+            loops.append(("off", info["rpm"], lb, "recorded overrun"))
+    else:
+        for (r, (l, info)), lb in zip(on, on_blend):
+            loops.append(("off", info["rpm"], overrun_eq(lb), "recorded climb with overrun eq"))
+    ons = sorted((x for x in loops if x[0] == "on"), key=lambda x: x[1])
+    below = [r for r in synth_below if r < ons[0][1] * 0.9]
+    if below:
+        loops += synth_fill(spec, below, ons[0][2], overrun_eq(ons[0][2]))
+    above = [r for r in synth_above if r > ons[-1][1] * 1.1]
+    if above:
+        loops += synth_fill(spec, above, ons[-1][2], overrun_eq(ons[-1][2]), above=True)
+    shots = synth_shots(muffle=muffle, pops=pops, turbo=turbo, seed=seed)
+    if start:
+        shots.append(("start", recorded_shot(*start, fade_out=0.5)))
+    return {"source": "recorded" if not above else "recorded+synth-top", "loops": loops, "shots": shots,
+            "notes": notes}
+
+
+def car_huracan():
+    t12 = "pp-lamborghini-huracan-2014/t12_ext_start_idle_blips.wav"
+    t10 = "pp-lamborghini-huracan-2014/t10_ext_bys_gearshifts.wav"
+    return car_recorded(
+        (t12, 14.5, 23.0, 700, 950, "v10", "mix"),
+        [(t12, 6.5, 49.0, 700, 7200, "v10"), (t10, 1.5, 6.0, 1800, 3200, "v10", "mix", -45),
+         (t10, 9.0, 14.0, 4800, 8200, "v10", "mix", -46)],
+        specs.lamborghini_v10(), [1400, 2000, 2700, 3500, 4400, 5300, 6300, 7200],
+        [1400, 2400, 3600, 5000, 6200], synth_below=[1100], synth_above=[7700, 8200],
+        start=(t12, 3.4, 6.2), muffle=0.25, seed=610, delta=0.11, min_cycles=1.5,
+        notes="pole position lamborghini huracan 2014 (5.2 v10)")
+
+
+def car_aventador():
+    t14 = "pp-lamborghini-aventador-2014/t14_onboard_exhaust.wav"
+    return car_recorded(
+        (t14, 88.0, 91.5, 900, 1100, "v12", "mix"),
+        [(t14, 23.9, 80.0, 650, 4500, "v12"), (t14, 97.0, 140.0, 650, 4500, "v12"),
+         (t14, 160.0, 240.0, 650, 4500, "v12"), (t14, 261.0, 292.0, 650, 4500, "v12")],
+        specs.lamborghini_l539(), [1300, 1800, 2400, 3000, 3600],
+        [1300, 2200, 3000], synth_above=[4300, 5100, 5900, 6700, 7500, 8300],
+        start=(t14, 0.0, 3.0), muffle=0.25, seed=539,
+        notes="pole position lamborghini aventador 2014 (6.5 v12), synth l539 above 4,000 rpm")
+
+
+def car_laferrari():
+    t7 = "pp-ferrari-812-2018/t7_onboard_idle_steady_blips.wav"
+    t2 = "pp-ferrari-f12-2016/t2_onboard_engine.wav"
+    return car_recorded(
+        (t7, 18.0, 31.0, 850, 1050, "v12", "mix"),
+        [(t7, 31.0, 57.0, 850, 4000, "v12"), (t2, 17.5, 30.0, 700, 2500, "v12", "mix", -45),
+         (t2, 120.0, 129.0, 1300, 4200, "v12", "mix", -45)],
+        specs.ferrari_f140(), [1400, 1900, 2500, 3100],
+        [1400, 2200, 3000], synth_above=[3800, 4700, 5600, 6500, 7400, 8300, 9100],
+        start=(t7, 2.0, 5.5), muffle=0.2, seed=140, delta=0.11, min_cycles=1.5,
+        notes="pole position ferrari 812 superfast 2018 and f12 2016 (f140 v12, same family as the laferrari's f140fe), synth f140fe above 3,500 rpm")
+
+
+def car_p1():
+    t7 = "pp-mclaren-570s-2016/t7_onboard_idle_steady_blips.wav"
+    t10 = "pp-mclaren-570s-2016/t10_onboard_exhaust.wav"
+    return car_recorded(
+        (t7, 24.6, 48.5, 750, 950, "v8f", "mix"),
+        [(t7, 48.0, 100.0, 900, 4000, "v8f"), (t10, 10.0, 41.0, 1000, 6000, "v8f"),
+         (t10, 69.0, 98.0, 1500, 6800, "v8f"), (t10, 124.0, 170.0, 1000, 8200, "v8f")],
+        specs.flat_plane_v8("m838tq"), [1300, 1900, 2600, 3400, 4200, 5000, 5800, 6600, 7400],
+        [1300, 2400, 3600, 4800, 6000, 7200], synth_above=[8200],
+        start=(t7, 3.0, 7.5), muffle=0.3, turbo=True, seed=838, delta=0.09, min_cycles=2,
+        notes="pole position mclaren 570s 2016 (m838te, the p1's m838tq family)")
+
+
+def car_918():
+    t8 = "pp-ferrari-458-2013/t8_onboard_intake.wav"
+    spans = [(t8, a, b, 1100, 9600, "v8f") for a, b in
+             [(7.5, 33.5), (36.5, 60.5), (90.5, 112.0), (154.5, 176.0), (208.0, 234.0), (250.5, 279.0), (293.5, 324.0)]]
+    return car_recorded(
+        (t8, 4.5, 6.5, 900, 1150, "v8f", "mix"),
+        spans, specs.flat_plane_v8("918"), [1500, 2200, 3000, 3900, 4800, 5700, 6600, 7500, 8400, 9000],
+        [1600, 2800, 4200, 5600, 7000, 8400], muffle=0.15, seed=918,
+        notes="pole position ferrari 458 2013 (4.5 na flat-plane v8, the closest licensed match to the 918's 4.6 flat-plane v8)")
+
+
 CARS = {
+    "ferrari-laferrari": car_laferrari,
+    "mclaren-p1": car_p1,
+    "porsche-918-spyder": car_918,
+    "lamborghini-aventador-s": car_aventador,
+    "lamborghini-huracan": car_huracan,
     "amg-one": car_amg_one,
     "bmw-e92-m3": car_e92,
     "amg-c63-507": car_c63_507,

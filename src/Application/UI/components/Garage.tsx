@@ -12,10 +12,13 @@ import {
 import type {
     CarLook,
     CarTune,
+    Exhaust,
+    Induction,
     PaintFinish,
     Spoiler,
     TireCompound,
 } from '../../Racing/Garage/garage';
+import { ENGINE_IDS, ENGINES, STOCK_ENGINE } from '../../Racing/Garage/engines';
 
 export type GarageState = {
     carId: string;
@@ -52,7 +55,7 @@ type Props = {
     onHome: () => void;
 };
 
-type Tab = 'paint' | 'wheels' | 'body' | 'tuning';
+type Tab = 'paint' | 'wheels' | 'body' | 'engine' | 'tuning';
 
 const PAINTS = [
     '#f4f4f2',
@@ -118,6 +121,19 @@ const WHEELS = [
 ];
 const carName = (id: string) =>
     carOptions.find((car) => car.id === id)?.label || id;
+
+const INDUCTIONS: Array<[Induction, string, string]> = [
+    ['stock', 'Factory', 'As the engine left the factory'],
+    ['na', 'Naturally aspirated', 'Turbos off: sharp, linear, a lot less power'],
+    ['twin', 'Twin turbo', 'Big midrange once they spool'],
+    ['quad', 'Quad turbo', 'Huge power up top, real lag below it'],
+    ['super', 'Supercharger', 'Boost from idle and the blower whine'],
+];
+const EXHAUSTS: Array<[Exhaust, string]> = [
+    ['stock', 'Factory'],
+    ['sport', 'Sport'],
+    ['straight', 'Straight pipe'],
+];
 
 const Swatches = ({
     colors,
@@ -253,6 +269,41 @@ const Garage = ({ state, onClose, onHome }: Props) => {
         return () => window.removeEventListener('keydown', onKey, true);
     }, [onClose]);
 
+    // hold W (or up) or the rev button to rev the engine on the stand
+    const [revving, setRevving] = useState(false);
+    const rev = (on: boolean) => {
+        setRevving(on);
+        eventBus.dispatch('race:garageRev', { on });
+    };
+    useEffect(() => {
+        const keys = ['KeyW', 'ArrowUp'];
+        const typing = () => {
+            const el = document.activeElement as HTMLElement | null;
+            return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'SELECT'));
+        };
+        const down = (event: KeyboardEvent) => {
+            if (!keys.includes(event.code) || event.repeat || typing()) return;
+            rev(true);
+        };
+        const up = (event: KeyboardEvent) => {
+            if (keys.includes(event.code)) rev(false);
+        };
+        const off = () => rev(false);
+        window.addEventListener('keydown', down);
+        window.addEventListener('keyup', up);
+        window.addEventListener('blur', off);
+        return () => {
+            window.removeEventListener('keydown', down);
+            window.removeEventListener('keyup', up);
+            window.removeEventListener('blur', off);
+            eventBus.dispatch('race:garageRev', { on: false });
+        };
+    }, []);
+
+    const stockEngine = STOCK_ENGINE[carId] || '';
+    const engineId = tune.engine === 'stock' ? stockEngine : tune.engine;
+    const turbocharged = Boolean(ENGINES[engineId]?.turbo);
+
     const tuned = !isStockSetup(tune, look);
     const stats = state?.stats;
 
@@ -284,7 +335,7 @@ const Garage = ({ state, onClose, onHome }: Props) => {
             </div>
             <div className="garage-panel">
                 <div className="garage-tabs">
-                    {(['paint', 'wheels', 'body', 'tuning'] as Tab[]).map(
+                    {(['paint', 'wheels', 'body', 'engine', 'tuning'] as Tab[]).map(
                         (name) => (
                             <button
                                 type="button"
@@ -422,6 +473,84 @@ const Garage = ({ state, onClose, onHome }: Props) => {
                                 onChange={(ride) => setL({ ride })}
                             />
                         </>
+                    )}
+                    {tab === 'engine' && (
+                        <>
+                            <h4>Engine</h4>
+                            <div className="garage-options column">
+                                {[stockEngine, ...ENGINE_IDS.filter((id) => id !== stockEngine)]
+                                    .filter((id) => ENGINES[id])
+                                    .map((id) => {
+                                        const factory = id === stockEngine;
+                                        const on = factory
+                                            ? tune.engine === 'stock' || tune.engine === id
+                                            : tune.engine === id;
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={id}
+                                                className={on ? 'on' : ''}
+                                                onClick={() => setT({ engine: factory ? 'stock' : id })}
+                                            >
+                                                <strong>
+                                                    {factory ? 'Factory: ' : ''}
+                                                    {ENGINES[id].label}
+                                                </strong>
+                                                <small>{ENGINES[id].detail}</small>
+                                            </button>
+                                        );
+                                    })}
+                            </div>
+                            <h4>Induction</h4>
+                            <div className="garage-options column">
+                                {INDUCTIONS.map(([induction, label, hint]) => {
+                                    // what it already has is just the factory setup
+                                    const same =
+                                        (induction === 'na' && !turbocharged) ||
+                                        (induction === 'twin' && turbocharged);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={induction}
+                                            className={tune.induction === induction ? 'on' : ''}
+                                            disabled={same}
+                                            onClick={() => setT({ induction })}
+                                        >
+                                            <strong>{label}</strong>
+                                            <small>{same ? 'That is how this engine comes' : hint}</small>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <h4>Exhaust</h4>
+                            <div className="garage-options">
+                                {EXHAUSTS.map(([exhaust, label]) => (
+                                    <button
+                                        type="button"
+                                        key={exhaust}
+                                        className={tune.exhaust === exhaust ? 'on' : ''}
+                                        onClick={() => setT({ exhaust })}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                    {(tab === 'engine' || tab === 'tuning') && (
+                        <button
+                            type="button"
+                            className={`garage-rev ${revving ? 'on' : ''}`}
+                            onPointerDown={(e) => {
+                                (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+                                rev(true);
+                            }}
+                            onPointerUp={() => rev(false)}
+                            onPointerCancel={() => rev(false)}
+                            onContextMenu={(e) => e.preventDefault()}
+                        >
+                            Hold to rev (or hold W)
+                        </button>
                     )}
                     {tab === 'tuning' && (
                         <>

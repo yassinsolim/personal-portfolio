@@ -51,6 +51,61 @@
       "url": "https://ftpmirror.your.org/pub/misc/sonniss2017/individual/Pole%20Position%20-%20Car%20Debris%2C%20Impacts%20%26%20Crashes/peugeot_106_dropped_5m_on_metal_plates_zaxcom_holophone_1.wav",
       "title": "Peugeot 106 dropped 5 m on metal plates",
       "author": "Pole Position Production", "bundle": "Sonniss GDC 2017 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-lamborghini-huracan-2014/t12_ext_start_idle_blips.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2019/individual/Pole%20Position%20-%20Lamborghini%20Huracan%202014/lamborghini_huracan_t12_ext_start_idle_blips_off_XY_RSM191.wav",
+      "title": "Lamborghini Huracan 2014, exterior start, idle, blips",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2019 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-lamborghini-huracan-2014/t10_ext_bys_gearshifts.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2019/individual/Pole%20Position%20-%20Lamborghini%20Huracan%202014/lamborghini_huracan_t10_ext_bys_gearshifts_left_turn_point_XY_MKH8040.wav",
+      "title": "Lamborghini Huracan 2014, exterior bys with gearshifts",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2019 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-lamborghini-aventador-2014/t14_onboard_exhaust.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Lamborghini%20Aventador%202014/lamborghini_aventador_t14_onbrd_start_drive_ramps_stop_off_exhaust_right_DPA4062.wav",
+      "title": "Lamborghini Aventador 2014, onboard start, drive, ramps, exhaust mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-ferrari-812-2018/t7_onboard_idle_steady_blips.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Ferrari%20812%20Superfast%202018/Ferrari%2C%20812%2C%20t7%2C%20Onbrd%2C%20Start%2C%20Idle%2C%20Steady%2C%20Blips%2C%20Off%2C%20Engine%2C%20Mix.wav",
+      "title": "Ferrari 812 Superfast 2018, onboard start, idle, steady, blips, engine mix",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-ferrari-f12-2016/t2_onboard_engine.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Ferrari%20F12%202016/Ferrari_F12_t2_Onbrd_Start_Medium_Drive_Stop_Reverse_Stop_Drive_Stop_Off_Engine_Left_DPA4061.wav",
+      "title": "Ferrari F12 2016, onboard medium drive, engine mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-mclaren-570s-2016/t7_onboard_idle_steady_blips.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20McLaren%20570S%202016/McLaren_570S_t7_Onbrd_Start_Idle_Steady_in_Neutral_Blips_Off_Interior_Mix.wav",
+      "title": "McLaren 570S 2016, onboard start, idle, steady rpm in neutral, blips",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-mclaren-570s-2016/t10_onboard_exhaust.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20McLaren%20570S%202016/McLaren_570S_t10_Onbrd_Fast_Various_Exhaust_Right_DPA4062.wav",
+      "title": "McLaren 570S 2016, onboard fast drive, exhaust mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-ferrari-458-2013/t8_onboard_intake.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Ferrari%20458%202013/ferrari_458_t8_onbrd_drive_ramps_stop_off_intake_left_DPA4062.wav",
+      "title": "Ferrari 458 2013, onboard drive, ramps, intake mic",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-ferrari-458-2013/t5_ext_fast_away.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Ferrari%20458%202013/ferrari_458_t5_ext_fast_away_by_XY_RSM191.wav",
+      "title": "Ferrari 458 2013, exterior fast away, by",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-lamborghini-aventador-2014/t9_ext_fast_bys.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Lamborghini%20Aventador%202014/lamborghini_aventador_t9_ext_fast_by_four_times_ORTF_MKH8040.wav",
+      "title": "Lamborghini Aventador 2014, exterior fast by, four times",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
+    },
+    "pp-ferrari-812-2018/t2_ext_medium_by.wav": {
+      "url": "https://ftpmirror.your.org/pub/misc/sonniss2020/individual/Pole%20Position%20-%20Ferrari%20812%20Superfast%202018/Ferrari%2C%20812%2C%20t2%2C%20Ext%2C%20Medium%2C%20By%2C%20ORTF%2C%20CMC6.wav",
+      "title": "Ferrari 812 Superfast 2018, exterior medium by",
+      "author": "Pole Position Production", "bundle": "Sonniss GDC 2020 Game Audio Bundle", "license": "Sonniss GDC bundle license"
     }
   }
 }

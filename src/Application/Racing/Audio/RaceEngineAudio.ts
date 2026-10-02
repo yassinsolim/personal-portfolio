@@ -1,5 +1,6 @@
 import UIEventBus from '../../UI/EventBus';
 import CarAudio, { type RemoteCarAudioState, type Vec3 } from './CarAudio';
+import type { EngineSound } from '../Garage/engines';
 
 // glue between RaceManager and the race audio. keeps the old update() shape
 // so the driving code only has to hand over its telemetry each frame.
@@ -22,6 +23,7 @@ type EngineTelemetry = {
     barrierContact?: number;
     onKerb?: boolean;
     onGrass?: boolean;
+    engine?: EngineSound;
 };
 
 export default class RaceEngineAudio {
@@ -78,6 +80,7 @@ export default class RaceEngineAudio {
                 scrape: telemetry.barrierContact ? 1 : 0,
                 kerb: telemetry.onKerb,
                 grass: telemetry.onGrass,
+                engine: telemetry.engine,
             },
             deltaSeconds
         );

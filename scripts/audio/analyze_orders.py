@@ -25,7 +25,8 @@ OUT = os.path.join(ROOT, "static", "sounds", "race")
 CYLINDERS = {
     "amg-one": 6, "bmw-e92-m3": 8, "amg-c63-507": 8, "amg-c63s-coupe": 8, "bmw-f82-m4": 6,
     "bmw-f90-m5-competition": 8, "bmw-m8-competition-coupe": 8, "mercedes-gt63s-edition-one": 8,
-    "toyota-crown-platinum": 4,
+    "toyota-crown-platinum": 4, "ferrari-laferrari": 12, "mclaren-p1": 8, "porsche-918-spyder": 8,
+    "lamborghini-aventador-s": 12, "lamborghini-huracan": 10,
 }
 
 

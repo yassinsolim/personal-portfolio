@@ -1,0 +1,210 @@
+{
+ "version": 1,
+ "carId": "mclaren-p1",
+ "sampleRate": 48000,
+ "source": "recorded+synth-top",
+ "notes": "pole position mclaren 570s 2016 (m838te, the p1's m838tq family)",
+ "files": {
+  "opus": "mclaren-p1.webm",
+  "aac": "mclaren-p1.m4a"
+ },
+ "bytes": {
+  "opus": 189689,
+  "aac": 253311
+ },
+ "duration": 30.78,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 829.37,
+   "start": 0.08,
+   "dur": 2.025625,
+   "db": 0.0
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1899.74,
+   "start": 2.225625,
+   "dur": 1.073833,
+   "db": -0.23
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2600.45,
+   "start": 3.419458,
+   "dur": 1.1075,
+   "db": -2.01
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3400.24,
+   "start": 4.646958,
+   "dur": 1.094042,
+   "db": -0.93
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 4201.31,
+   "start": 5.861,
+   "dur": 1.113938,
+   "db": -2.12
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 5000.0,
+   "start": 7.094938,
+   "dur": 1.104,
+   "db": -2.18
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5800.6,
+   "start": 8.318938,
+   "dur": 1.096437,
+   "db": -2.38
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 6597.94,
+   "start": 9.535375,
+   "dur": 1.09125,
+   "db": -2.32
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 7403.6,
+   "start": 10.746625,
+   "dur": 1.102167,
+   "db": -4.51
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1299.93,
+   "start": 11.968792,
+   "dur": 1.10775,
+   "db": -3.74
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2400.0,
+   "start": 13.196542,
+   "dur": 1.1,
+   "db": -2.59
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 3600.0,
+   "start": 14.416542,
+   "dur": 1.1,
+   "db": -0.19
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 4800.0,
+   "start": 15.636542,
+   "dur": 1.1,
+   "db": -1.79
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 6000.0,
+   "start": 16.856542,
+   "dur": 1.1,
+   "db": -3.74
+  },
+  {
+   "id": "off5",
+   "kind": "off",
+   "rpm": 7200.0,
+   "start": 18.076542,
+   "dur": 1.1,
+   "db": -5.33
+  },
+  {
+   "id": "on8",
+   "kind": "on",
+   "rpm": 8205.13,
+   "start": 19.296542,
+   "dur": 1.096875,
+   "db": -9.71
+  },
+  {
+   "id": "off6",
+   "kind": "off",
+   "rpm": 8205.13,
+   "start": 20.513417,
+   "dur": 1.096875,
+   "db": -32.81
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 21.740292,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 22.210292,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 22.680292,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 23.150292,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 23.620292,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 24.340292,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 25.160292,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 25.650292,
+   "dur": 0.45
+  },
+  {
+   "id": "start8",
+   "kind": "start",
+   "start": 26.220292,
+   "dur": 4.5
+  }
+ ]
+}
