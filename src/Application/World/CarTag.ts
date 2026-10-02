@@ -27,15 +27,11 @@ export default class CarTag {
     constructor(transition: RaceTransition) {
         this.application = new Application();
         this.transition = transition;
-        const touch = Boolean(window.matchMedia?.('(pointer: coarse)').matches);
         const element = document.createElement('div');
         element.className = 'car-tag';
         element.setAttribute('aria-hidden', 'true');
         const label = document.createElement('span');
-        label.textContent = `${touch ? 'Tap' : 'Click'} the car to race `;
-        const smile = document.createElement('b');
-        smile.textContent = ':)';
-        label.appendChild(smile);
+        label.textContent = 'Play Solo';
         element.appendChild(label);
         document.body.appendChild(element);
         this.element = element;

@@ -21,7 +21,7 @@ import {
     type AssistPreset,
 } from '../Racing/Vehicle/assists';
 import './style.css';
-import ModelCredits from './components/ModelCredits';
+import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
@@ -1029,6 +1029,7 @@ const App = () => {
                                     </button>
                                 </div>
                             )}
+                            <ShellCredits />
                             {multiplayer.connected && multiplayer.lobbyCode && (
                                 <div className="multiplayer-status">
                                     <span>
@@ -1295,7 +1296,7 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && lobbyChoiceOpen && !racePaused && !garageOpen && (
+            {raceModeActive && lobbyChoiceOpen && !garageOpen && (
                 <LobbyChoice
                     multiplayer={multiplayer}
                     playerName={playerName}
@@ -1325,7 +1326,7 @@ const App = () => {
             <div className={`garage-fade ${garageFade ? 'on' : ''}`} data-prevent-click={garageFade ? '' : undefined}>
                 <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
             </div>
-            {raceModeActive && racePaused && (
+            {raceModeActive && racePaused && !lobbyChoiceOpen && (
                 <div className="race-menu-overlay" data-prevent-click>
                     <div className="race-menu-panel" data-prevent-click>
                         <h3>{trackState.track === 'drift' ? 'Drift Park' : 'Nordschleife'} Pause</h3>
@@ -1533,7 +1534,7 @@ const App = () => {
                             Elevation: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0,
                             www.lvermgeo.rlp.de [Daten bearbeitet]; Copernicus GLO-30 DEM.
                         </p>
-                        <ModelCredits />
+                        <ShellCredits />
 
                         <div className="race-menu-actions">
                             <button
@@ -1542,6 +1543,12 @@ const App = () => {
                                 onClick={handleResumeRace}
                             >
                                 Resume Race
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setLobbyChoiceOpen(true)}
+                            >
+                                Drive with others
                             </button>
                             <button
                                 type="button"

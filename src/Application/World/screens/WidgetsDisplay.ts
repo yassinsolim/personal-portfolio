@@ -120,7 +120,7 @@ export function createWidgetsDisplay(ctx: DisplayContext): Themed<RoomDisplay> {
     const lapValue = el('div', 'rd-race-lap');
     const raceActions = el('div', 'rd-race-actions');
     raceActions.append(
-        button('Race', 'rd-btn-primary', 'Race the Nordschleife', () =>
+        button('Play Solo', 'rd-btn-primary', 'Play a solo lap of the Nordschleife', () =>
             ctx.startRace()
         ),
         el('span', 'rd-race-hint', 'or click the car')

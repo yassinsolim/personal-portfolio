@@ -1416,6 +1416,25 @@ body.race-mode-touch #ui-app {
     color: rgba(255, 255, 255, 0.72);
 }
 
+.shell-credits {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+.shell-credits p {
+    margin: 0 0 6px;
+}
+
+.shell-credits a {
+    color: inherit;
+}
+
+.look-hint .shell-credits {
+    padding-top: 2px;
+}
+
 .race-menu-credits {
     margin: -6px 0 12px;
     font-size: 10.5px;

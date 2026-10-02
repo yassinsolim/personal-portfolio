@@ -197,7 +197,7 @@ export const CREDITS: [string, string][] = [
     ['Dustin Brett', 'daedalOS, the base of yassinOS'],
     ['three.js', '3D rendering'],
     ['React', 'interface'],
-    ['Ddiaz Design, Black Snow, hashikemu, sultan', 'car models (Sketchfab)'],
+    ['hashikemu, Black Snow, Ddiaz Design, sultan, vecarz, friends of Yassin', 'car models'],
     ['Pavel Zhovner', 'Flipper Zero model (Sketchfab)'],
     ['OpenStreetMap contributors', 'Nordschleife track data (ODbL)'],
 ];

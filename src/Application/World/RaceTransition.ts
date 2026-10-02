@@ -14,6 +14,7 @@ import { isLowPowerDevice } from '../Utils/Device';
 import { reportStage } from '../Utils/loadStages';
 import { HYBRID } from '../UI/loaders/hybridConfig';
 import { prefersReducedMotion } from '../UI/loaders/variant';
+import { opensLobbyChoice } from './soloLaunch';
 
 // click the car in the room: it rocks on its springs and the camera swings
 // round behind it, landing exactly where the race camera will start, with its
@@ -107,6 +108,8 @@ export default class RaceTransition {
 
     // the homepage garage button's start: skips the fly, opens the garage
     toGarage = false;
+    // false when this launch is already a solo lap, so the lobby card stays down
+    askAfter = true;
     // race mode was on, so its end goes back to the room the long way
     private racing = false;
     // how long the camera holds on the terminal before pulling back
@@ -184,7 +187,7 @@ export default class RaceTransition {
                 if (!this.hitsCar(event.clientX, event.clientY)) return;
                 event.stopImmediatePropagation();
                 event.preventDefault();
-                void this.start();
+                void this.start({ ask: false });
             },
             true
         );
@@ -316,9 +319,10 @@ export default class RaceTransition {
         return false;
     }
 
-    async start() {
+    async start(options?: { ask?: boolean }) {
         const car = this.application.world?.car?.model;
         if (!car || this.busy) return;
+        this.askAfter = options?.ask !== false;
         this.busy = true;
         this.skipped = false;
         this.joining = false;
@@ -1072,7 +1076,14 @@ export default class RaceTransition {
         if (this.toGarage) {
             this.toGarage = false;
             if (manager.active) UIEventBus.dispatch('race:garageFromHome', {});
-        } else if (manager.active && !getInviteLobbyCode()) {
+        } else if (
+            opensLobbyChoice({
+                active: manager.active,
+                toGarage: this.toGarage,
+                hasInvite: Boolean(getInviteLobbyCode()),
+                ask: this.askAfter,
+            })
+        ) {
             UIEventBus.dispatch('race:lobbyChoice', {});
         }
     }

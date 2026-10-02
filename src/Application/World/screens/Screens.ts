@@ -283,7 +283,7 @@ export default class Screens {
             osState: () => this.osState,
             startRace: () => {
                 this.backOut(true);
-                void this.application.world.raceTransition?.start();
+                void this.application.world.raceTransition?.start({ ask: false });
             },
             bestLapMs: () => bestLocalLap(),
             focus: (target) => (target ? this.focus(target) : this.backOut()),
@@ -748,9 +748,9 @@ export default class Screens {
                 this.backOut(true);
                 this.application.world.flipper?.focus();
             }],
-            ['Race the car on the Nordschleife', () => {
+            ['Play Solo on the Nordschleife', () => {
                 this.backOut(true);
-                void this.application.world.raceTransition?.start();
+                void this.application.world.raceTransition?.start({ ask: false });
             }],
         ];
         items.forEach(([label, action]) => {
