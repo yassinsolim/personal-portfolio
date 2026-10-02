@@ -36,6 +36,7 @@ const WEB =
     'textures resized to 1024 px and converted to WebP, geometry welded and Draco compressed';
 const LITE = 'a low detail version (simplified geometry, 512 px textures)';
 const GARAGE = 'the paint and wheels can be changed in the garage';
+const REGROUPED = 'wheel and caliper parts regrouped per corner and merged by material';
 const carChanges = (ktx2MergesMeshes: boolean) =>
     `${WEB}; ${LITE}; a KTX2 texture version${
         ktx2MergesMeshes ? ' with merged meshes' : ''
@@ -133,5 +134,45 @@ export const MODEL_CREDITS: ModelCredit[] = [
         'toyota-crown-2025-9f48fc0a66e44a69a09fda2f864e5944',
         CC_BY,
         `geometry welded and Draco compressed (it has no textures); a low detail version with simplified geometry; ${GARAGE}`,
+    ),
+    sketchfabCar(
+        'Lamborghini Huracán LP 610-4',
+        '2015 Lamborghini Huracan LP610-4',
+        DDIAZ,
+        '2015-lamborghini-huracan-lp610-4-6857c07260714cbbbb3b4b1d7087604f',
+        CC_BY_NC_SA,
+        `${REGROUPED}; ${carChanges(true)}`,
+    ),
+    sketchfabCar(
+        'Lamborghini Aventador S',
+        '2017 Lamborghini Aventador S LP 740-4',
+        DDIAZ,
+        '2017-lamborghini-aventador-s-lp-740-4-c2ca558099b040ff970012300e100b75',
+        CC_BY_NC_SA,
+        `${REGROUPED}; ${carChanges(true)}`,
+    ),
+    sketchfabCar(
+        'Ferrari LaFerrari',
+        '2014 Ferrari LaFerrari',
+        DDIAZ,
+        '2014-ferrari-laferrari-8b46fa49718647de846387ef4c1e95b3',
+        CC_BY,
+        `${REGROUPED}; ${carChanges(true)}`,
+    ),
+    sketchfabCar(
+        'McLaren P1',
+        'Mclaren P1 | www.vecarz.com',
+        sketchfabAuthor('vecarz', 'heynic'),
+        'mclaren-p1-wwwvecarzcom-adae2edc721e4ce7b31c1d06a581e30a',
+        CC_BY,
+        `${REGROUPED}; ${carChanges(true)}`,
+    ),
+    sketchfabCar(
+        'Porsche 918 Spyder',
+        '2015 Porsche 918 Spyder',
+        DDIAZ,
+        '2015-porsche-918-spyder-f6d03ef13bf243c8b632ca7bacd8c0f3',
+        CC_BY_NC_SA,
+        `${REGROUPED}; ${carChanges(true)}`,
     ),
 ];

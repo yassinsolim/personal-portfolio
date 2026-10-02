@@ -137,6 +137,41 @@ original downloads, unmodified, are in `models-src/`.
   - Author: friends of Yassin, who made it and shared it with him directly (not named here). It
     has no public source or license
   - Changes: brake discs simplified, plus the same web, lite and KTX2 steps as the other cars
+- Lamborghini Huracán LP 610-4 (`static/models/Cars/lamborghini_huracan/`)
+  - Title: "2015 Lamborghini Huracan LP610-4"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2015-lamborghini-huracan-lp610-4-6857c07260714cbbbb3b4b1d7087604f
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: the wheel and caliper parts regrouped into one node per corner and merged by
+    material (`scripts/lib/wheel-groups.mjs`), then the same web, lite and KTX2 steps as the
+    other cars. The garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Lamborghini Aventador S (`static/models/Cars/lamborghini_aventador_s/`)
+  - Title: "2017 Lamborghini Aventador S LP 740-4"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2017-lamborghini-aventador-s-lp-740-4-c2ca558099b040ff970012300e100b75
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: as the Huracán
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
+- Ferrari LaFerrari (`static/models/Cars/ferrari_laferrari/`)
+  - Title: "2014 Ferrari LaFerrari"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2014-ferrari-laferrari-8b46fa49718647de846387ef4c1e95b3
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Huracán
+- McLaren P1 (`static/models/Cars/mclaren_p1/`)
+  - Title: "Mclaren P1 | www.vecarz.com"
+  - Author: vecarz (https://sketchfab.com/heynic)
+  - Source: https://sketchfab.com/3d-models/mclaren-p1-wwwvecarzcom-adae2edc721e4ce7b31c1d06a581e30a
+  - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  - Changes: as the Huracán
+- Porsche 918 Spyder (`static/models/Cars/porsche_918_spyder/`)
+  - Title: "2015 Porsche 918 Spyder"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2015-porsche-918-spyder-f6d03ef13bf243c8b632ca7bacd8c0f3
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: as the Huracán
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
 
 The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has
 no ads, sales or sponsorship.
@@ -224,6 +259,26 @@ from tiresize.com), and which figures are estimated, is in `docs/cars-drivetrain
 - Car and Driver tested: 2023 Toyota Crown Platinum
   - URL: https://www.caranddriver.com/reviews/a41711747/2023-toyota-crown-drive/
   - Usage: target top speed envelope
+
+- Lamborghini Huracán LP 610-4: Car and Driver test and the Huracán owner's handbook (gearing)
+  - URL: https://www.caranddriver.com/reviews/a15108747/2015-lamborghini-huracan-lp610-4-tested-review/
+  - Usage: gearing, top speed and acceleration envelope
+
+- Lamborghini Aventador S technical data
+  - URL: https://autointernational.com.my/WebNews/News/Year%202017/Lamborghini%20Avantador%20S%20-%202%20Mar%2017/Aventador%20S%20technical%20specs.pdf
+  - Usage: gearing, top speed and acceleration envelope
+
+- Ferrari LaFerrari technical specifications, Motor Trend test, F12berlinetta owner's manual
+  - URL: https://web.archive.org/web/20150110075807/http://www.laferrari.com/en/techicalspecifications/
+  - Usage: gearing, top speed and acceleration envelope
+
+- McLaren P1 owner's handbook
+  - URL: https://www.manualslib.com/manual/1643049/Mclaren-P1.html?page=224
+  - Usage: gearing, tyres, mass, top speed and acceleration envelope
+
+- Porsche 918 Spyder press kit (2013)
+  - URL: https://web.archive.org/web/20190721105445/https://presse.porsche.de/presskits_until_2015/products/2013/spyder/text/presskit/918_Spyder_Fahrvorstellung_EN6_hp.pdf
+  - Usage: gearing, tyres, mass, top speed and acceleration envelope
 
 ## Libraries Used by New Racing Modules
 

@@ -22,6 +22,14 @@ const TOYOTA_CROWN_ID = 'toyota-crown-platinum';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
 const BMW_M8_COMPETITION_COUPE_ID = 'bmw-m8-competition-coupe';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
+const KEEP_EXPORT_MATERIALS = new Set([
+    MERCEDES_GT63S_EDITION_ONE_ID,
+    'lamborghini-huracan',
+    'lamborghini-aventador-s',
+    'ferrari-laferrari',
+    'mclaren-p1',
+    'porsche-918-spyder',
+]);
 const BODY_BLUE = legacyColor(0x050f2f);
 const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);
 const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = legacyColor(0x040924);
@@ -400,7 +408,9 @@ export default class Car {
     }
 
     applyMaterialStyling(car: THREE.Object3D, carOption: CarOption) {
-        if (carOption.id === MERCEDES_GT63S_EDITION_ONE_ID) {
+        // these come finished from their exports; the name rules below would
+        // turn the p1's rims (a material called 'material') blue
+        if (KEEP_EXPORT_MATERIALS.has(carOption.id)) {
             return;
         }
 

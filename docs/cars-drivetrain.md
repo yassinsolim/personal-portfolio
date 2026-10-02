@@ -74,6 +74,11 @@ The mean is 0.970. Rolling radius = circumference / 2 pi. Sizes used by the cars
 | M8 Competition | 285/35 ZR20 | 0.3433 m | P: 746 revs/mile |
 | GT 63 S Edition 1 | 315/30 R21 | 0.3504 m | D: 0.970 x 722.4 mm / 2 |
 | Crown Platinum | 225/45 R21 | 0.3569 m | D: 0.970 x 735.9 mm / 2 |
+| Huracán | 305/30 R20 | 0.3351 m | D: 0.970 x 691.0 mm / 2 |
+| Aventador S | 355/25 R21 | 0.3448 m | D: 0.970 x 710.9 mm / 2 |
+| LaFerrari | 345/30 ZR20 | 0.3468 m | D: 0.970 x 715.0 mm / 2 |
+| P1 | 315/30 R20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
+| 918 Spyder | 325/30 ZR21 | 0.3533 m | D: 0.970 x 728.4 mm / 2 |
 
 The model based radius the physics used before was 0.328 to 0.360 m, up to 7% off (the C63 507's
 model wheels gave 0.331 m, the real tyre rolls at 0.308 m).
@@ -264,6 +269,104 @@ the curve is fitted to Car and Driver's full throttle run and peaks near 217 kW;
 that figure because it's what the car drives with. The 0-100 km/h target (5.6 s) is Car and
 Driver's 5.1 s to 60 mph plus the rollout and the last 2 mph.
 
+### Lamborghini Huracán LP 610-4 (2014 to 2019)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 5.2 V10, naturally aspirated | P | [Car and Driver](https://www.caranddriver.com/reviews/a15108747/2015-lamborghini-huracan-lp610-4-tested-review/) |
+| Transmission | 7-speed LDF dual clutch, two output shafts | P | Huracán owner's handbook ([STO edition, same box](https://www.manualslib.com/manual/3723878/Lamborghini-Huracan-Sto-2021.html?page=392)) |
+| Ratios | 3.133, 2.588, 1.958, 1.244, 0.979, 0.976, 0.841, R 2.647 | P | handbook |
+| Final drives | 4.89 (1st, 4th, 5th, reverse), 3.938 (2nd, 3rd, 6th, 7th) | P, D | handbook prints 3.938 and "2.48937" for the first shaft, which would make 1st reach 140 km/h; 4.89 gives the speeds below and matches a restated table ([ccdiscussion](https://ccdiscussion.com/t/2014-lamborghini-huracan-lp-610-4/7495)) |
+| Overall ratios | 15.32, 10.19, 7.711, 6.083, 4.787, 3.843, 3.312, R 12.94 | D | gear x its shaft's final drive |
+| Tyres | 245/30 R20, 305/30 R20 | P | Car and Driver spec data |
+| Idle | 1,000 rpm | E | not published |
+| Redline, limiter | 8,500 rpm | P | Lamborghini, via Car and Driver |
+| Power, torque | 449 kW at 8,250 rpm, 560 Nm at 6,500 rpm | P | Lamborghini |
+| Top speed | 325 km/h, on the limiter in 7th | P | Car and Driver ("redline ltd") |
+| 0-100 | 3.2 s | P | Lamborghini |
+| 0-60 / 0-100 / 0-150 mph | 2.5 / 5.7 / 13.3 s (+0.3 s rollout) | T | Car and Driver |
+| Mass | 1,553 kg | T | Car and Driver curb weight |
+| Launch | about 4,200 rpm | T | Car and Driver ("north of 4,000") |
+
+Estimated: the curve between the published peaks, the drag area (0.74 m2: Cd 0.39 over about
+1.9 m2) and the 30% front torque share of the Haldex coupling.
+
+### Lamborghini Aventador S LP 740-4 (2017)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | L539 6.5 V12, naturally aspirated | P | [Lamborghini technical data](https://autointernational.com.my/WebNews/News/Year%202017/Lamborghini%20Avantador%20S%20-%202%20Mar%2017/Aventador%20S%20technical%20specs.pdf) |
+| Transmission | 7-speed ISR, single clutch | P | Lamborghini |
+| Ratios | 3.909, 2.438, 1.810, 1.458, 1.185, 0.967, 0.844, R 2.929, final drive 2.867 (rear) | P | Lamborghini |
+| Tyres | 255/30 R20, 355/25 R21 | P | Lamborghini |
+| Redline, limiter | 8,500 rpm | T | [Car and Driver](https://www.caranddriver.com/reviews/a15098260/2017-lamborghini-aventador-s-first-drive-review/) |
+| Power, torque | 544 kW at 8,400 rpm, 690 Nm at 5,500 rpm | P | Lamborghini |
+| Top speed | 350 km/h | P | Lamborghini |
+| 0-100 / 0-200 / 0-300 | 2.9 / 8.8 / 24.2 s | P | Lamborghini |
+| Mass | 1,740 kg | E | dry weight 1,525 to 1,575 kg plus fluids, from spec sites; no road test of the S |
+| Weight split | 43 / 57 | P | Lamborghini |
+
+Estimated: the curve between the peaks, the drag area (0.77 m2, fitted to the 350 km/h top speed)
+and the launch revs (5,500 rpm).
+
+### Ferrari LaFerrari (2013 to 2016)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | F140FE 6.3 V12 with HY-KERS | P | [Ferrari](https://web.archive.org/web/20150110075807/http://www.laferrari.com/en/techicalspecifications/) |
+| Transmission | 7-speed dual clutch | P | Ferrari |
+| Ratios | 3.077, 2.185, 1.626, 1.286, 1.028, 0.839, 0.693, R 2.791, final drive 4.375 | P* | the F12berlinetta's ([owner's manual](https://www.manualslib.com/manual/1110293/Ferrari-2012-F12-Berlinetta.html?page=28)); [Motor Trend](https://www.motortrend.com/reviews/ferrari-laferrari-first-test/) measured the LaFerrari's axle at 4.38 and its top gear at 3.02 overall |
+| Tyres | 265/30 ZR19, 345/30 ZR20 | P | Ferrari |
+| Redline, limiter | 9,250 rpm | P | Ferrari |
+| Power | 588 kW at 9,000 rpm (V12), 120 kW motor, 708 kW system | P | Ferrari |
+| Torque | 700 Nm at 6,750 rpm (V12), over 900 Nm system | P | Ferrari |
+| Top speed | over 350 km/h | P | Ferrari (it doesn't say whether that's governed; the sim treats it as the limiter) |
+| 0-100 / 0-200 | under 3 / under 7 s | P | Ferrari |
+| Mass | 1,585 kg | T | Motor Trend curb weight |
+| Weight split | 41 / 59 | P | Ferrari |
+
+\*The LaFerrari's own ratios aren't published. Estimated: the low end of the curve where the motor
+fills in, and the drag area (0.75 m2).
+
+### McLaren P1 (2013 to 2015)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | M838TQ 3.8 twin turbo V8 with the IPAS motor | P | [P1 owner's handbook](https://www.manualslib.com/manual/1643049/Mclaren-P1.html?page=224) |
+| Transmission | 7-speed SSG dual clutch | P | handbook |
+| Ratios | 3.981, 2.613, 1.905, 1.479, 1.161, 0.906, 0.686, final drive 3.308 | P | handbook; [Motor Trend](https://www.motortrend.com/reviews/mclaren-p1-how-i-set-the-motor-trend-production-car-record/) confirms 3.31 |
+| Reverse | as 1st | E | not found |
+| Tyres | 245/35 R19, 315/30 R20 | P | handbook |
+| Redline, limiter | 8,500 rpm | P | handbook (Motor Trend lists 8,300) |
+| Power | 542 kW (engine), 132 kW (motor), 674 kW system at 7,500 rpm | P | McLaren |
+| Torque | 720 Nm from 4,000 to 7,000 rpm (engine), 900 Nm system | P | handbook, McLaren |
+| Top speed | 350 km/h, electronically limited | P | McLaren |
+| 0-100 / 0-200 / 0-300 | 2.8 / 6.8 / 16.5 s | P | McLaren |
+| Mass | 1,492 kg, with fluids and 90% fuel | P | handbook |
+| Weight split | 42 / 58 | P | handbook |
+
+Estimated: the fall past 7,500 rpm and the drag area (0.80 m2), fitted to McLaren's 0-300.
+
+### Porsche 918 Spyder (2013 to 2015)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 4.6 V8 with a rear motor and a front axle motor | P | [Porsche press kit](https://web.archive.org/web/20190721105445/https://presse.porsche.de/presskits_until_2015/products/2013/spyder/text/presskit/918_Spyder_Fahrvorstellung_EN6_hp.pdf) |
+| Transmission | 7-speed PDK | P | Porsche |
+| Ratios | 3.91, 2.29, 1.58, 1.19, 0.97, 0.83, 0.67, R 3.55, final drive 3.09 | P | Porsche |
+| Tyres | 265/35 ZR20, 325/30 ZR21 | P | Porsche |
+| Redline, limiter | 9,150 rpm | P | Porsche |
+| Power | 447 kW at 8,700 rpm (V8), 652 kW system | P | Porsche |
+| Torque | 540 Nm at 6,700 rpm (V8), up to 1,280 Nm system | P | Porsche |
+| Top speed | 345 km/h | P | Porsche |
+| 0-100 / 0-200 / 0-300 | 2.6 / 7.3 / 20.9 s | P | Porsche (the car without the Weissach package) |
+| Mass | 1,674 kg (DIN) | P | Porsche |
+| Weight split | 43 / 57 | P | Porsche |
+
+Estimated: the system curve's shape (the motors carry the low end), the 25% front share and the
+drag area (1.0 m2, fitted to the top speed and 0-300; the real car also loses its front motor past
+265 km/h, which the sim doesn't model).
+
 ## Transmissions
 
 Estimated from the gearbox type, not measured on these cars:
@@ -277,6 +380,9 @@ Estimated from the gearbox type, not measured on these cars:
 | M DCT | M4 | 0.10 s | 70% | 2,500 (T) |
 | ZF 8HP, converter | M5, M8 | 0.15 s | 40% | 3,000, converter 1.8 |
 | Direct Shift-6AT | Crown | 0.30 s | 40% | 2,400 |
+| Dual clutch | Huracán | 0.10 s | 70% | 4,200 (T) |
+| Dual clutch with a motor filling the gap | LaFerrari, P1, 918 | 0.10 s | 80% | 3,000 to 3,500 |
+| ISR, single clutch | Aventador S | 0.10 s | 0 | 5,500 |
 
 ## Tolerances
 
@@ -314,6 +420,11 @@ top speeds to the hundredth. Road test times include the 0.3 s rollout.
 | M8 Competition | 3.13 / 3.2 | 10.17 / 10.6 | 304.6 / 305 | 1,561 / 1,559 | |
 | GT 63 S | 3.15 / 3.2 | 10.37 / 10.2 T | 314.4 / 315 | 1,487 / 1,485 | 0-160: 6.75 / 6.6 T |
 | Crown Platinum | 5.72 / - | 22.90 / - | 208.0 / 208 | 1,868 / 1,866 | 0-97: 5.40 / 5.7 P and 5.4 T, 0-161: 13.85 / 13.8 T, 0-193: 20.63 / 21.1 T |
+| Huracán | 3.07 / 3.2 | 9.15 / - | 321.7 / 325 | 2,624 / 2,621 | 0-97: 2.93 / 2.8 T, 0-161: 6.18 / 6.0 T, 0-241: 13.62 / 13.6 T |
+| Aventador S | 3.15 / 2.9 | 8.85 / 8.8 | 353.7 / 350 | 1,863 / 1,862 | 0-300: 22.42 / 24.2 |
+| LaFerrari | 2.78 / 3.0 | 6.48 / 7.0 | 349.6 / 350 | 2,322 / 2,319 | |
+| P1 | 2.83 / 2.8 | 6.63 / 6.8 | 349.3 / 350 | 1,783 / 1,781 | 0-300: 15.07 / 16.5 |
+| 918 Spyder | 2.47 / 2.6 | 7.23 / 7.3 | 341.8 / 345 | 1,557 / 1,554 | 0-300: 19.00 / 20.9 |
 
 Max speed per gear at the limiter, km/h (road speed in game / from the published gearing). The
 driven wheels match the published figure within 1 km/h in every gear; road speed is a little lower
@@ -330,6 +441,11 @@ in the low gears because the wheels slip. A dash is a gear the car can't reach t
 | M8 Competition | 59/59, 91/92, 136/138, 170/172, 223/225, 293/295, -/359, -/462 |
 | GT 63 S | 52/53, 86/87, 124/126, 171/172, 232/234, 281/283, 327/329, -/393, -/471 |
 | Crown Platinum | 52/52, 92/93, 149/150, 203/205, -/275, -/348 |
+| Huracán | 70/70, 104/105, 138/139, 175/177, 222/224, 277/279, 322/324 |
+| Aventador S | 98/99, 156/158, 211/213, 262/264, 323/325, -/399, -/457 |
+| LaFerrari | 87/90, 123/127, 166/170, 210/215, 264/269, 324/329, -/399 |
+| P1 | 80/82, 122/125, 168/172, 217/221, 277/282, 357/361, -/477 |
+| 918 Spyder | 99/101, 169/172, 246/250, 328/331, -/407, -/475, -/589 |
 
 The per gear runs take the speed limiter out, so the gears above the stock limit show where drag
 stops them.

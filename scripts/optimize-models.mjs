@@ -20,6 +20,7 @@ import { MeshoptSimplifier } from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import sharp from 'sharp';
 import ts from 'typescript';
+import { groupWheels } from './lib/wheel-groups.mjs';
 
 // node 20 can't import .ts files, so strip the types with the compiler the
 // app already uses and import the result from a data url
@@ -185,6 +186,26 @@ const modelLength = (document) => {
 
 const formatMb = (bytes) => `${(bytes / 1e6).toFixed(1)} MB`;
 
+// some game rips keep dirt and damage masks in COLOR_0 (alpha 0 throughout);
+// three.js would multiply the paint by them. returns how many were dropped
+const dropMaskColors = (document) => {
+    let dropped = 0;
+    for (const mesh of document.getRoot().listMeshes()) {
+        for (const prim of mesh.listPrimitives()) {
+            const color = prim.getAttribute('COLOR_0');
+            if (!color || color.getElementSize() !== 4) continue;
+            let opaque = false;
+            for (let i = 0; i < color.getCount() && !opaque; i++) {
+                opaque = color.getElement(i, [])[3] > 0;
+            }
+            if (opaque) continue;
+            prim.setAttribute('COLOR_0', null);
+            dropped += 1;
+        }
+    }
+    return dropped;
+};
+
 await MeshoptSimplifier.ready;
 
 for (const model of selected) {
@@ -199,6 +220,14 @@ for (const model of selected) {
 
     const document = await io.read(input);
     const trianglesBefore = countTriangles(document);
+    // the lite pass reads the web glb, already grouped
+    if (!lite) {
+        const masks = dropMaskColors(document);
+        if (masks) console.log(`${model.id}: dropped ${masks} vertex colour masks`);
+        for (const line of groupWheels(document, model.id, model.lengthMeters)) {
+            console.log(`${model.id}: ${line}`);
+        }
+    }
     const unitsPerMeter = modelLength(document) / model.lengthMeters;
 
     // only textures are deduped. merging meshes would make the four wheels

@@ -25,11 +25,17 @@ const PAINT: Record<string, string[]> = {
     'bmw-m8-competition-coupe': ['m8competition_2020paint'],
     'mercedes-gt63s-edition-one': ['carpaint'],
     'toyota-crown-platinum': ['body', 'blue'],
+    'lamborghini-huracan': ['paint_material'],
+    'ferrari-laferrari': ['mat_carpaint_red'],
+    'porsche-918-spyder': ['paint_material'],
 };
 // the amg one's painted panels are plain 'black' too, which only counts as
-// paint off the wheels
+// paint off the wheels. the p1 and aventador name their black trim after the
+// paint
 const PAINT_EXACT: Record<string, string[]> = {
     'amg-one': ['black', 'material'],
+    'mclaren-p1': ['carpaint'],
+    'lamborghini-aventador-s': ['lambom_carpaint_max1'],
 };
 const CALIPER = /callipergloss|calliperanodised|_caliper|tire_brake|^brakes$/;
 const BRAKE = /disc|disk|brake|calip|rotor/;
@@ -114,6 +120,7 @@ type Stock = {
     clearcoatRoughness?: number;
     iridescence?: number;
     map: THREE.Texture | null;
+    vertexColors?: boolean;
     shininess?: number;
     reflectivity?: number;
     specular?: THREE.Color;
@@ -164,6 +171,7 @@ const ownMaterial = (model: THREE.Object3D, mesh: THREE.Mesh) => {
             clearcoatRoughness: current.clearcoatRoughness,
             iridescence: current.iridescence,
             map: current.map,
+            vertexColors: current.vertexColors,
             shininess: (current as unknown as THREE.MeshPhongMaterial)
                 .shininess,
             reflectivity: (current as unknown as THREE.MeshPhongMaterial)
@@ -241,6 +249,7 @@ const restore = (material: THREE.MeshPhysicalMaterial) => {
         if (stock.specular) phong.specular.copy(stock.specular);
     }
     material.map = stock.map;
+    if (stock.vertexColors !== undefined) material.vertexColors = stock.vertexColors;
     material.needsUpdate = true;
 };
 
@@ -252,8 +261,10 @@ const paintMaterial = (
     restore(material);
     if (hex) {
         material.color.set(hex);
-        // factory liveries are baked into the map, a repaint covers them
+        // factory liveries are baked into the map, a repaint covers them,
+        // and the paint masks some exports keep in their vertex colours
         material.map = null;
+        material.vertexColors = false;
     }
     if (finish !== 'stock') {
         const f = FINISHES[finish];
