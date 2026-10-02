@@ -10,6 +10,8 @@ import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
 import DriftHud, { type DriftHudState } from './components/DriftHud';
 import Minimap from './components/Minimap';
 import Garage, { GarageState } from './components/Garage';
+import CarPicker, { carThumb } from './components/CarPicker';
+import { isLowPowerDevice } from '../Utils/Device';
 import GraphicsInfo from './components/GraphicsInfo';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
@@ -268,6 +270,9 @@ const Loader = () => {
 const App = () => {
     const [showHint, setShowHint] = useState(false);
     const [selectedCar, setSelectedCar] = useState(() => getStoredCarId());
+    const [pickerOpen, setPickerOpen] = useState(false);
+    const [pickLive] = useState(() => !isLowPowerDevice());
+    const closePicker = useCallback(() => setPickerOpen(false), []);
     const [freeCamActive, setFreeCamActive] = useState(false);
     const [freeCamPending, setFreeCamPending] = useState(false);
     const [raceModeActive, setRaceModeActive] = useState(false);
@@ -589,14 +594,14 @@ const App = () => {
         }
     }, [multiplayer.lobbyCode]);
 
-    const handleCarChange = (
-        event: React.ChangeEvent<HTMLSelectElement>
-    ) => {
-        const nextCar = event.target.value;
+    const selectCar = (nextCar: string) => {
         setSelectedCar(nextCar);
         storeCarId(nextCar);
         eventBus.dispatch('carChange', nextCar);
     };
+    const handleCarChange = (
+        event: React.ChangeEvent<HTMLSelectElement>
+    ) => selectCar(event.target.value);
 
     const handleViewToggle = () => {
         if (raceModeActive || freeCamPending) return;
@@ -819,6 +824,14 @@ const App = () => {
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
             <Loader />
+            {pickerOpen && (
+                <CarPicker
+                    selected={selectedCar}
+                    live={pickLive}
+                    onSelect={selectCar}
+                    onClose={closePicker}
+                />
+            )}
             {showHint && (
                 <div
                     className={[
@@ -867,9 +880,26 @@ const App = () => {
                         </a>
                     )}
                     <div className="car-switcher" data-prevent-click>
-                        <label htmlFor="car-switcher">Car</label>
+                        <label htmlFor="car-picker-open">Car</label>
+                        <button
+                            type="button"
+                            id="car-picker-open"
+                            className="car-picker-open"
+                            aria-haspopup="dialog"
+                            onClick={() => setPickerOpen(true)}
+                        >
+                            <img src={carThumb(selectedCar)} alt="" width={64} height={36} />
+                            <span>
+                                {carOptions.find((car) => car.id === selectedCar)?.label}
+                            </span>
+                            <em>Browse</em>
+                        </button>
+                        {/* kept for scripts and the test harness */}
                         <select
                             id="car-switcher"
+                            className="car-switcher-native"
+                            aria-hidden="true"
+                            tabIndex={-1}
                             value={selectedCar}
                             onChange={handleCarChange}
                         >

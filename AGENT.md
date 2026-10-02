@@ -906,6 +906,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Low speed orientation: the surface normal, forward and body slerp rates used to drop to 1.2 /
   4.5 / 5 per second near rest, so the body trailed the road's pitch and caught up while pulling
   away (a bob). They're 8 / 8 / 10 now.
+- Car picker (`UI/components/CarPicker.tsx`): the main panel's car button opens it; cars sorted
+  by 0-100, filtered by power to weight class. Capable devices get a side panel that swaps the
+  room's car on every pick (browse in 3D); low power devices get a full screen sheet of pictures
+  that closes on a pick. The pictures are `static/images/cars/<id>.webp`, rendered from the
+  garage by `node scripts/render-car-thumbs.mjs --url <served build>` (rerun it for a new car).
+  The old `#car-switcher` select stays, hidden, for the scripts.
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling

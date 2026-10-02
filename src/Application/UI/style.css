@@ -275,6 +275,203 @@ br {
     pointer-events: auto;
 }
 
+.look-hint .car-picker-open {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 5px 10px 5px 5px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #fff;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.look-hint .car-picker-open:hover,
+.look-hint .car-picker-open:focus-visible {
+    border-color: rgba(255, 138, 22, 0.6);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.car-picker-open img {
+    width: 64px;
+    height: 36px;
+    flex: none;
+    border-radius: 6px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.car-picker-open span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.car-picker-open em {
+    font-style: normal;
+    font-size: 11px;
+    color: #ffad55;
+}
+
+.look-hint .car-switcher-native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.car-picker {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+    box-sizing: border-box;
+    background: #08090c;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    font-size: 13px;
+    pointer-events: auto;
+}
+
+/* capable devices browse with the room's car swapping behind, so the panel
+   docks left and leaves it in view */
+.car-picker.live {
+    inset: 18px auto 18px 18px;
+    width: min(560px, calc(100vw - 36px));
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(24, 25, 30, 0.92), rgba(12, 13, 16, 0.92));
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(14px);
+}
+
+.car-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 15px;
+}
+
+.car-picker button {
+    font-family: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.car-picker .car-picker-close {
+    padding: 7px 14px;
+    border: 0;
+    border-radius: 9px;
+    background: linear-gradient(180deg, #ffad55, #ff8a16);
+    color: #1a1006;
+    font-weight: 600;
+}
+
+.car-picker-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.car-picker-filters button {
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 12px;
+}
+
+.car-picker-filters button.active {
+    border-color: rgba(255, 138, 22, 0.7);
+    background: rgba(255, 138, 22, 0.16);
+}
+
+.car-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 40vw), 1fr));
+    gap: 10px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.car-card {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 8px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.04);
+    text-align: left;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.car-card:hover,
+.car-card:focus-visible {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+    outline: none;
+}
+
+.car-card.selected {
+    border-color: #ff8a16;
+    background: rgba(255, 138, 22, 0.12);
+}
+
+.car-card img {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    border-radius: 8px;
+    object-fit: cover;
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.car-card-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.car-card-class {
+    align-self: center;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #ffad55;
+}
+
+.car-card-stats {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.car-card-stats b {
+    color: #fff;
+    font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .car-card {
+        transition: none;
+    }
+}
+
 .look-hint select,
 .look-hint input {
     height: 31px;
