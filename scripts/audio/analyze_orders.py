@@ -27,6 +27,7 @@ CYLINDERS = {
     "bmw-f90-m5-competition": 8, "bmw-m8-competition-coupe": 8, "mercedes-gt63s-edition-one": 8,
     "toyota-crown-platinum": 4, "ferrari-laferrari": 12, "mclaren-p1": 8, "porsche-918-spyder": 8,
     "lamborghini-aventador-s": 12, "lamborghini-huracan": 10,
+    "bugatti-chiron-super-sport": 16, "koenigsegg-jesko": 8, "pagani-huayra": 12, "aston-martin-valkyrie": 12,
 }
 
 

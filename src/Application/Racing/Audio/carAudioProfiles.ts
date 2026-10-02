@@ -1,7 +1,8 @@
 // per-car mixing for the race audio. the loops themselves live in
-// static/sounds/race/<carId>.json + .webm/.m4a (built by scripts/audio).
-// idleRpm is the rpm the idle loop was recorded or rendered at, so the
-// engine sits on that pitch at the game's idle.
+// static/sounds/race/<carId>.json + .webm/.m4a (built by scripts/audio), or
+// in the bank a profile borrows. idleRpm is the rpm the idle loop was
+// recorded or rendered at, so the engine sits on that pitch at the game's
+// idle.
 import type { EngineSound } from '../Garage/engines';
 
 export type TurboProfile = {
@@ -19,6 +20,8 @@ export type TurboProfile = {
 
 export type CarAudioProfile = {
     engine: string;
+    // another car's loops, for an engine with no recording of its own
+    bank?: string;
     idleRpm: number;
     limiterRpm: number;
     gain: number;
@@ -45,6 +48,15 @@ const subtleTurbo = (overrides: Partial<TurboProfile> = {}): TurboProfile => ({
     hissGain: 0.02,
     ...overrides,
 });
+
+const MCLAREN_TURBO: TurboProfile = {
+    whistleHz: [2400, 7000],
+    whistleGain: 0.03,
+    spool: [2200, 4000],
+    spoolTime: 0.3,
+    releaseGain: 0.55,
+    hissGain: 0.05,
+};
 
 export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
     'amg-one': {
@@ -219,14 +231,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         offDb: [-21, -12],
         pops: { rate: 1.5, minRpm: 3500, window: 1, gain: 0.5 },
         shiftCrackle: 0.5,
-        turbo: {
-            whistleHz: [2400, 7000],
-            whistleGain: 0.03,
-            spool: [2200, 4000],
-            spoolTime: 0.3,
-            releaseGain: 0.55,
-            hissGain: 0.05,
-        },
+        turbo: MCLAREN_TURBO,
         motorWhine: { hzPerMps: 16, gain: 0.016 },
         limiterHz: 14,
     },
@@ -243,12 +248,115 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         motorWhine: { hzPerMps: 20, gain: 0.02 },
         limiterHz: 15,
     },
+    'bugatti-chiron-super-sport': {
+        engine: 'Bugatti 8.0 W16 with four turbos, 7,100 rpm',
+        idleRpm: 900,
+        limiterRpm: 7100,
+        gain: 1,
+        onDb: [-10, 0],
+        offDb: [-23, -13],
+        pops: null,
+        shiftCrackle: 0.15,
+        // the second pair of turbos comes in at 3,800
+        turbo: {
+            whistleHz: [1600, 5200],
+            whistleGain: 0.035,
+            spool: [2200, 3800],
+            spoolTime: 0.45,
+            releaseGain: 0.7,
+            hissGain: 0.06,
+        },
+        motorWhine: null,
+        limiterHz: 12,
+    },
+    'koenigsegg-jesko': {
+        engine: 'Koenigsegg 5.0 twin-turbo flat-plane V8, 8,500 rpm',
+        idleRpm: 950,
+        limiterRpm: 8500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -11],
+        pops: { rate: 2, minRpm: 3500, window: 1.2, gain: 0.6 },
+        shiftCrackle: 0.7,
+        turbo: {
+            whistleHz: [2400, 7200],
+            whistleGain: 0.035,
+            spool: [2700, 4500],
+            spoolTime: 0.3,
+            releaseGain: 0.65,
+            hissGain: 0.06,
+        },
+        motorWhine: null,
+        limiterHz: 14,
+    },
+    'pagani-huayra': {
+        engine: 'Mercedes-AMG M158 6.0 twin-turbo V12',
+        idleRpm: 850,
+        limiterRpm: 6500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -12],
+        pops: { rate: 1.5, minRpm: 3000, window: 1.2, gain: 0.55 },
+        shiftCrackle: 0.6,
+        // the wastegates chatter on every lift
+        turbo: subtleTurbo({ whistleGain: 0.03, spool: [1800, 2800], releaseGain: 0.75, hissGain: 0.05 }),
+        motorWhine: null,
+        limiterHz: 12,
+    },
+    // no recording or synth of its own: the p1's loops, from the 570s's
+    // m838te, the m840tr's family
+    'mclaren-senna': {
+        engine: 'McLaren M840TR 4.0 twin-turbo flat-plane V8',
+        bank: 'mclaren-p1',
+        idleRpm: 829,
+        limiterRpm: 8500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -12],
+        pops: { rate: 1.8, minRpm: 3500, window: 1, gain: 0.55 },
+        shiftCrackle: 0.6,
+        turbo: MCLAREN_TURBO,
+        motorWhine: null,
+        limiterHz: 14,
+    },
+    // the 918's loops, a ferrari 458 flat-plane v8 recording, with turbos
+    // and the motors on top
+    'ferrari-sf90-stradale': {
+        engine: 'Ferrari F154 4.0 twin-turbo flat-plane V8 with three motors',
+        bank: 'porsche-918-spyder',
+        idleRpm: 1015,
+        limiterRpm: 8000,
+        gain: 0.95,
+        onDb: [-10, 0],
+        offDb: [-22, -12],
+        pops: { rate: 1, minRpm: 3500, window: 1, gain: 0.45 },
+        shiftCrackle: 0.4,
+        turbo: subtleTurbo({ whistleHz: [2200, 6800], whistleGain: 0.025, spool: [2000, 3500], releaseGain: 0.4, hissGain: 0.04 }),
+        motorWhine: { hzPerMps: 18, gain: 0.02 },
+        limiterHz: 15,
+    },
+    'aston-martin-valkyrie': {
+        engine: 'Cosworth 6.5 na V12 with a motor, 11,100 rpm',
+        idleRpm: 1200,
+        limiterRpm: 11100,
+        gain: 1,
+        onDb: [-10, 0],
+        offDb: [-22, -11],
+        pops: { rate: 1, minRpm: 5000, window: 0.9, gain: 0.45 },
+        shiftCrackle: 0.5,
+        turbo: null,
+        motorWhine: { hzPerMps: 16, gain: 0.016 },
+        limiterHz: 18,
+    },
 };
 
 export const DEFAULT_CAR_AUDIO_PROFILE = CAR_AUDIO_PROFILES['bmw-e92-m3'];
 
 export const getCarAudioProfile = (carId: string) =>
     CAR_AUDIO_PROFILES[carId] || DEFAULT_CAR_AUDIO_PROFILE;
+
+// the sprite in static/sounds/race a car's engine plays
+export const bankOf = (carId: string) => CAR_AUDIO_PROFILES[carId]?.bank || carId;
 
 const DEFAULT_POPS = { rate: 1.8, minRpm: 3000, window: 1.2, gain: 0.55 };
 const louder = (pair: [number, number], db: [number, number]): [number, number] => [pair[0] + db[0], pair[1] + db[1]];

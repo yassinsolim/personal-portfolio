@@ -28,14 +28,20 @@ const PAINT: Record<string, string[]> = {
     'lamborghini-huracan': ['paint_material'],
     'ferrari-laferrari': ['mat_carpaint_red'],
     'porsche-918-spyder': ['paint_material'],
+    'bugatti-chiron-super-sport': ['paint_material'],
+    'mclaren-senna': ['paint_material'],
+    'ferrari-sf90-stradale': ['paint_material'],
 };
 // the amg one's painted panels are plain 'black' too, which only counts as
 // paint off the wheels. the p1 and aventador name their black trim after the
-// paint
+// paint, and the huayra and valkyrie their second colour
 const PAINT_EXACT: Record<string, string[]> = {
     'amg-one': ['black', 'material'],
     'mclaren-p1': ['carpaint'],
     'lamborghini-aventador-s': ['lambom_carpaint_max1'],
+    'koenigsegg-jesko': ['jeskovehicle_exterior_mm_ext1'],
+    'pagani-huayra': ['pag_huayra_paint'],
+    'aston-martin-valkyrie': ['body'],
 };
 const CALIPER = /callipergloss|calliperanodised|_caliper|tire_brake|^brakes$/;
 const BRAKE = /disc|disk|brake|calip|rotor/;

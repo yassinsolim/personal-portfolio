@@ -82,5 +82,41 @@
         "trackFront": 1.642,
         "trackRear": 1.608,
         "modelWheelRadius": 0.36
+    },
+    "bugatti-chiron-super-sport": {
+        "wheelbase": 2.724,
+        "trackFront": 1.754,
+        "trackRear": 1.678,
+        "modelWheelRadius": 0.355
+    },
+    "koenigsegg-jesko": {
+        "wheelbase": 2.703,
+        "trackFront": 1.688,
+        "trackRear": 1.669,
+        "modelWheelRadius": 0.36
+    },
+    "pagani-huayra": {
+        "wheelbase": 2.747,
+        "trackFront": 1.624,
+        "trackRear": 1.676,
+        "modelWheelRadius": 0.35
+    },
+    "mclaren-senna": {
+        "wheelbase": 2.663,
+        "trackFront": 1.648,
+        "trackRear": 1.612,
+        "modelWheelRadius": 0.34
+    },
+    "ferrari-sf90-stradale": {
+        "wheelbase": 2.65,
+        "trackFront": 1.7,
+        "trackRear": 1.636,
+        "modelWheelRadius": 0.355
+    },
+    "aston-martin-valkyrie": {
+        "wheelbase": 2.772,
+        "trackFront": 1.66,
+        "trackRear": 1.59,
+        "modelWheelRadius": 0.36
     }
 }

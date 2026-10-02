@@ -167,3 +167,78 @@ def flat_plane_v8(kind="m838tq"):
         jitter_amp=0.04, jitter_deg=0.22, cyl_spread=0.03, low_boost_db=0.5,
         seed=838 if turbo else 918,
     )
+
+
+def bugatti_w16():
+    # bugatti w16 (chiron): two narrow vr8 banks at 90 degrees on one crank,
+    # 16 cylinders firing every 45 degrees, firing order
+    # 1-14-9-4-7-12-15-6-13-8-3-16-11-2-5-10. four turbos, two of them only
+    # above 3,800 rpm, and a big silenced titanium exhaust: deep and smooth
+    # more than loud. which cylinders feed which turbo isn't published; here
+    # each turbo gets evenly spaced pulses, which is how smooth it sounds
+    order = [1, 14, 9, 4, 7, 12, 15, 6, 13, 8, 3, 16, 11, 2, 5, 10]
+    fire = firing_angles(order, [45])
+    runners = [0.34, 0.36, 0.35, 0.33]
+    paths = [
+        Path(order[k::4], runners, pipe_m=2.2 + 0.1 * k, tail_m=0.35, delay_ms=0.2 * (k % 2), gain=1.0 - 0.03 * k)
+        for k in range(4)
+    ]
+    return EngineSpec(
+        name="bugatti-w16", cylinders=16, fire_deg=fire, paths=paths,
+        redline=7100, idle=900, turbo=0.75, muffler_hz=1100, drone_notch_hz=60,
+        pipe_reflect=-0.30, runner_reflect=-0.38, blowdown_ms=1.0, intake=0.06,
+        intake_hz=650, rasp=0.04, rasp_hz=2600, mech=0.03, jitter_amp=0.035,
+        jitter_deg=0.2, cyl_spread=0.025, low_boost_db=3.0, crowding=0.3, seed=16,
+    )
+
+
+def koenigsegg_v8():
+    # koenigsegg jesko: 5.0 twin turbo flat-plane v8, a turbo per bank,
+    # 8,500 rpm. firing order taken as the usual flat-plane 1-5-3-7-4-8-2-6.
+    # short, barely silenced exhaust out of the centre of the diffuser: harder
+    # and louder than the mclaren
+    fire = firing_angles([1, 5, 3, 7, 4, 8, 2, 6], [90])
+    a = Path([1, 2, 3, 4], [0.36, 0.37, 0.37, 0.36], pipe_m=1.0, tail_m=0.2, gain=1.0)
+    b = Path([5, 6, 7, 8], [0.37, 0.36, 0.36, 0.37], pipe_m=1.05, tail_m=0.2, delay_ms=0.2, gain=0.97)
+    return EngineSpec(
+        name="koenigsegg-v8", cylinders=8, fire_deg=fire, paths=[a, b],
+        redline=8500, idle=950, turbo=0.45, muffler_hz=2400, pipe_reflect=-0.30,
+        runner_reflect=-0.42, blowdown_ms=0.8, intake=0.09, intake_hz=1000,
+        rasp=0.13, rasp_hz=3800, mech=0.03, jitter_amp=0.045, jitter_deg=0.24,
+        cyl_spread=0.035, low_boost_db=1.0, seed=170,
+    )
+
+
+def amg_m158():
+    # mercedes-amg m158 (pagani huayra): 6.0 twin turbo 60 degree v12, even
+    # 60 degree firing, a turbo per bank. the firing order is taken from
+    # mercedes' other v12s, 1-12-5-8-3-10-6-7-2-11-4-9 (1-6 right bank).
+    # pagani's titanium system ends in four pipes in the middle of the tail
+    fire = firing_angles([1, 12, 5, 8, 3, 10, 6, 7, 2, 11, 4, 9], [60])
+    right = Path([1, 2, 3, 4, 5, 6], [0.40, 0.42, 0.41, 0.41, 0.42, 0.40], pipe_m=1.8, tail_m=0.3, gain=1.0)
+    left = Path([7, 8, 9, 10, 11, 12], [0.41, 0.40, 0.42, 0.42, 0.40, 0.41], pipe_m=1.85, tail_m=0.3, delay_ms=0.2,
+                gain=0.97)
+    return EngineSpec(
+        name="amg-m158", cylinders=12, fire_deg=fire, paths=[right, left],
+        redline=6500, idle=850, turbo=0.6, muffler_hz=1700, pipe_reflect=-0.32,
+        runner_reflect=-0.40, blowdown_ms=1.0, intake=0.06, intake_hz=750,
+        rasp=0.07, rasp_hz=3000, mech=0.025, jitter_amp=0.04, jitter_deg=0.22,
+        cyl_spread=0.03, low_boost_db=2.0, crowding=0.35, seed=158,
+    )
+
+
+def cosworth_v12():
+    # cosworth 6.5 na v12 (aston martin valkyrie): 65 degree vee, even 60
+    # degree firing, 11,100 rpm. the firing order isn't published, the usual
+    # 1-7-5-11-3-9-6-12-2-8-4-10 stands in. short equal length headers and
+    # next to no silencing: an old f1 car's scream
+    fire = firing_angles([1, 7, 5, 11, 3, 9, 6, 12, 2, 8, 4, 10], [60])
+    right = Path([1, 2, 3, 4, 5, 6], [0.46] * 6, pipe_m=0.9, tail_m=0.18, gain=1.0)
+    left = Path([7, 8, 9, 10, 11, 12], [0.46] * 6, pipe_m=0.92, tail_m=0.18, delay_ms=0.2, gain=0.97)
+    return EngineSpec(
+        name="cosworth-v12", cylinders=12, fire_deg=fire, paths=[right, left],
+        redline=11100, idle=1200, turbo=0.0, muffler_hz=3800, pipe_reflect=-0.26,
+        runner_reflect=-0.44, blowdown_ms=0.55, intake=0.3, intake_hz=1500,
+        rasp=0.2, rasp_hz=4800, mech=0.025, jitter_amp=0.03, jitter_deg=0.16,
+        cyl_spread=0.02, low_boost_db=0.0, crowding=0.35, seed=650,
+    )

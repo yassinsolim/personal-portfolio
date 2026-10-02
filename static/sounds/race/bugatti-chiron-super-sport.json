@@ -1,0 +1,122 @@
+{
+ "version": 1,
+ "carId": "bugatti-chiron-super-sport",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "bugatti-w16",
+ "files": {
+  "opus": "bugatti-chiron-super-sport.webm",
+  "aac": "bugatti-chiron-super-sport.m4a"
+ },
+ "bytes": {
+  "opus": 106769,
+  "aac": 130345
+ },
+ "duration": 15.765,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 900.0,
+   "start": 0.08,
+   "dur": 1.6,
+   "db": -17.54
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1400.1,
+   "start": 1.8,
+   "dur": 1.114208,
+   "db": -1.94
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2300.32,
+   "start": 3.034208,
+   "dur": 1.0955,
+   "db": -0.94
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3200.0,
+   "start": 4.249708,
+   "dur": 1.0875,
+   "db": 0.0
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 4099.64,
+   "start": 5.457208,
+   "dur": 1.112292,
+   "db": -3.07
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 5000.0,
+   "start": 6.6895,
+   "dur": 1.104,
+   "db": -2.43
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5901.64,
+   "start": 7.9135,
+   "dur": 1.098,
+   "db": -6.43
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 6800.47,
+   "start": 9.1315,
+   "dur": 1.094042,
+   "db": -5.08
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1400.1,
+   "start": 10.345542,
+   "dur": 1.114208,
+   "db": -22.13
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2800.19,
+   "start": 11.57975,
+   "dur": 1.114208,
+   "db": -19.72
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 4400.31,
+   "start": 12.813958,
+   "dur": 1.090833,
+   "db": -24.05
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 6000.0,
+   "start": 14.024792,
+   "dur": 1.1,
+   "db": -24.43
+  }
+ ],
+ "shots": [
+  {
+   "id": "bov0",
+   "kind": "bov",
+   "start": 15.254792,
+   "dur": 0.45
+  }
+ ]
+}

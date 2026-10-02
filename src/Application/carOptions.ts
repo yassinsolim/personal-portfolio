@@ -1349,6 +1349,524 @@ export const carOptions: CarOption[] = [
             ],
         },
     },
+    {
+        id: 'bugatti-chiron-super-sport',
+        label: 'Bugatti Chiron Super Sport',
+        resourceName: 'carModelBugattiChironSuperSport',
+        modelPath:
+            'models/Cars/bugatti_chiron_super_sport/source/bugatti_chiron_super_sport.glb',
+        lengthMeters: 4.794,
+        windowTint: {
+            materials: ['csBugatti_ChironSuperSport_2022Window_Material1'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'AWD',
+            topSpeedKph: 440,
+            zeroToHundredSec: 2.4,
+            // with the top speed key, 380 without
+            speedLimitKph: 440,
+            // fitted: bugatti's 1,995 kg DIN plus a driver and test kit. it
+            // also slows the 300 to 400 stretch to bugatti's time, which more
+            // drag can't do without losing the 440
+            massKg: 2110,
+            wheelRadiusMeters: 0.355,
+            tyres: { front: '285/30 R20', rear: '355/25 R21' },
+            transmission: {
+                type: 'dct',
+                name: '7-speed DSG dual clutch (Ricardo)',
+                shiftTime: 0.1,
+                shiftTorque: 0.7,
+                launchRpm: 3500,
+            },
+            idleRpm: 900,
+            redlineRpm: 7100,
+            tachMaxRpm: 8000,
+            shiftUpRpm: 7000,
+            shiftDownRpm: 3000,
+            // overall ratios from bugatti's speed in each gear at the limiter;
+            // 7th from the 300+'s 490 km/h, the same longer gear
+            finalDrive: 1,
+            gearRatios: [9.229, 5.768, 4.395, 3.296, 2.714, 2.224, 1.882],
+            reverseRatio: 9.229,
+            steerRateLow: 0.72,
+            steerRateHigh: 1.55,
+            maxSteerAngleDeg: 33,
+            brakeDecel: 44,
+            physics: {
+                powerKw: 1177,
+                powerRpm: 7050,
+                torqueNm: 1600,
+                torqueRpm: 2250,
+                // 1,600 Nm from 2,250 to 7,000 and 1,177 kW at 7,050 are
+                // bugatti's; below 2,250, where the second pair of turbos
+                // is still waiting, is estimated
+                torqueCurve: [
+                    [900, 700],
+                    [1500, 1000],
+                    [2000, 1400],
+                    [2250, 1600],
+                    [7000, 1600],
+                    [7050, 1594.3],
+                    [7100, 1560],
+                ],
+                weightFront: 0.43,
+                cgHeight: 0.45,
+                tireGrip: 1.5,
+                cdA: 0.855,
+                clA: 0.5,
+                frontTorqueShare: 0.3,
+            },
+            references: [
+                {
+                    label: 'Bugatti Chiron Super Sport technical data',
+                    url: 'https://bugatti-newsroom.imgix.net/6673edce31d99cf64fc74087/211122_BU_Chiron%20Super%20Sport_ENG.pdf',
+                },
+                {
+                    label: 'Bugatti Chiron Super Sport press release',
+                    url: 'https://newsroom.bugatti.com/press-releases/the-bugatti-chiron-super-sport-the-quintessence-of-luxury-and-speed',
+                },
+            ],
+        },
+    },
+    {
+        id: 'koenigsegg-jesko',
+        label: 'Koenigsegg Jesko Attack',
+        resourceName: 'carModelKoenigseggJesko',
+        modelPath: 'models/Cars/koenigsegg_jesko/source/koenigsegg_jesko.glb',
+        lengthMeters: 4.61,
+        windowTint: {
+            materials: ['jeskoVehicle_Exterior_mm_windows1'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'RWD',
+            allowRwdDrift: true,
+            // koenigsegg publishes neither for the attack: the sim's figures
+            topSpeedKph: 413,
+            zeroToHundredSec: 2.5,
+            speedLimitKph: null,
+            massKg: 1420,
+            wheelRadiusMeters: 0.36,
+            tyres: { front: '265/35 R20', rear: '325/30 R21' },
+            transmission: {
+                type: 'mct',
+                name: '9-speed Light Speed Transmission, seven wet clutches',
+                shiftTime: 0.05,
+                shiftTorque: 0.8,
+                launchRpm: 4000,
+            },
+            idleRpm: 950,
+            redlineRpm: 8500,
+            tachMaxRpm: 9000,
+            shiftUpRpm: 8350,
+            shiftDownRpm: 3500,
+            // only 9th (0.66) is published. the final drive puts the
+            // absolut's 531 km/h at 8,500 rpm in 9th on the tyre's nominal
+            // size, the rest is an even spread
+            finalDrive: 3.33,
+            gearRatios: [4.62, 3.62, 2.84, 2.23, 1.75, 1.37, 1.07, 0.84, 0.66],
+            reverseRatio: 4.62,
+            steerRateLow: 0.78,
+            steerRateHigh: 1.65,
+            maxSteerAngleDeg: 34,
+            brakeDecel: 46,
+            physics: {
+                powerKw: 1195,
+                powerRpm: 7800,
+                torqueNm: 1500,
+                torqueRpm: 5100,
+                // on e85: 1,195 kW at 7,800 and 1,500 Nm at 5,100 are
+                // koenigsegg's, as is over 1,000 Nm from 2,700. the rest is
+                // estimated
+                torqueCurve: [
+                    [950, 600],
+                    [2000, 900],
+                    [2700, 1050],
+                    [4000, 1350],
+                    [5100, 1500],
+                    [6170, 1480],
+                    [7000, 1470],
+                    [7800, 1463],
+                    [8500, 1290],
+                ],
+                weightFront: 0.42,
+                cgHeight: 0.4,
+                tireGrip: 1.5,
+                cdA: 1.0,
+                clA: 2.0,
+            },
+            references: [
+                {
+                    label: 'Koenigsegg Jesko Attack technical specifications',
+                    url: 'https://www.koenigsegg.com/technical-specifications-jesko-attack',
+                },
+                {
+                    label: 'Car and Driver on the Light Speed Transmission',
+                    url: 'https://www.caranddriver.com/features/a28927301/koenigsegg-new-transmission-promises-ultraquick-shifts/',
+                },
+            ],
+        },
+    },
+    {
+        id: 'pagani-huayra',
+        label: 'Pagani Huayra',
+        resourceName: 'carModelPaganiHuayra',
+        modelPath: 'models/Cars/pagani_huayra/source/pagani_huayra.glb',
+        lengthMeters: 4.605,
+        windowTint: {
+            materials: ['pag_glass', 'PAG_HUAYRA_WINDOWS_2'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'RWD',
+            allowRwdDrift: true,
+            topSpeedKph: 370,
+            zeroToHundredSec: 3.3,
+            speedLimitKph: null,
+            massKg: 1440,
+            wheelRadiusMeters: 0.35,
+            tyres: { front: '255/35 ZR19', rear: '335/30 ZR20' },
+            transmission: {
+                type: 'amt',
+                name: '7-speed Xtrac sequential, single clutch',
+                shiftTime: 0.15,
+                shiftTorque: 0,
+                launchRpm: 3500,
+            },
+            idleRpm: 850,
+            redlineRpm: 6500,
+            tachMaxRpm: 8000,
+            shiftUpRpm: 6350,
+            shiftDownRpm: 2500,
+            // pagani publishes no ratios: overall ratios estimated from the
+            // top speed and a usual spread
+            finalDrive: 1,
+            gearRatios: [8.87, 6.019, 4.555, 3.586, 2.957, 2.515, 2.161],
+            reverseRatio: 8.87,
+            steerRateLow: 0.76,
+            steerRateHigh: 1.6,
+            maxSteerAngleDeg: 34,
+            brakeDecel: 43,
+            physics: {
+                powerKw: 537,
+                powerRpm: 5800,
+                torqueNm: 1000,
+                torqueRpm: 2250,
+                // 730 cv and 1,000 Nm are pagani's; the 2,250 to 4,500
+                // plateau, the 5,800 peak and the ends are estimates
+                torqueCurve: [
+                    [850, 450],
+                    [1500, 700],
+                    [2250, 1000],
+                    [4500, 1000],
+                    [5000, 960],
+                    [5800, 884.1],
+                    [6500, 760],
+                ],
+                weightFront: 0.44,
+                cgHeight: 0.43,
+                tireGrip: 1.2,
+                cdA: 0.7,
+                clA: 0.4,
+            },
+            references: [
+                {
+                    label: 'Pagani Huayra (pagani.com, archived)',
+                    url: 'https://web.archive.org/web/20140118005046/http://www.pagani.com/huayra/default.aspx',
+                },
+                {
+                    label: 'Top Gear Pagani Huayra review',
+                    url: 'https://www.topgear.com/car-reviews/pagani/huayra',
+                },
+            ],
+        },
+    },
+    {
+        id: 'mclaren-senna',
+        label: 'McLaren Senna',
+        resourceName: 'carModelMclarenSenna',
+        modelPath: 'models/Cars/mclaren_senna/source/mclaren_senna.glb',
+        lengthMeters: 4.744,
+        windowTint: {
+            materials: ['mMcLaren_SennaLE_2018Window_Material1'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'RWD',
+            allowRwdDrift: true,
+            topSpeedKph: 335,
+            zeroToHundredSec: 2.8,
+            speedLimitKph: null,
+            massKg: 1309,
+            wheelRadiusMeters: 0.34,
+            tyres: { front: '245/35 R19', rear: '315/30 R20' },
+            transmission: {
+                type: 'dct',
+                name: '7-speed SSG dual clutch',
+                shiftTime: 0.1,
+                shiftTorque: 0.7,
+                launchRpm: 3500,
+            },
+            idleRpm: 850,
+            redlineRpm: 8500,
+            tachMaxRpm: 9000,
+            shiftUpRpm: 8350,
+            shiftDownRpm: 3500,
+            // not published: the p1's ratios, from the same ssg family
+            finalDrive: 3.308,
+            gearRatios: [3.981, 2.613, 1.905, 1.479, 1.161, 0.906, 0.686],
+            reverseRatio: 3.981,
+            steerRateLow: 0.8,
+            steerRateHigh: 1.7,
+            maxSteerAngleDeg: 34,
+            brakeDecel: 47,
+            physics: {
+                powerKw: 588,
+                powerRpm: 7250,
+                torqueNm: 800,
+                torqueRpm: 5500,
+                // 800 Nm from 5,500 to 6,700 and 588 kW at 7,250 are
+                // mclaren's; below and past them are estimates
+                torqueCurve: [
+                    [850, 380],
+                    [2000, 500],
+                    [3000, 610],
+                    [4000, 700],
+                    [5500, 800],
+                    [6700, 800],
+                    [7250, 774.5],
+                    [8500, 640],
+                ],
+                weightFront: 0.41,
+                cgHeight: 0.38,
+                tireGrip: 1.35,
+                cdA: 1.0,
+                clA: 1.1,
+            },
+            references: [
+                {
+                    label: 'McLaren Senna technical specification',
+                    url: 'https://cms-assets-production.mclaren.com/1628/McLaren-Senna-Technical-Specification.pdf',
+                },
+                {
+                    label: 'Car and Driver McLaren Senna test',
+                    url: 'https://www.caranddriver.com/reviews/a25293693/2019-mclaren-senna-supercar-drive/',
+                },
+            ],
+        },
+    },
+    {
+        id: 'ferrari-sf90-stradale',
+        label: 'Ferrari SF90 Stradale',
+        resourceName: 'carModelFerrariSf90Stradale',
+        modelPath:
+            'models/Cars/ferrari_sf90_stradale/source/ferrari_sf90_stradale.glb',
+        lengthMeters: 4.71,
+        windowTint: {
+            materials: ['Ferrari_SF90Stradale_2020Window_Material'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'AWD',
+            topSpeedKph: 340,
+            zeroToHundredSec: 2.5,
+            speedLimitKph: null,
+            massKg: 1740,
+            wheelRadiusMeters: 0.355,
+            tyres: { front: '255/35 ZR20', rear: '315/30 ZR20' },
+            transmission: {
+                type: 'dct',
+                name: '8-speed dual clutch, no reverse gear',
+                shiftTime: 0.08,
+                // the motors keep pulling through the change
+                shiftTorque: 0.8,
+                launchRpm: 3000,
+            },
+            idleRpm: 1000,
+            redlineRpm: 8000,
+            tachMaxRpm: 9000,
+            shiftUpRpm: 7900,
+            shiftDownRpm: 3500,
+            // ferrari publishes no ratios: overall ratios estimated, top
+            // speed in 7th and a long 8th. the front motors back it up, the
+            // reverse here stands in for them
+            finalDrive: 1,
+            gearRatios: [11.328, 7.842, 5.927, 4.742, 3.921, 3.289, 2.832, 2.427],
+            reverseRatio: 11.328,
+            steerRateLow: 0.78,
+            steerRateHigh: 1.65,
+            maxSteerAngleDeg: 34,
+            brakeDecel: 45,
+            physics: {
+                powerKw: 735,
+                powerRpm: 7500,
+                torqueNm: 800,
+                torqueRpm: 6000,
+                // system output: 1,000 cv (735 kW) at 7,500 is ferrari's, as
+                // is the v8's own 800 Nm at 6,000. what the three motors add
+                // across the range is estimated
+                torqueCurve: [
+                    [1000, 600],
+                    [2000, 820],
+                    [3000, 900],
+                    [4000, 940],
+                    [5000, 960],
+                    [6000, 1000],
+                    [7000, 960],
+                    [7500, 935.8],
+                    [8000, 860],
+                ],
+                weightFront: 0.45,
+                cgHeight: 0.42,
+                tireGrip: 1.2,
+                cdA: 1.22,
+                clA: 0.5,
+                frontTorqueShare: 0.25,
+            },
+            references: [
+                {
+                    label: 'Ferrari SF90 Stradale press release',
+                    url: 'https://cdn.ferrari.com/cms/network/media/pdf/pr_ferrari_sf90_stradale_gbr.pdf',
+                },
+                {
+                    label: 'Car and Driver SF90 Stradale test',
+                    url: 'https://www.caranddriver.com/news/a37066187/2021-ferrari-sf90-stradale-60-mph-acceleration/',
+                },
+            ],
+        },
+    },
+    {
+        id: 'aston-martin-valkyrie',
+        label: 'Aston Martin Valkyrie',
+        resourceName: 'carModelAstonMartinValkyrie',
+        modelPath:
+            'models/Cars/aston_martin_valkyrie/source/aston_martin_valkyrie.glb',
+        lengthMeters: 4.506,
+        windowTint: {
+            materials: ['glass'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'RWD',
+            allowRwdDrift: true,
+            topSpeedKph: 354,
+            zeroToHundredSec: 2.7,
+            // aston quotes 220 mph without saying what holds it; the sim
+            // holds it there
+            speedLimitKph: 354,
+            massKg: 1355,
+            wheelRadiusMeters: 0.36,
+            tyres: { front: '265/35 ZR20', rear: '325/30 ZR21' },
+            transmission: {
+                type: 'amt',
+                name: '7-speed Ricardo sequential, single clutch',
+                shiftTime: 0.08,
+                // the motor between engine and box fills part of the gap
+                shiftTorque: 0.3,
+                launchRpm: 6000,
+            },
+            idleRpm: 1200,
+            redlineRpm: 11100,
+            tachMaxRpm: 12000,
+            shiftUpRpm: 10900,
+            shiftDownRpm: 5000,
+            // aston publishes no ratios: overall ratios estimated from the
+            // top speed and a usual spread. the motor backs it up
+            finalDrive: 1,
+            gearRatios: [14.783, 10.195, 7.781, 6.291, 5.28, 4.549, 3.995],
+            reverseRatio: 14.783,
+            steerRateLow: 0.8,
+            steerRateHigh: 1.7,
+            maxSteerAngleDeg: 33,
+            brakeDecel: 47,
+            physics: {
+                powerKw: 865,
+                powerRpm: 10500,
+                torqueNm: 900,
+                torqueRpm: 6000,
+                // v12 and motor together: 1,160 bhp at 10,500 and 900 Nm at
+                // 6,000 are aston's 2019 figures (the v12 alone: 1,000 bhp at
+                // 10,500). the shape between is estimated
+                torqueCurve: [
+                    [1200, 450],
+                    [2500, 560],
+                    [4000, 700],
+                    [5000, 820],
+                    [6000, 900],
+                    [7000, 880],
+                    [8000, 850],
+                    [9000, 820],
+                    [10000, 795],
+                    [10500, 786.7],
+                    [11100, 720],
+                ],
+                weightFront: 0.42,
+                cgHeight: 0.36,
+                tireGrip: 1.4,
+                cdA: 1.1,
+                clA: 1.3,
+            },
+            references: [
+                {
+                    label: 'Aston Martin Valkyrie specification',
+                    url: 'https://www.astonmartin.com/en/models/valkyrie',
+                },
+                {
+                    label: 'Aston Martin Valkyrie hybrid powertrain (2019)',
+                    url: 'https://media.astonmartin.com/aston-martin-valkyrie-the-ultimate-hybrid-powertrain-for-the-ultimate-hypercar/',
+                },
+            ],
+        },
+    },
 ];
 
 export const defaultCarId = 'amg-one';

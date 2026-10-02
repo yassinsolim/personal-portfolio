@@ -262,4 +262,110 @@ export const REFERENCE = {
             { kph: 300, s: 20.9, kind: 'mfr' },
         ],
     },
+    'bugatti-chiron-super-sport': {
+        variant: 'Bugatti Chiron Super Sport (2021-2022)',
+        engine: '8.0 W16 with four turbos',
+        transmission: '7-speed DSG dual clutch',
+        idleRpm: null,
+        redlineRpm: 7100,
+        // overall ratios: bugatti gives the speed in each gear at the
+        // limiter (100, 160, 210, 280, 340 and 415 km/h); 7th is the one the
+        // 300+ reached 490.48 km/h in
+        gearRatios: [9.229, 5.768, 4.395, 3.296, 2.714, 2.224, 1.882],
+        finalDrive: 1,
+        tyreRear: '355/25 R21',
+        topSpeedKph: 440,
+        speedLimitKph: 440,
+        times: [
+            { kph: 100, s: 2.4, kind: 'mfr' },
+            { kph: 200, s: 5.8, kind: 'mfr' },
+            { kph: 300, s: 12.1, kind: 'mfr' },
+            { kph: 400, s: 28.6, kind: 'mfr' },
+        ],
+    },
+    'koenigsegg-jesko': {
+        variant: 'Koenigsegg Jesko Attack (2022), on E85',
+        engine: '5.0 twin turbo flat-plane V8',
+        transmission: '9-speed Light Speed Transmission',
+        idleRpm: null,
+        redlineRpm: 8500,
+        // only 9th (0.66) is published; the final drive puts the absolut's
+        // 531 km/h at 8,500 rpm on the tyre's nominal size, the other gears
+        // are an even spread
+        gearRatios: [4.62, 3.62, 2.84, 2.23, 1.75, 1.37, 1.07, 0.84, 0.66],
+        finalDrive: 3.33,
+        tyreRear: '325/30 R21',
+        // not published for the attack: the sim's drag limit with the drag
+        // estimated from its downforce
+        topSpeedKph: 413,
+        speedLimitKph: null,
+        times: [],
+    },
+    'pagani-huayra': {
+        variant: 'Pagani Huayra coupe (2012-2017)',
+        engine: 'Mercedes-AMG M158 6.0 twin turbo V12',
+        transmission: '7-speed Xtrac sequential, single clutch',
+        idleRpm: null,
+        redlineRpm: null,
+        // not published: estimated overall ratios
+        gearRatios: [8.87, 6.019, 4.555, 3.586, 2.957, 2.515, 2.161],
+        finalDrive: 1,
+        tyreRear: '335/30 ZR20',
+        // top gear's "over 230 mph"; no times worth testing against
+        topSpeedKph: 370,
+        speedLimitKph: null,
+        times: [],
+    },
+    'mclaren-senna': {
+        variant: 'McLaren Senna (2018)',
+        engine: 'M840TR 4.0 twin turbo flat-plane V8',
+        transmission: '7-speed SSG dual clutch',
+        idleRpm: null,
+        redlineRpm: 8500,
+        // not published: the p1's ratios, from the same ssg family
+        gearRatios: [3.981, 2.613, 1.905, 1.479, 1.161, 0.906, 0.686],
+        finalDrive: 3.308,
+        tyreRear: '315/30 R20',
+        topSpeedKph: 335,
+        speedLimitKph: null,
+        // car and driver's run (2.8 s to 60, 5.1 to 100 and 12.5 to 160 mph)
+        // is left out: it is about 15% behind mclaren's own figures, and no
+        // car can meet both
+        times: [
+            { kph: 100, s: 2.8, kind: 'mfr' },
+            { kph: 200, s: 6.8, kind: 'mfr' },
+        ],
+    },
+    'ferrari-sf90-stradale': {
+        variant: 'Ferrari SF90 Stradale (2020)',
+        engine: 'F154 4.0 twin turbo flat-plane V8 with three motors',
+        transmission: '8-speed dual clutch',
+        idleRpm: null,
+        redlineRpm: 8000,
+        // not published: estimated overall ratios, top speed in 7th
+        gearRatios: [11.328, 7.842, 5.927, 4.742, 3.921, 3.289, 2.832, 2.427],
+        finalDrive: 1,
+        tyreRear: '315/30 ZR20',
+        topSpeedKph: 340,
+        speedLimitKph: null,
+        times: [
+            { kph: 100, s: 2.5, kind: 'mfr' },
+            { kph: 200, s: 6.7, kind: 'mfr' },
+            { kph: 60 * MPH, s: cd(2.0), kind: 'test' },
+        ],
+    },
+    'aston-martin-valkyrie': {
+        variant: 'Aston Martin Valkyrie coupe (2021)',
+        engine: 'Cosworth 6.5 na V12 with a motor between engine and gearbox',
+        transmission: '7-speed sequential, single clutch',
+        idleRpm: 1200,
+        redlineRpm: 11100,
+        // not published: estimated overall ratios
+        gearRatios: [14.783, 10.195, 7.781, 6.291, 5.28, 4.549, 3.995],
+        finalDrive: 1,
+        tyreRear: '325/30 ZR21',
+        topSpeedKph: 354,
+        speedLimitKph: 354,
+        times: [],
+    },
 };

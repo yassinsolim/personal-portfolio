@@ -912,6 +912,16 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   that closes on a pick. The pictures are `static/images/cars/<id>.webp`, rendered from the
   garage by `node scripts/render-car-thumbs.mjs --url <served build>` (rerun it for a new car).
   The old `#car-switcher` select stays, hidden, for the scripts.
+- Second batch: Chiron Super Sport, Jesko Attack, Huayra, Senna, SF90 Stradale, Valkyrie (the
+  chiwei Valkyrie on Sketchfab has its doors open; the sohyalebret one is used). `wheel-groups.mjs`
+  now also cuts a mesh that spans several wheels (one mesh for all four rims, the Huayra and
+  Valkyrie) into per corner pieces by triangle, keeping anything away from a wheel on the body.
+  The race rig spins a `wheel_fl` style node as a whole (`resolveMappedWheelNode`), so small
+  parts like centre caps turn with the wheel and a swapped rim hides all of them.
+- Engines without a bank of their own borrow one: `bank` in `carAudioProfiles.ts` (the Senna
+  plays the P1's, the SF90 the 918's), loaded through `bankOf`. The W16, Koenigsegg V8, M158 and
+  Cosworth V12 are synthesized (`specs.py`). Unpublished gearing is estimated and marked E in
+  `docs/cars-drivetrain.md`.
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling
