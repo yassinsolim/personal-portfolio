@@ -852,8 +852,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   names, so remote clones get it too, and it copies materials before changing them.
 - Tune (`Garage/garage.ts` `applyTune`): engine map, tire compound, spring balance and damping
   (roll share and load transfer time), diff lock, final drive, brake bias, plus the aero of the
-  body kit and the ride height's effect on cg height. Mass never changes, so collisions don't
-  depend on the tune. A stock tune returns the spec unchanged (harness identical).
+  body kit and the ride height's effect on cg height. Only an engine swap changes mass. A stock
+  tune returns the spec unchanged (harness identical).
 - Leaderboard: any tune, body kit or ride height change makes the car tuned. Tuned laps are
   tagged `<car>@v4~t<code>` and live on the tuned board; the stock board still reads `%@v4`.
 - Multiplayer: the look rides on telemetry as a short code (`encodeLook`), no extra messages.
@@ -866,6 +866,24 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   is shaped around the body's own box center (the Crown's model starts at its nose), and
   `kitsThatFit` tells the garage which spoilers a car can take (the AMG One has no lid for a
   ducktail).
+- Engine bay (`Garage/engines.ts`): swap to any car's engine or five extras (Huracan V10,
+  Aventador V12, LaFerrari V12, P1 V8, 918 V8), pick induction (n/a, twin, quad, supercharger)
+  and exhaust. `applyEngine` runs first in `applyTune` (curve, idle/redline, mass, yaw inertia);
+  induction adds `spec.boost`, which spools in `VehiclePhysics.updateBoost`. The sound follows
+  `engineSound(carId, tune)` on telemetry, so the voice reloads the swapped bank with turbo,
+  blower and exhaust overrides (`engineProfile`). `tuneCode` appends `x<engine><ind><exh>`.
+- Garage revving: hold the button or W. `RaceManager.updateGarageRev` runs a free-rev sim with a
+  limiter cut; audio is unpaused while the garage is open.
+- Kits are always carbon now (no paint match). Painted rims on Phong (low tier) set low
+  reflectivity or they read as silver.
+- Wheels: `groupHubParts` puts tires, rim parts sharing the wheel material, and caps on the
+  wheel, and front brakes inside the wheel on a steering hub (`race-hub-steer-*`), so nothing
+  pops out under steering. `axleOffset` moves each model so its drawn axles sit on the physics
+  axles (the Crown's origin is at its nose, it was 3 m back).
+- Audio for the five extra engines: `build_audio.py` `car_recorded` cuts rev runs with
+  `split_runs`; tops without recordings are synthesized (`synth_fill`). Needs the venv with
+  numpy, scipy and soundfile. The 918 uses a 458 recording, the P1 a 570S, the LaFerrari an
+  F12/812 (credits list them).
 
 ## Drivetrain Notes (2026-09-28)
 - Every car runs its real gearing: published ratios and final drive, the driven tyre's rolling

@@ -3,6 +3,10 @@
 // the other players. a car with any tune or aero or ride height change sets
 // laps on the tuned board, stock cars on the stock one
 import type { PhysicsSpec } from '../Vehicle/VehiclePhysics';
+import { applyEngine, ENGINE_IDS, isStockEngine } from './engines';
+import type { Exhaust, Induction } from './engines';
+
+export type { Exhaust, Induction };
 
 export type PaintFinish =
     'stock' | 'gloss' | 'metallic' | 'pearl' | 'matte' | 'chrome';
@@ -40,6 +44,10 @@ export type CarTune = {
     speedLimiter: boolean;
     // angle kit: more steering lock, for countersteering big slides
     angleKit: boolean;
+    // 'stock' or an engine from engines.ts, and what feeds and follows it
+    engine: string;
+    induction: Induction;
+    exhaust: Exhaust;
 };
 
 export const STOCK_LOOK: CarLook = {
@@ -65,6 +73,9 @@ export const STOCK_TUNE: CarTune = {
     brakeBias: STOCK_BRAKE_BIAS,
     speedLimiter: true,
     angleKit: false,
+    engine: 'stock',
+    induction: 'stock',
+    exhaust: 'stock',
 };
 
 // what the drift build button sets: drift tires, a locked diff, a stiffer
@@ -111,6 +122,8 @@ const AERO: Record<Spoiler, { cl: number; cd: number }> = {
 };
 
 const RIDE_METERS = 0.03;
+const INDUCTIONS: Induction[] = ['stock', 'na', 'twin', 'quad', 'super'];
+const EXHAUSTS: Exhaust[] = ['stock', 'sport', 'straight'];
 // junk falls back to the middle of the range, which is stock for every setting
 const clamp = (value: number, min: number, max: number) =>
     Number.isFinite(value)
@@ -177,17 +190,29 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         brakeBias: num(source.brakeBias, STOCK_BRAKE_BIAS, LIMITS.brakeBias),
         speedLimiter: source.speedLimiter !== false,
         angleKit: source.angleKit === true,
+        engine:
+            typeof source.engine === 'string' && ENGINE_IDS.includes(source.engine)
+                ? source.engine
+                : 'stock',
+        induction: INDUCTIONS.includes(source.induction as Induction)
+            ? (source.induction as Induction)
+            : 'stock',
+        exhaust: EXHAUSTS.includes(source.exhaust as Exhaust)
+            ? (source.exhaust as Exhaust)
+            : 'stock',
     };
 };
 
 // the tune on top of the car's stock spec. a stock tune and look return the
 // spec unchanged, so stock cars drive exactly as before
 export const applyTune = (
-    spec: PhysicsSpec,
+    stock: PhysicsSpec,
     tune: CarTune,
-    look: CarLook
+    look: CarLook,
+    carId = ''
 ): PhysicsSpec => {
-    if (isStockSetup(tune, look)) return spec;
+    if (isStockSetup(tune, look)) return stock;
+    const spec = applyEngine(stock, carId, tune);
     const tires = TIRES[tune.tires];
     const aero = AERO[look.spoiler];
     const stiffness = (tune.springsFront + tune.springsRear) / 2;
@@ -242,7 +267,8 @@ export const isStockTune = (tune: CarTune) =>
     tune.gearing === 0 &&
     Math.abs(tune.brakeBias - STOCK_BRAKE_BIAS) < 1e-6 &&
     tune.speedLimiter &&
-    !tune.angleKit;
+    !tune.angleKit &&
+    isStockEngine(tune);
 
 // what changes the physics: the tune, aero and ride height. paint and wheels
 // are only looks
@@ -272,6 +298,12 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         ['none', 'ducktail', 'wing'].indexOf(look.spoiler).toString(36),
         tune.speedLimiter ? '' : '1',
         tune.angleKit ? 'a' : '',
+        // an x and one digit each for the engine, induction and exhaust
+        isStockEngine(tune)
+            ? ''
+            : `x${(ENGINE_IDS.indexOf(tune.engine) + 1).toString(36)}${INDUCTIONS.indexOf(
+                  tune.induction
+              ).toString(36)}${EXHAUSTS.indexOf(tune.exhaust).toString(36)}`,
     ].join('');
 };
 

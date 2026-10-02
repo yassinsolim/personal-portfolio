@@ -92,6 +92,8 @@ export default class EngineVoice {
     hissGain: GainNode | null;
     whine: OscillatorNode | null;
     whineGain: GainNode | null;
+    blower: OscillatorNode | null;
+    blowerGain: GainNode | null;
     disposed: boolean;
     shotCounts: Record<string, number>;
 
@@ -154,6 +156,8 @@ export default class EngineVoice {
         this.hissGain = null;
         this.whine = null;
         this.whineGain = null;
+        this.blower = null;
+        this.blowerGain = null;
         if (!this.remote) {
             this.buildExtras();
         }
@@ -195,6 +199,21 @@ export default class EngineVoice {
             this.whine.connect(this.whineGain);
             this.whineGain.connect(this.output);
             this.whine.start();
+        }
+        if (profile.superWhine) {
+            // a roots blower's lobes: a buzzy whine an octave of harmonics deep
+            this.blower = context.createOscillator();
+            this.blower.type = 'sawtooth';
+            this.blower.frequency.value = 300;
+            const tame = context.createBiquadFilter();
+            tame.type = 'lowpass';
+            tame.frequency.value = 4500;
+            this.blowerGain = context.createGain();
+            this.blowerGain.gain.value = 0;
+            this.blower.connect(tame);
+            tame.connect(this.blowerGain);
+            this.blowerGain.connect(this.output);
+            this.blower.start();
         }
     }
 
@@ -338,6 +357,7 @@ export default class EngineVoice {
             this.updatePops(throttle, rpm, dt);
             this.updateTurbo(throttle, rpm, span, input.boost, dt, now);
             this.updateWhine(throttle, input.speedMps, now);
+            this.updateBlower(throttle, rpm, now);
         }
         this.rpm = rpm;
         this.lastThrottle = throttle;
@@ -392,6 +412,14 @@ export default class EngineVoice {
         this.whine.frequency.setTargetAtTime(Math.max(40, whine.hzPerMps * v), now, 0.05);
         const level = whine.gain * smooth(0.5, 6, v) * (0.35 + 0.65 * throttle) * (1 - 0.5 * smooth(40, 80, v));
         this.whineGain.gain.setTargetAtTime(level, now, 0.08);
+    }
+
+    updateBlower(throttle: number, rpm: number, now: number) {
+        const blower = this.profile.superWhine;
+        if (!blower || !this.blower || !this.blowerGain) return;
+        this.blower.frequency.setTargetAtTime(Math.max(60, (rpm / 60) * blower.ratio), now, 0.03);
+        const level = blower.gain * (0.3 + 0.7 * throttle) * smooth(this.profile.idleRpm, this.profile.limiterRpm * 0.6, rpm);
+        this.blowerGain.gain.setTargetAtTime(level, now, 0.05);
     }
 
     // gear change from the gearbox model
@@ -455,7 +483,7 @@ export default class EngineVoice {
         [this.idle, ...this.onLoops, ...this.offLoops].forEach((loop) => {
             if (loop) this.stopLoop(loop, end);
         });
-        [this.whistle, this.hiss, this.whine].forEach((node) => {
+        [this.whistle, this.hiss, this.whine, this.blower].forEach((node) => {
             try {
                 node?.stop(end);
             } catch {

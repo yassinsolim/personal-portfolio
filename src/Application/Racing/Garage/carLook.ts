@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { CarLook, PaintFinish, Spoiler } from './garage';
 import { rideOffsetMeters, STOCK_LOOK } from './garage';
-import { buildKitParts, kitPaint, type KitSurface } from './bodyKit';
+import { buildKitParts, type KitSurface } from './bodyKit';
 
 // body paint material names per car, lowercase substrings
 const PAINT: Record<string, string[]> = {
@@ -115,6 +115,8 @@ type Stock = {
     iridescence?: number;
     map: THREE.Texture | null;
     shininess?: number;
+    reflectivity?: number;
+    specular?: THREE.Color;
 };
 
 const wheelRoots = (model: THREE.Object3D) => {
@@ -164,6 +166,9 @@ const ownMaterial = (model: THREE.Object3D, mesh: THREE.Mesh) => {
             map: current.map,
             shininess: (current as unknown as THREE.MeshPhongMaterial)
                 .shininess,
+            reflectivity: (current as unknown as THREE.MeshPhongMaterial)
+                .reflectivity,
+            specular: (current as unknown as THREE.MeshPhongMaterial).specular?.clone(),
         } as Stock),
     };
     mesh.material = copy;
@@ -230,8 +235,10 @@ const restore = (material: THREE.MeshPhysicalMaterial) => {
         (material as unknown as THREE.MeshPhongMaterial).isMeshPhongMaterial &&
         stock.shininess !== undefined
     ) {
-        (material as unknown as THREE.MeshPhongMaterial).shininess =
-            stock.shininess;
+        const phong = material as unknown as THREE.MeshPhongMaterial;
+        phong.shininess = stock.shininess;
+        if (stock.reflectivity !== undefined) phong.reflectivity = stock.reflectivity;
+        if (stock.specular) phong.specular.copy(stock.specular);
     }
     material.map = stock.map;
     material.needsUpdate = true;
@@ -435,8 +442,7 @@ const topField = (
 const buildKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler'],
-    paint: THREE.Material | null
+    kind: CarLook['spoiler']
 ) => {
     // mesh boxes blow up under the models' rotations, so width and length
     // come from the measured body size
@@ -450,7 +456,7 @@ const buildKit = (
     const center = bounds.getCenter(new THREE.Vector3());
     const field = topField(model, roots, width, length, center);
     const surface: KitSurface = (x, z) => field(x + center.x, z + center.z);
-    const group = buildKitParts(kind, surface, width, length, paint);
+    const group = buildKitParts(kind, surface, width, length);
     group.traverse((child) => {
         child.userData.garageKit = true;
     });
@@ -462,7 +468,7 @@ const buildKit = (
 
 // the kits that can be shaped on this car's boot (a hypercar's tail has no
 // lid for a ducktail), worked out once per model
-export const kitsThatFit = (model: THREE.Object3D, carId: string) => {
+export const kitsThatFit = (model: THREE.Object3D) => {
     const known = model.userData.garageKitsFit as Spoiler[] | undefined;
     if (known) return known;
     const roots = new Set([
@@ -470,14 +476,13 @@ export const kitsThatFit = (model: THREE.Object3D, carId: string) => {
         ...model.children.filter((child) => child.userData.raceHub),
     ]);
     const fits = (['ducktail', 'wing'] as Spoiler[]).filter((kind) => {
-        const kit = buildKit(model, roots, kind, bodyPaint(model, carId, roots));
+        const kit = buildKit(model, roots, kind);
         let meshes = 0;
         kit.traverse((child) => {
             const mesh = child as THREE.Mesh;
             if (!mesh.isMesh) return;
             meshes++;
             mesh.geometry.dispose();
-            (mesh.material as THREE.Material).dispose();
         });
         return meshes > 0;
     });
@@ -485,43 +490,19 @@ export const kitsThatFit = (model: THREE.Object3D, carId: string) => {
     return fits;
 };
 
-// the body's paint material as it is now (the garage swaps in copies)
-const bodyPaint = (
-    model: THREE.Object3D,
-    carId: string,
-    roots: Set<THREE.Object3D>
-) => {
-    let found: THREE.Material | null = null;
-    model.traverse((child) => {
-        const mesh = child as THREE.Mesh;
-        if (found || !mesh.isMesh || Array.isArray(mesh.material)) return;
-        if (child.userData.garageKit || underAny(mesh, roots, model)) return;
-        if (isPaint(carId, (mesh.material as THREE.Material).name || ''))
-            found = mesh.material as THREE.Material;
-    });
-    return found;
-};
-
 const setKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler'],
-    carId: string
+    kind: CarLook['spoiler']
 ) => {
-    const paint = bodyPaint(model, carId, roots);
     const old = model.getObjectByName('garage-kit');
-    if (old && old.userData.kind === kind) {
-        // a repaint swaps the body's material, the ducktail follows it
-        const tail = old.getObjectByName('garage-ducktail') as THREE.Mesh | undefined;
-        if (tail && paint) kitPaint(paint, tail.material as THREE.Material);
-        return;
-    }
+    if (old && old.userData.kind === kind) return;
     if (old) {
         old.removeFromParent();
         old.traverse((child) => (child as THREE.Mesh).geometry?.dispose());
     }
     if (kind === 'none') return;
-    const kit = buildKit(model, roots, kind, paint);
+    const kit = buildKit(model, roots, kind);
     kit.userData.kind = kind;
     model.add(kit);
 };
@@ -700,80 +681,97 @@ const setWheels = (
         new THREE.Matrix4().compose(new THREE.Vector3(), m.quaternion, m.scale);
     roots.forEach((root) => {
         if (root.userData.garageDonor === donorId) return;
-        const myParts = wheelParts(model, root);
-        const myBox = partsBox(myParts);
-        if (myBox.isEmpty()) return;
-        const mySide =
-            Math.sign(
-                myBox.getCenter(new THREE.Vector3()).applyMatrix4(toParent(model)).x
-            ) || 1;
-        // the donor wheel on the same side, cut to that side when the donor
-        // keeps a whole axle in one node (the amg one)
-        let theirParts: Part[] = [];
-        for (const candidate of donorRoots) {
-            theirParts = sidePart(donor, wheelParts(donor, candidate), mySide);
-            if (theirParts.length) break;
-        }
-        const theirBox = partsBox(theirParts);
-        if (theirBox.isEmpty()) return;
-        // a donor wheel node can hold only the rim (the e92's): then it's
-        // sized by its real tire and goes inside this car's tire
-        const theirTire = theirParts.some((part) => part.part === 'tire');
-        const mySize = myBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model));
-        const theirSize = theirBox
-            .getSize(new THREE.Vector3())
-            .applyMatrix4(toParent(donor));
-        // diameter is the larger of the height and length in the parent
-        // frame. this car sits on its wheels as they are drawn; a donor node
-        // well short of its race wheel radius holds only the rim, which is
-        // sized by that radius so it lands inside this car's tire
-        const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
-        const theirOwn = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
-        const theirRace = 2 * (Number(donor.userData.raceWheelRadius) || 0);
-        const theirDiameter =
-            theirOwn >= theirRace * RIM_ONLY_SHARE ? theirOwn : theirRace;
-        if (!(myDiameter > 0 && theirDiameter > 0)) return;
-        const k = myDiameter / theirDiameter;
-        // the new rim and tyre take this car's tyre width, so they sit in the
-        // arch like the factory ones instead of poking out or sinking in
-        const kx = THREE.MathUtils.clamp(
-            Math.abs(mySize.x) / Math.max(1e-6, Math.abs(theirSize.x) * k),
-            0.7,
-            1.5
-        ) * k;
-        // donor model frame -> parent frame, rescaled about the wheel center
-        // -> this model -> this wheel root
-        const theirCenter = theirBox.getCenter(new THREE.Vector3());
-        const myCenter = myBox.getCenter(new THREE.Vector3());
-        const transform = new THREE.Matrix4()
-            .makeTranslation(myCenter.x, myCenter.y, myCenter.z)
-            .multiply(toParent(model).invert())
-            .multiply(new THREE.Matrix4().makeScale(kx, k, k))
-            .multiply(toParent(donor))
-            .multiply(
-                new THREE.Matrix4().makeTranslation(
-                    -theirCenter.x,
-                    -theirCenter.y,
-                    -theirCenter.z
-                )
-            );
-        const toRoot = new THREE.Matrix4()
-            .copy(root.matrixWorld)
-            .invert()
-            .multiply(model.matrixWorld);
-        theirParts.forEach((part) => {
-            const copy = new THREE.Mesh(part.geometry, part.material);
-            // a width change isn't a plain scale in the wheel's frame, so the
-            // matrix is set as it is
-            copy.matrixAutoUpdate = false;
-            copy.matrix
-                .multiplyMatrices(toRoot, transform)
-                .multiply(part.matrix);
-            copy.castShadow = part.castShadow;
-            copy.userData.garageRim = true;
-            copy.userData.garagePart = part.part;
-            root.add(copy);
+        const own = wheelParts(model, root);
+        const ownBox = partsBox(own);
+        if (ownBox.isEmpty()) return;
+        // a node holding a whole axle (the amg one's) takes a wheel each side
+        const across = Math.abs(
+            ownBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model)).x
+        );
+        const sides =
+            across >= 0.9
+                ? [-1, 1]
+                : [
+                      Math.sign(
+                          ownBox.getCenter(new THREE.Vector3()).applyMatrix4(toParent(model)).x
+                      ) || 1,
+                  ];
+        let theirTire = false;
+        let fitted = false;
+        sides.forEach((mySide) => {
+            const myParts = sides.length > 1 ? sidePart(model, own, mySide) : own;
+            const myBox = partsBox(myParts);
+            if (myBox.isEmpty()) return;
+            // the donor wheel on the same side, cut to that side when the donor
+            // keeps a whole axle in one node
+            let theirParts: Part[] = [];
+            for (const candidate of donorRoots) {
+                theirParts = sidePart(donor, wheelParts(donor, candidate), mySide);
+                if (theirParts.length) break;
+            }
+            const theirBox = partsBox(theirParts);
+            if (theirBox.isEmpty()) return;
+            // a donor wheel node can hold only the rim (the e92's): then it's
+            // sized by its real tire and goes inside this car's tire
+            theirTire = theirTire || theirParts.some((part) => part.part === 'tire');
+            const mySize = myBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model));
+            const theirSize = theirBox
+                .getSize(new THREE.Vector3())
+                .applyMatrix4(toParent(donor));
+            // diameter is the larger of the height and length in the parent
+            // frame. this car sits on its wheels as they are drawn; a donor node
+            // well short of its race wheel radius holds only the rim, which is
+            // sized by that radius so it lands inside this car's tire
+            const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
+            const theirOwn = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
+            const theirRace = 2 * (Number(donor.userData.raceWheelRadius) || 0);
+            const theirDiameter =
+                theirOwn >= theirRace * RIM_ONLY_SHARE ? theirOwn : theirRace;
+            if (!(myDiameter > 0 && theirDiameter > 0)) return;
+            const k = myDiameter / theirDiameter;
+            // the new rim and tyre take this car's tyre width, so they sit in the
+            // arch like the factory ones instead of poking out or sinking in
+            const kx = THREE.MathUtils.clamp(
+                Math.abs(mySize.x) / Math.max(1e-6, Math.abs(theirSize.x) * k),
+                0.7,
+                1.5
+            ) * k;
+            // donor model frame -> parent frame, rescaled about the wheel center
+            // -> this model -> this wheel root
+            const theirCenter = theirBox.getCenter(new THREE.Vector3());
+            const myCenter = myBox.getCenter(new THREE.Vector3());
+            const transform = new THREE.Matrix4()
+                .makeTranslation(myCenter.x, myCenter.y, myCenter.z)
+                .multiply(toParent(model).invert())
+                .multiply(new THREE.Matrix4().makeScale(kx, k, k))
+                .multiply(toParent(donor))
+                .multiply(
+                    new THREE.Matrix4().makeTranslation(
+                        -theirCenter.x,
+                        -theirCenter.y,
+                        -theirCenter.z
+                    )
+                );
+            const toRoot = new THREE.Matrix4()
+                .copy(root.matrixWorld)
+                .invert()
+                .multiply(model.matrixWorld);
+            theirParts.forEach((part) => {
+                const copy = new THREE.Mesh(part.geometry, part.material);
+                // a width change isn't a plain scale in the wheel's frame, so the
+                // matrix is set as it is
+                copy.matrixAutoUpdate = false;
+                copy.matrix
+                    .multiplyMatrices(toRoot, transform)
+                    .multiply(part.matrix);
+                copy.castShadow = part.castShadow;
+                copy.userData.garageRim = true;
+                copy.userData.garagePart = part.part;
+                root.add(copy);
+            });
+            fitted = true;
         });
+        if (!fitted) return;
         hideOwn(root, !theirTire);
         root.userData.garageDonor = donorId;
     });
@@ -1062,13 +1060,20 @@ export const applyCarLook = (
                     material.clearcoat = RIM_PAINT.clearcoat;
                     material.clearcoatRoughness = 0.06;
                 }
+                const phong = material as unknown as THREE.MeshPhongMaterial;
+                if (phong.isMeshPhongMaterial) {
+                    // the cheap sky reflection would wash a painted rim to silver
+                    phong.reflectivity = 0.06;
+                    phong.specular.setScalar(0.35);
+                    phong.shininess = 70;
+                }
             }
             material.needsUpdate = true;
         }
     });
     // the kit is sized on the car at stock height, then moves with the body
     applyRide(model, roots, 0);
-    setKit(model, roots, look.spoiler, carId);
+    setKit(model, roots, look.spoiler);
     applyRide(model, roots, rideOffsetMeters(look));
 };
 

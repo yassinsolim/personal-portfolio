@@ -259,6 +259,11 @@ https://ftpmirror.your.org/pub/misc/ (exact URLs in `scripts/audio/sources.json`
 | Mercedes-AMG C63 507: idle, full-throttle loops above 3,700 rpm, start-up | Mercedes AMG C63 2009 (W204, same M156 6.2 V8), `Mercedes_C63_t3_Ext_Start_Fast_Away_Up_Reverse_Stop_Away_By_Up_Stop_Off_Wide_AB_MKH8060.wav` | Pole Position Production | GDC 2020 |
 | Mercedes-AMG C63 S Coupe and GT63 S Edition 1: idle, loops above 3,700 rpm, start-up | Mercedes AMG GT R 2018 (M178, sister engine of the M177), `mercedes_amg_gtr_t13_ext_start_fast_away_by_up_stop_off_wide_AB_MKH8060.wav` | Pole Position Production | GDC 2019 |
 | BMW F90 M5 Competition and M8 Competition: idle, start-up, and the eq target for their synth | BMW X5 M (S63 family), `X50104 BMW X5 M EXHAUST 1 start idle stop.wav` | FLYSOUND | GDC 2018 |
+| Lamborghini V10 (garage engine, Huracan): idle, free-rev and pass-by loops from 2,000 to 7,200 rpm, start-up | Lamborghini Huracan 2014, `lamborghini_huracan_t12_ext_start_idle_blips_off_XY_RSM191.wav` and `lamborghini_huracan_t10_ext_bys_gearshifts_left_turn_point_XY_MKH8040.wav` | Pole Position Production | GDC 2019 |
+| Lamborghini V12 (garage engine, Aventador): idle and loops to 3,600 rpm, start-up | Lamborghini Aventador 2014, `lamborghini_aventador_t14_onbrd_start_drive_ramps_stop_off_exhaust_right_DPA4062.wav` | Pole Position Production | GDC 2020 |
+| Ferrari V12 hybrid (garage engine, LaFerrari): idle and loops to 3,100 rpm, start-up | Ferrari 812 Superfast 2018 and F12 2016 (F140 V12, the LaFerrari's family), `Ferrari, 812, t7, Onbrd, Start, Idle, Steady, Blips, Off, Engine, Mix.wav` and `Ferrari_F12_t2_Onbrd_Start_Medium_Drive_Stop_Reverse_Stop_Drive_Stop_Off_Engine_Left_DPA4061.wav` | Pole Position Production | GDC 2020 |
+| McLaren V8 hybrid (garage engine, P1): idle and loops to 7,400 rpm, start-up | McLaren 570S 2016 (M838TE, the P1's M838T family), `McLaren_570S_t7_Onbrd_Start_Idle_Steady_in_Neutral_Blips_Off_Interior_Mix.wav` and `McLaren_570S_t10_Onbrd_Fast_Various_Exhaust_Right_DPA4062.wav` | Pole Position Production | GDC 2020 |
+| Porsche 918 V8 hybrid (garage engine): idle and loops to 9,000 rpm | Ferrari 458 2013 (4.5 flat-plane V8, the closest licensed match to the 918's 4.6 flat-plane V8), `ferrari_458_t8_onbrd_drive_ramps_stop_off_intake_left_DPA4062.wav` | Pole Position Production | GDC 2020 |
 | Tire squeal and scrub (all cars) | Skids & Screeches Tarmac, `Skids_Tarmac_t4_exterior_skidding_in_circles_MKH8060_stand.wav` | Pole Position Production | GDC 2018 |
 | Impacts and bumps (all cars) | Car Debris, Impacts & Crashes, `mercedes_benz_dropped_1m_on_concrete_ls-5_2.wav`, `peugeot_106_dropped_5m_on_metal_plates_zaxcom_holophone_1.wav` | Pole Position Production | GDC 2017 |
 
@@ -272,8 +277,10 @@ https://ftpmirror.your.org/pub/misc/ (exact URLs in `scripts/audio/sources.json`
     the X5 M exhaust recording.
   - C63 507, C63 S, GT63 S: only the loops below about 3,700 rpm that the recordings don't cover,
     eq'd to match the lowest recorded loop.
+  - Lamborghini V12 (L539) above 4,000 rpm and Ferrari V12 (F140FE) above 3,500 rpm, eq'd to
+    match the highest recorded loop; the V10's ends and the McLaren V8's top the same way.
   - Overrun pops, crackles, upshift crackle and turbo release one-shots for every car.
-- Runtime Web Audio (`src/Application/Racing/Audio/`): turbo whistle, hybrid motor whine, wind,
+- Runtime Web Audio (`src/Application/Racing/Audio/`): turbo whistle, supercharger whine, hybrid motor whine, wind,
   road, kerb rumble, grass and barrier scrape are generated live.
 
 ### Reference recordings (analysis only, not shipped)

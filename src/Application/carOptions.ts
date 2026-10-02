@@ -841,7 +841,6 @@ export const carOptions: CarOption[] = [
             visualForwardAxis: 'negativeZ',
             visualYawOffsetDeg: 0,
             groundOffsetMeters: 0,
-            cameraFollowDistanceOffsetMeters: 3.8,
             startForwardOffsetMeters: 0,
             wheelSpinDirectionMultiplier: -1,
             drivetrain: 'AWD',

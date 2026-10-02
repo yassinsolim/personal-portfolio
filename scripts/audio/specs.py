@@ -95,3 +95,75 @@ def t24a_crown():
         intake_hz=800, rasp=0.04, rasp_hz=2800, mech=0.035, jitter_amp=0.04,
         jitter_deg=0.25, cyl_spread=0.03, seed=24,
     )
+
+
+def lamborghini_l539():
+    # lamborghini l539: 6.5 na v12, 60 degree vee, even 60 degree firing,
+    # firing order 1-7-4-10-2-8-6-12-3-9-5-11 (1-6 right bank, 7-12 left).
+    # each bank runs a 6-into-2-into-1 manifold into its own silencer, the
+    # valved system opens under load. aventador s: 8,500 rpm.
+    fire = firing_angles([1, 7, 4, 10, 2, 8, 6, 12, 3, 9, 5, 11], [60])
+    right = Path([1, 2, 3, 4, 5, 6], [0.46, 0.48, 0.47, 0.47, 0.48, 0.46], pipe_m=1.4, tail_m=0.3, gain=1.0)
+    left = Path([7, 8, 9, 10, 11, 12], [0.47, 0.46, 0.48, 0.48, 0.46, 0.47], pipe_m=1.5, tail_m=0.3, delay_ms=0.3, gain=0.96)
+    return EngineSpec(
+        name="lamborghini-l539", cylinders=12, fire_deg=fire, paths=[right, left],
+        redline=8500, idle=1000, turbo=0.0, muffler_hz=2300, pipe_reflect=-0.30,
+        runner_reflect=-0.42, blowdown_ms=0.75, intake=0.18, intake_hz=1100,
+        rasp=0.12, rasp_hz=3600, mech=0.02, jitter_amp=0.04, jitter_deg=0.2,
+        cyl_spread=0.03, low_boost_db=1.0, crowding=0.35, seed=539,
+    )
+
+
+def ferrari_f140():
+    # ferrari f140fe (laferrari): 6.3 na v12, 65 degree vee, even 60 degree
+    # firing, firing order 1-7-5-11-3-9-6-12-2-8-4-10 (1-6 right bank),
+    # equal length 6-into-1 headers per bank, 9,250 rpm limit. the hy-kers
+    # motor rides on the gearbox
+    fire = firing_angles([1, 7, 5, 11, 3, 9, 6, 12, 2, 8, 4, 10], [60])
+    right = Path([1, 2, 3, 4, 5, 6], [0.52] * 6, pipe_m=1.2, tail_m=0.25, gain=1.0)
+    left = Path([7, 8, 9, 10, 11, 12], [0.52] * 6, pipe_m=1.25, tail_m=0.25, delay_ms=0.25, gain=0.97)
+    return EngineSpec(
+        name="ferrari-f140fe", cylinders=12, fire_deg=fire, paths=[right, left],
+        redline=9250, idle=1000, turbo=0.0, muffler_hz=2700, pipe_reflect=-0.28,
+        runner_reflect=-0.44, blowdown_ms=0.65, intake=0.24, intake_hz=1300,
+        rasp=0.15, rasp_hz=4100, mech=0.022, jitter_amp=0.035, jitter_deg=0.18,
+        cyl_spread=0.025, low_boost_db=0.5, crowding=0.35, seed=140,
+    )
+
+
+def lamborghini_v10():
+    # lamborghini/audi 5.2 fsi v10 (huracan lp610-4): 90 degree vee with split
+    # crankpins for even 72 degree firing, firing order 1-6-5-10-2-7-3-8-4-9
+    # (1-5 right bank), 5-into-1 per bank, 8,250 rpm limit
+    fire = firing_angles([1, 6, 5, 10, 2, 7, 3, 8, 4, 9], [72])
+    right = Path([1, 2, 3, 4, 5], [0.44, 0.46, 0.45, 0.46, 0.44], pipe_m=1.5, tail_m=0.32, gain=1.0)
+    left = Path([6, 7, 8, 9, 10], [0.45, 0.44, 0.46, 0.45, 0.46], pipe_m=1.6, tail_m=0.32, delay_ms=0.3, gain=0.96)
+    return EngineSpec(
+        name="lamborghini-v10", cylinders=10, fire_deg=fire, paths=[right, left],
+        redline=8250, idle=1000, turbo=0.0, muffler_hz=2200, pipe_reflect=-0.32,
+        runner_reflect=-0.42, blowdown_ms=0.8, intake=0.15, intake_hz=1000,
+        rasp=0.12, rasp_hz=3500, mech=0.02, jitter_amp=0.045, jitter_deg=0.22,
+        cyl_spread=0.035, low_boost_db=1.2, crowding=0.35, seed=610,
+    )
+
+
+def flat_plane_v8(kind="m838tq"):
+    # flat-plane v8s fire alternate banks every 90 degrees, so each bank
+    # pulses evenly every 180: the hard, high rasp. firing order 1-5-3-7-4-8-2-6
+    # (1-4 one bank). mclaren m838tq (p1): 3.8 twin turbo, a turbo per bank,
+    # 8,500 rpm. porsche 918: 4.6 na from the rs spyder, top exit pipes right
+    # behind the cabin, 9,150 rpm
+    fire = firing_angles([1, 5, 3, 7, 4, 8, 2, 6], [90])
+    turbo = kind == "m838tq"
+    a = Path([1, 2, 3, 4], [0.40, 0.41, 0.41, 0.40], pipe_m=1.3 if turbo else 0.6, tail_m=0.3 if turbo else 0.12, gain=1.0)
+    b = Path([5, 6, 7, 8], [0.41, 0.40, 0.40, 0.41], pipe_m=1.35 if turbo else 0.62, tail_m=0.3 if turbo else 0.12,
+             delay_ms=0.25, gain=0.96)
+    return EngineSpec(
+        name=f"flat-plane-{kind}", cylinders=8, fire_deg=fire, paths=[a, b],
+        redline=8500 if turbo else 9150, idle=850 if turbo else 950, turbo=0.5 if turbo else 0.0,
+        muffler_hz=1700 if turbo else 3000, pipe_reflect=-0.30, runner_reflect=-0.42,
+        blowdown_ms=0.9 if turbo else 0.7, intake=0.07 if turbo else 0.2, intake_hz=900 if turbo else 1200,
+        rasp=0.09 if turbo else 0.16, rasp_hz=3300 if turbo else 4200, mech=0.03,
+        jitter_amp=0.04, jitter_deg=0.22, cyl_spread=0.03, low_boost_db=0.5,
+        seed=838 if turbo else 918,
+    )

@@ -1,0 +1,190 @@
+{
+ "version": 1,
+ "carId": "porsche-918-spyder",
+ "sampleRate": 48000,
+ "source": "recorded",
+ "notes": "pole position ferrari 458 2013 (4.5 na flat-plane v8, the closest licensed match to the 918's 4.6 flat-plane v8)",
+ "files": {
+  "opus": "porsche-918-spyder.webm",
+  "aac": "porsche-918-spyder.m4a"
+ },
+ "bytes": {
+  "opus": 141336,
+  "aac": 201260
+ },
+ "duration": 24.425,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 1015.16,
+   "start": 0.08,
+   "dur": 2.009542,
+   "db": 0.0
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1500.0,
+   "start": 2.209542,
+   "dur": 1.12,
+   "db": -0.17
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2200.15,
+   "start": 3.449542,
+   "dur": 1.090833,
+   "db": -0.83
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 3000.0,
+   "start": 4.660375,
+   "dur": 1.12,
+   "db": -0.02
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 3899.8,
+   "start": 5.900375,
+   "dur": 1.10775,
+   "db": -1.48
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 4800.0,
+   "start": 7.128125,
+   "dur": 1.1,
+   "db": -2.12
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5697.33,
+   "start": 8.348125,
+   "dur": 1.09525,
+   "db": -3.0
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 6597.94,
+   "start": 9.563375,
+   "dur": 1.09125,
+   "db": -3.08
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 7500.0,
+   "start": 10.774625,
+   "dur": 1.104,
+   "db": -1.87
+  },
+  {
+   "id": "on8",
+   "kind": "on",
+   "rpm": 8396.5,
+   "start": 11.998625,
+   "dur": 1.100458,
+   "db": -3.37
+  },
+  {
+   "id": "on9",
+   "kind": "on",
+   "rpm": 9000.0,
+   "start": 13.219083,
+   "dur": 1.106667,
+   "db": -2.82
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 2800.19,
+   "start": 14.44575,
+   "dur": 1.114208,
+   "db": -0.33
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 4201.31,
+   "start": 15.679958,
+   "dur": 1.113938,
+   "db": -0.9
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 5597.67,
+   "start": 16.913896,
+   "dur": 1.093312,
+   "db": -2.3
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 6998.78,
+   "start": 18.127208,
+   "dur": 1.097333,
+   "db": -3.05
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 8396.5,
+   "start": 19.344542,
+   "dur": 1.100458,
+   "db": -2.53
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 20.575,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 21.045,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 21.515,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 21.985,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 22.455,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 23.175,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 23.995,
+   "dur": 0.37
+  }
+ ]
+}

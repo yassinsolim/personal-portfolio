@@ -29,9 +29,9 @@ const weave = () => {
             const g = across
                 ? ctx.createLinearGradient(x, y, x, y + tow)
                 : ctx.createLinearGradient(x, y, x + tow, y);
-            g.addColorStop(0, '#16171a');
-            g.addColorStop(0.5, '#3a3d44');
-            g.addColorStop(1, '#16171a');
+            g.addColorStop(0, '#0b0c0e');
+            g.addColorStop(0.5, '#2c2f35');
+            g.addColorStop(1, '#0b0c0e');
             ctx.fillStyle = g;
             ctx.fillRect(x, y, tow, tow);
             ctx.strokeStyle = 'rgba(0,0,0,0.25)';
@@ -64,11 +64,11 @@ export const carbonMaterial = () => {
         carbon = new THREE.MeshPhysicalMaterial({
             name: 'garage-carbon',
             map: weave(),
-            color: 0xb8bcc4,
-            roughness: 0.42,
-            metalness: 0.25,
+            color: 0x9a9fa8,
+            roughness: 0.5,
+            metalness: 0.15,
             clearcoat: 1,
-            clearcoatRoughness: 0.08,
+            clearcoatRoughness: 0.04,
         });
     }
     return carbon;
@@ -268,10 +268,10 @@ const across = (shape: THREE.Shape, depth: number) => {
 const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
     const edge = lidEdge(surface, 0, halfLength);
     if (!edge) return null;
-    const chord = 0.3;
-    const aoa = THREE.MathUtils.degToRad(9);
-    const lead = edge.z + 0.27;
-    const height = edge.y + 0.3;
+    const chord = 0.27;
+    const aoa = THREE.MathUtils.degToRad(8);
+    const lead = edge.z + 0.24;
+    const height = edge.y + 0.24;
     const carbonParts: THREE.BufferGeometry[] = [];
     const metalParts: THREE.BufferGeometry[] = [];
 
@@ -288,25 +288,26 @@ const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
     gurney.translate(0, height + trailing.y + 0.006, lead - trailing.x + 0.001);
     carbonParts.push(gurney.toNonIndexed());
 
-    // end plates, a rounded slab a little bigger than the blade's side
+    // end plates: a little longer than the blade, raked at the front and
+    // only deep enough to box in its tips
     const plate = new THREE.Shape();
-    const back0 = -0.04;
-    const back1 = chord + 0.06;
-    const low = -0.1;
-    const high = trailing.y + 0.07;
-    const r = 0.03;
-    plate.moveTo(back0 + r, low);
-    plate.lineTo(back1 - r, low + 0.03);
-    plate.quadraticCurveTo(back1, low + 0.03, back1, low + 0.03 + r);
+    const back0 = -0.02;
+    const back1 = chord + 0.05;
+    const low = Math.min(...profile.map((v) => v.y)) - 0.05;
+    const high = Math.max(...profile.map((v) => v.y)) + 0.035;
+    const r = 0.02;
+    plate.moveTo(back0 + 0.05, low);
+    plate.lineTo(back1 - r, low);
+    plate.quadraticCurveTo(back1, low, back1, low + r);
     plate.lineTo(back1, high - r);
     plate.quadraticCurveTo(back1, high, back1 - r, high);
-    plate.lineTo(back0 + 0.06, high - 0.04);
-    plate.quadraticCurveTo(back0, high - 0.05, back0, high - 0.08);
-    plate.lineTo(back0, low + r);
-    plate.quadraticCurveTo(back0, low, back0 + r, low);
+    plate.lineTo(back0 + 0.07, high);
+    plate.quadraticCurveTo(back0, high, back0, high - 0.03);
+    plate.lineTo(back0, low + 0.04);
+    plate.quadraticCurveTo(back0, low, back0 + 0.05, low);
     [-1, 1].forEach((side) => {
-        const g = across(plate, 0.006);
-        g.translate(side > 0 ? span / 2 : -span / 2 - 0.006, height, lead);
+        const g = across(plate, 0.008);
+        g.translate(side > 0 ? span / 2 : -span / 2 - 0.008, height, lead);
         carbonParts.push(g);
     });
 
@@ -331,15 +332,15 @@ const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
             const t = i / (pts.length - 1);
             const tangent = curve.getTangent(t);
             const normal = new THREE.Vector2(-tangent.y, tangent.x);
-            const w = THREE.MathUtils.lerp(0.05, 0.028, t) / 2;
+            const w = THREE.MathUtils.lerp(0.06, 0.032, t) / 2;
             left.push(p.clone().addScaledVector(normal, w));
             right.push(p.clone().addScaledVector(normal, -w));
         });
         // shape x is 'back', so the neck's points go in as (back, up) with
         // back measured from z = 0
         const shape = new THREE.Shape([...left, ...right.reverse()]);
-        const g = across(shape, 0.012);
-        g.translate(x - 0.006, 0, 0);
+        const g = across(shape, 0.014);
+        g.translate(x - 0.007, 0, 0);
         metalParts.push(g);
         const foot = new THREE.BoxGeometry(0.034, 0.008, 0.1);
         foot.translate(x, baseY + 0.001, edge.z + 0.14);
@@ -351,42 +352,24 @@ const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
     };
 };
 
-// the body's paint without its maps (liveries and dirt are laid out for the
-// body's uvs, not the kit's), kept in step with repaints by kitPaint again
-export const kitPaint = (paint: THREE.Material, into?: THREE.Material) => {
-    const source = paint as THREE.MeshPhysicalMaterial;
-    const copy = (into as THREE.MeshPhysicalMaterial) || new THREE.MeshPhysicalMaterial({ name: 'garage-kit-paint' });
-    if (source.color) copy.color.copy(source.color);
-    copy.metalness = source.metalness ?? 0.4;
-    copy.roughness = source.roughness ?? 0.35;
-    copy.clearcoat = source.clearcoat ?? 0.8;
-    copy.clearcoatRoughness = source.clearcoatRoughness ?? 0.1;
-    copy.envMapIntensity = source.envMapIntensity ?? 1;
-    copy.iridescence = source.iridescence ?? 0;
-    copy.needsUpdate = true;
-    return copy;
-};
-
-// the kit in the parent frame. the ducktail takes the body's paint when
-// there is one to take
+// the kit in the parent frame, all of it in carbon fibre
 export const buildKitParts = (
     kind: Spoiler,
     surface: KitSurface,
     width: number,
-    length: number,
-    paint: THREE.Material | null
+    length: number
 ) => {
     const group = new THREE.Group();
     const halfLength = length / 2;
     if (kind === 'ducktail') {
         const geometry = ducktail(surface, width * 0.8, halfLength);
         if (geometry) {
-            const mesh = new THREE.Mesh(geometry, paint ? kitPaint(paint) : carbonMaterial());
+            const mesh = new THREE.Mesh(geometry, carbonMaterial());
             mesh.name = 'garage-ducktail';
             group.add(mesh);
         }
     } else if (kind === 'wing') {
-        const wing = gtWing(surface, Math.min(1.75, width * 0.86), halfLength);
+        const wing = gtWing(surface, Math.min(1.6, width * 0.82), halfLength);
         if (wing) {
             const blade = new THREE.Mesh(wing.carbon, carbonMaterial());
             blade.name = 'garage-wing';

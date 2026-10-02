@@ -21,6 +21,7 @@ import {
     STOCK_TUNE,
 } from '../Garage/garage';
 import type { CarLook, CarTune } from '../Garage/garage';
+import { engineSound, type EngineSound } from '../Garage/engines';
 import DrivingInput from '../Input/DrivingInput';
 import NordschleifeTrack from '../Track/NordschleifeTrack';
 import DriftSmoke from '../Effects/DriftSmoke';
@@ -228,6 +229,8 @@ type VehicleTelemetry = {
     driftTargetDeg: number;
     trackDistance: number;
     trackLateral: number;
+    boost?: number;
+    engine: EngineSound;
 };
 
 type WheelRig = {
@@ -250,6 +253,9 @@ type WheelRig = {
     steerAxis: THREE.Vector3;
     spinSign: number;
     radius: number;
+    // brakes inside a front wheel turn with it, about its steering axis in
+    // the model's frame
+    hub?: { object: THREE.Object3D; center: THREE.Vector3; axis: THREE.Vector3 };
 };
 
 export type LinkedWheelVisualMeta = {
@@ -786,10 +792,11 @@ export default class RaceVehicle {
             this.getGeometricContactBottom(model, wheelRig) ??
             this.getWheelContactBottom(wheelRig) ??
             bbox.min.y;
+        const onAxles = this.axleOffset(model, wheelRig, option);
         model.position.set(
-            0,
+            onAxles.x,
             -rideHeight - contactBottom + (option?.race.groundOffsetMeters || 0),
-            0
+            onAxles.z
         );
         model.updateMatrixWorld(true);
 
@@ -1818,6 +1825,10 @@ export default class RaceVehicle {
         frontRightGroup.add(frontAxleSplit.rearMesh);
         rearLeftGroup.add(rearAxleSplit.frontMesh);
         rearRightGroup.add(rearAxleSplit.rearMesh);
+        // attach() below needs the groups in the model: under a detached group
+        // a part took the model's scale twice and shrank to a point at its origin
+        model.add(frontLeftGroup, frontRightGroup, rearLeftGroup, rearRightGroup);
+        model.updateMatrixWorld(true);
         this.addToyotaSplitAttachmentMeshes(
             model,
             TOYOTA_SPLIT_FRONT_ATTACHMENT_SOURCE_HINTS,
@@ -1866,7 +1877,6 @@ export default class RaceVehicle {
             model,
             TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS
         );
-        model.add(frontLeftGroup, frontRightGroup, rearLeftGroup, rearRightGroup);
 
         frontSourceNode.visible = false;
         rearSourceNode.visible = false;
@@ -3221,11 +3231,105 @@ export default class RaceVehicle {
             return false;
         };
         const hubs: THREE.Group[] = [];
-        const boxes = wheelRig.map((wheel) => {
-            const box = new THREE.Box3().setFromObject(wheel.object);
-            // discs and calipers sit a little inboard of the rim
-            return box.isEmpty() ? null : box.expandByScalar(0.08);
+        const steerHubs: THREE.Group[] = [];
+        const own = wheelRig.map((wheel) => new THREE.Box3().setFromObject(wheel.object));
+        // discs and calipers sit a little inboard of the rim
+        const boxes = own.map((wheelBox) =>
+            wheelBox.isEmpty() ? null : wheelBox.clone().expandByScalar(0.08)
+        );
+        const wheelMaterials = wheelRig.map((wheel) => {
+            const names = new Set<string>();
+            wheel.object.traverse((child) => {
+                const mesh = child as THREE.Mesh;
+                if (mesh.isMesh && !Array.isArray(mesh.material))
+                    names.add(mesh.material.name);
+            });
+            return names;
         });
+        const middle = new THREE.Box3().setFromObject(model).getCenter(new THREE.Vector3());
+        const wheelCenter = new THREE.Vector3();
+        const ownSize = new THREE.Vector3();
+        const partCenter = new THREE.Vector3();
+        const partSize = new THREE.Vector3();
+        // wheel parts a model keeps outside the node, whatever their material
+        // is called: a tyre round the axle as big as the wheel or more (the
+        // e92's and m4's), more of the wheel's own material (the m8's face,
+        // the gt63's spokes) and a center cap on the outer face
+        const isWheelPart = (index: number, name: string, part: THREE.Box3) => {
+            const wheelBox = own[index];
+            if (wheelBox.isEmpty() || FIXED_BRAKE_PART_HINT_REGEX.test(name)) return false;
+            wheelBox.getSize(ownSize);
+            wheelBox.getCenter(wheelCenter);
+            // a node holding a whole axle (the amg one's) is linked by its own code
+            if (ownSize.x > 0.7 * Math.min(ownSize.y, ownSize.z)) return false;
+            part.getSize(partSize);
+            part.getCenter(partCenter);
+            const dy = Math.abs(partCenter.y - wheelCenter.y) / ownSize.y;
+            const dz = Math.abs(partCenter.z - wheelCenter.z) / ownSize.z;
+            // inside the wheel's circle, not a body panel near it
+            const reach = Math.hypot(
+                Math.max(Math.abs(part.min.y - wheelCenter.y), Math.abs(part.max.y - wheelCenter.y)),
+                Math.max(Math.abs(part.min.z - wheelCenter.z), Math.abs(part.max.z - wheelCenter.z))
+            );
+            if (
+                wheelMaterials[index].has(name) &&
+                !HUB_TYRE_REGEX.test(name) &&
+                reach <= 0.6 * Math.max(ownSize.y, ownSize.z) &&
+                Math.abs(partCenter.x - wheelCenter.x) <= ownSize.x * 0.6
+            )
+                return true;
+            if (dy > 0.06 || dz > 0.06) return false;
+            if (
+                partSize.y >= ownSize.y * 0.9 &&
+                partSize.z >= ownSize.z * 0.9 &&
+                partSize.y <= ownSize.y * 1.4 &&
+                partSize.x <= ownSize.x * 1.4
+            )
+                return true;
+            const out = Math.sign(wheelCenter.x - middle.x) || 1;
+            return (
+                partSize.y < ownSize.y * 0.3 &&
+                ((partCenter.x - wheelCenter.x) * out) / ownSize.x > 0.25
+            );
+        };
+        // discs and calipers sit inside the wheel, mud flaps and odd bits of
+        // body near it don't
+        const insideWheel = (index: number, part: THREE.Box3) => {
+            const wheelBox = own[index];
+            if (wheelBox.isEmpty()) return false;
+            wheelBox.getSize(ownSize);
+            wheelBox.getCenter(wheelCenter);
+            if (ownSize.x > 0.7 * Math.min(ownSize.y, ownSize.z)) return false;
+            part.getCenter(partCenter);
+            return (
+                Math.hypot(
+                    (partCenter.y - wheelCenter.y) / ownSize.y,
+                    (partCenter.z - wheelCenter.z) / ownSize.z
+                ) < 0.45 && Math.abs(partCenter.x - wheelCenter.x) < ownSize.x
+            );
+        };
+        const steerHubFor = (index: number) => {
+            const wheel = wheelRig[index];
+            if (!wheel.hub) {
+                const hub = new THREE.Group();
+                hub.name = `race-hub-steer-${index}`;
+                hub.userData.raceHub = true;
+                model.add(hub);
+                const toModel = new THREE.Matrix4()
+                    .copy(model.matrixWorld)
+                    .invert()
+                    .multiply(wheel.object.parent!.matrixWorld);
+                wheel.hub = {
+                    object: hub,
+                    center: wheel.spinCenter.clone().applyMatrix4(toModel),
+                    axis: (wheel.steerAxis || new THREE.Vector3(0, 1, 0))
+                        .clone()
+                        .transformDirection(toModel),
+                };
+                steerHubs.push(hub);
+            }
+            return wheel.hub.object;
+        };
         const candidates: THREE.Mesh[] = [];
         model.traverse((child) => {
             const mesh = child as THREE.Mesh;
@@ -3254,11 +3358,18 @@ export default class RaceVehicle {
             if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
             partBox.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld);
             const tyre =
-                HUB_TYRE_REGEX.test(name) &&
-                !FIXED_BRAKE_PART_HINT_REGEX.test(name) &&
-                partBox.getSize(size).y >
-                    boxes[index]!.getSize(wheelSize).y * 0.6;
-            return tyre ? wheelRig[index].object : hubFor(index);
+                (HUB_TYRE_REGEX.test(name) &&
+                    !FIXED_BRAKE_PART_HINT_REGEX.test(name) &&
+                    partBox.getSize(size).y >
+                        boxes[index]!.getSize(wheelSize).y * 0.6) ||
+                isWheelPart(index, name, partBox);
+            if (tyre) return wheelRig[index].object;
+            return wheelRig[index].front &&
+                wheelRig[index].object.parent &&
+                this.preparingCarId !== BMW_F90_M5_COMPETITION_ID &&
+                insideWheel(index, partBox)
+                ? steerHubFor(index)
+                : hubFor(index);
         };
         candidates.forEach((mesh) => {
             if (Array.isArray(mesh.material)) return;
@@ -3279,6 +3390,14 @@ export default class RaceVehicle {
                 home(index, mesh).attach(mesh);
                 return;
             }
+            const materialName = mesh.material.name || '';
+            const round = own.findIndex((_, i) =>
+                isWheelPart(i, materialName, box)
+            );
+            if (round >= 0) {
+                wheelRig[round].object.attach(mesh);
+                return;
+            }
             // one tyre or brake mesh for the whole car (the crown's): the
             // triangles in each wheel's space go with that wheel
             if (!HUB_PART_REGEX.test(mesh.material.name || '')) return;
@@ -3288,7 +3407,7 @@ export default class RaceVehicle {
             });
         });
         model.updateMatrixWorld(true);
-        return hubs.filter(Boolean);
+        return [...hubs.filter(Boolean), ...steerHubs];
     }
 
     // weak gpus: cabin and engine bay parts can't be seen from the chase
@@ -3811,7 +3930,7 @@ export default class RaceVehicle {
 
     // the car's stock spec with the garage tune on top
     buildSpec(option: CarOption, geometry: WheelGeometry) {
-        return applyTune(buildPhysicsSpec(option, geometry), this.tune, this.look);
+        return applyTune(buildPhysicsSpec(option, geometry), this.tune, this.look, option.id);
     }
 
     // new garage choices for the current car: saved, shown and driven
@@ -3887,6 +4006,42 @@ export default class RaceVehicle {
         };
     }
 
+    // the physics turns the car about its center of mass, between the axles
+    // by the weight split. models put their origin anywhere (the crown's is
+    // at its nose), so a model moves until its wheels sit on the physics
+    // car's axles. with a rig getWheelGeometry won't measure (the amg one's
+    // axle nodes) the physics has the default wheelbase, and the middles meet
+    axleOffset(model: THREE.Object3D, wheels: WheelRig[], option?: CarOption) {
+        const offset = new THREE.Vector3();
+        const at = (wheel: WheelRig) =>
+            wheel.localCenter.clone().applyQuaternion(model.quaternion);
+        const fronts = wheels.filter((wheel) => wheel.front).map(at);
+        const rears = wheels.filter((wheel) => !wheel.front).map(at);
+        if (!option || !fronts.length || !rears.length) return offset;
+        const mean = (list: THREE.Vector3[]) =>
+            list.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(list.length);
+        const width = (list: THREE.Vector3[]) =>
+            Math.max(...list.map((point) => point.x)) - Math.min(...list.map((point) => point.x));
+        const front = mean(fronts);
+        const rear = mean(rears);
+        const drawn = front.z - rear.z;
+        const measured =
+            fronts.length >= 2 &&
+            rears.length >= 2 &&
+            drawn > 2 &&
+            drawn < 3.6 &&
+            [width(fronts), width(rears)].every((track) => track > 1.2 && track < 2);
+        const wheelbase = measured
+            ? drawn
+            : defaultWheelGeometry(option, this.wheelRadius).wheelbase;
+        const weightFront = option.race.physics.weightFront;
+        return offset.set(
+            -(front.x + rear.x) / 2,
+            0,
+            (wheelbase * (1 - 2 * weightFront)) / 2 - (front.z + rear.z) / 2
+        );
+    }
+
     isWheelRigSpatiallyValid(wheels: WheelRig[]) {
         if (wheels.length < 4) return false;
         const xValues = wheels.map((wheel) => wheel.localCenter.x);
@@ -3900,6 +4055,8 @@ export default class RaceVehicle {
         this.wheelRig.forEach((wheel) => {
             wheel.object.position.copy(wheel.basePosition);
             wheel.object.quaternion.copy(wheel.baseQuaternion);
+            wheel.hub?.object.position.set(0, 0, 0);
+            wheel.hub?.object.quaternion.identity();
             wheel.linkedVisuals.forEach((linked) => {
                 linked.object.position.copy(linked.basePosition);
                 linked.object.quaternion.copy(linked.baseQuaternion);
@@ -5265,6 +5422,16 @@ export default class RaceVehicle {
                     wheel.spinCenter,
                     steerQuaternion
                 );
+                if (wheel.hub) {
+                    const hub = wheel.hub.object;
+                    hub.position.set(0, 0, 0);
+                    hub.quaternion.identity();
+                    this.rotateObjectParentAroundCenter(
+                        hub,
+                        wheel.hub.center,
+                        this.tmpQuatG.setFromAxisAngle(wheel.hub.axis, visualSteerAngle)
+                    );
+                }
             }
             const wheelWorldQuaternionBeforeSpin = wheel.object.getWorldQuaternion(
                 this.tmpQuatE
@@ -5612,6 +5779,10 @@ export default class RaceVehicle {
             driftTargetDeg: (physics.driftTarget * 180) / Math.PI,
             trackDistance: this.trackFrame.distance,
             trackLateral: this.trackFrame.lateral,
+            // the garage turbos' boost, left out so stock cars' audio
+            // guesses its own
+            boost: physics.spec.boost ? physics.boost : undefined,
+            engine: engineSound(this.currentCarId, this.tune),
         };
     }
 }

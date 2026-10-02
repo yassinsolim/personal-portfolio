@@ -2,6 +2,7 @@
 // static/sounds/race/<carId>.json + .webm/.m4a (built by scripts/audio).
 // idleRpm is the rpm the idle loop was recorded or rendered at, so the
 // engine sits on that pitch at the game's idle.
+import type { EngineSound } from '../Garage/engines';
 
 export type TurboProfile = {
     // whistle pitch at zero and full boost
@@ -30,6 +31,8 @@ export type CarAudioProfile = {
     turbo: TurboProfile | null;
     // electric motor whine (hybrids), in hz per m/s of road speed
     motorWhine: { hzPerMps: number; gain: number } | null;
+    // supercharger whine from the garage, hz per engine rev per second
+    superWhine?: { ratio: number; gain: number } | null;
     limiterHz: number;
 };
 
@@ -168,9 +171,123 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         motorWhine: { hzPerMps: 22, gain: 0.02 },
         limiterHz: 10,
     },
+    'lamborghini-huracan': {
+        engine: 'Lamborghini 5.2 V10, 8,500 rpm',
+        idleRpm: 801,
+        limiterRpm: 8500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -11],
+        pops: { rate: 2.5, minRpm: 3000, window: 1.4, gain: 0.7 },
+        shiftCrackle: 0.6,
+        turbo: null,
+        motorWhine: null,
+        limiterHz: 14,
+    },
+    'lamborghini-aventador-s': {
+        engine: 'Lamborghini L539 6.5 V12, 8,500 rpm, single clutch ISR box',
+        idleRpm: 989,
+        limiterRpm: 8500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -11],
+        pops: { rate: 2, minRpm: 3500, window: 1.2, gain: 0.75 },
+        shiftCrackle: 0.9,
+        turbo: null,
+        motorWhine: null,
+        limiterHz: 14,
+    },
+    'ferrari-laferrari': {
+        engine: 'Ferrari F140FE 6.3 V12 with HY-KERS, 9,250 rpm',
+        idleRpm: 939,
+        limiterRpm: 9250,
+        gain: 1,
+        onDb: [-10, 0],
+        offDb: [-22, -12],
+        pops: { rate: 1, minRpm: 4000, window: 0.9, gain: 0.45 },
+        shiftCrackle: 0.4,
+        turbo: null,
+        motorWhine: { hzPerMps: 18, gain: 0.016 },
+        limiterHz: 16,
+    },
+    'mclaren-p1': {
+        engine: 'McLaren M838TQ 3.8 twin-turbo flat-plane V8 with IPAS',
+        idleRpm: 829,
+        limiterRpm: 8500,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -12],
+        pops: { rate: 1.5, minRpm: 3500, window: 1, gain: 0.5 },
+        shiftCrackle: 0.5,
+        turbo: {
+            whistleHz: [2400, 7000],
+            whistleGain: 0.03,
+            spool: [2200, 4000],
+            spoolTime: 0.3,
+            releaseGain: 0.55,
+            hissGain: 0.05,
+        },
+        motorWhine: { hzPerMps: 16, gain: 0.016 },
+        limiterHz: 14,
+    },
+    'porsche-918-spyder': {
+        engine: 'Porsche 4.6 flat-plane V8 with two motors, 9,150 rpm, top exit pipes',
+        idleRpm: 1015,
+        limiterRpm: 9150,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -11],
+        pops: { rate: 1.2, minRpm: 4000, window: 1, gain: 0.5 },
+        shiftCrackle: 0.45,
+        turbo: null,
+        motorWhine: { hzPerMps: 20, gain: 0.02 },
+        limiterHz: 15,
+    },
 };
 
 export const DEFAULT_CAR_AUDIO_PROFILE = CAR_AUDIO_PROFILES['bmw-e92-m3'];
 
 export const getCarAudioProfile = (carId: string) =>
     CAR_AUDIO_PROFILES[carId] || DEFAULT_CAR_AUDIO_PROFILE;
+
+const DEFAULT_POPS = { rate: 1.8, minRpm: 3000, window: 1.2, gain: 0.55 };
+const louder = (pair: [number, number], db: [number, number]): [number, number] => [pair[0] + db[0], pair[1] + db[1]];
+
+// a bank's mix with the garage's induction and exhaust on top
+export const engineProfile = (sound: EngineSound): CarAudioProfile => {
+    const base = getCarAudioProfile(sound.sound);
+    const redline = sound.redlineRpm;
+    const profile: CarAudioProfile = { ...base, limiterRpm: redline };
+    if (sound.turbo === 'none') profile.turbo = null;
+    if (sound.turbo === 'twin') {
+        profile.turbo =
+            base.turbo ||
+            subtleTurbo({ whistleGain: 0.022, hissGain: 0.035, releaseGain: 0.35, spool: [0.3 * redline, 0.5 * redline] });
+    }
+    if (sound.turbo === 'quad') {
+        const t = base.turbo || subtleTurbo();
+        profile.turbo = {
+            ...t,
+            whistleGain: t.whistleGain * 2.2 + 0.01,
+            hissGain: t.hissGain * 2,
+            releaseGain: Math.max(0.6, t.releaseGain),
+            spool: [0.4 * redline, 0.62 * redline],
+            spoolTime: 0.6,
+        };
+    }
+    if (sound.supercharger) profile.superWhine = { ratio: 9, gain: 0.018 };
+    const pops = base.pops || DEFAULT_POPS;
+    if (sound.exhaust === 'sport') {
+        profile.gain = base.gain * 1.1;
+        profile.onDb = louder(base.onDb, [1, 1.5]);
+        profile.pops = { ...pops, rate: pops.rate * 1.6, gain: Math.min(1, pops.gain * 1.2) };
+        profile.shiftCrackle = base.shiftCrackle + 0.2;
+    } else if (sound.exhaust === 'straight') {
+        profile.gain = base.gain * 1.2;
+        profile.onDb = louder(base.onDb, [2, 3]);
+        profile.offDb = louder(base.offDb, [3, 3]);
+        profile.pops = { ...pops, rate: pops.rate * 2.6, window: pops.window * 1.4, gain: Math.min(1, pops.gain * 1.5) };
+        profile.shiftCrackle = base.shiftCrackle + 0.45;
+    }
+    return profile;
+};

@@ -1695,7 +1695,7 @@ body.race-mode-touch .race-minimap {
 
 .garage-tabs {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 4px;
 }
 
@@ -1799,6 +1799,32 @@ body.race-mode-touch .race-minimap {
 .garage-options small {
     opacity: 0.7;
     font-size: 11px;
+}
+
+.garage-options button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.garage-rev {
+    width: 100%;
+    margin-top: 14px;
+    padding: 13px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 90, 60, 0.7);
+    background: rgba(255, 90, 60, 0.16);
+    color: #fff;
+    font-family: inherit;
+    font-weight: bold;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.garage-rev.on {
+    background: #ff5a3c;
 }
 
 .garage-slider {

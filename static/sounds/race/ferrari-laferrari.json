@@ -1,0 +1,244 @@
+{
+ "version": 1,
+ "carId": "ferrari-laferrari",
+ "sampleRate": 48000,
+ "source": "recorded+synth-top",
+ "notes": "pole position ferrari 812 superfast 2018 and f12 2016 (f140 v12, same family as the laferrari's f140fe), synth f140fe above 3,500 rpm",
+ "files": {
+  "opus": "ferrari-laferrari.webm",
+  "aac": "ferrari-laferrari.m4a"
+ },
+ "bytes": {
+  "opus": 207065,
+  "aac": 290689
+ },
+ "duration": 35.345,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 939.49,
+   "start": 0.08,
+   "dur": 2.043667,
+   "db": -0.22
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1400.1,
+   "start": 2.243667,
+   "dur": 1.114208,
+   "db": 0.0
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 1899.74,
+   "start": 3.477875,
+   "dur": 1.073833,
+   "db": -1.08
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 2500.0,
+   "start": 4.671708,
+   "dur": 1.104,
+   "db": -4.47
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 3100.11,
+   "start": 5.895708,
+   "dur": 1.083833,
+   "db": -3.87
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1400.1,
+   "start": 7.099542,
+   "dur": 1.114208,
+   "db": -0.77
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2200.15,
+   "start": 8.33375,
+   "dur": 1.090833,
+   "db": -2.85
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 3000.0,
+   "start": 9.544583,
+   "dur": 1.12,
+   "db": -4.94
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 3799.47,
+   "start": 10.784583,
+   "dur": 1.105417,
+   "db": -8.17
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 3799.47,
+   "start": 12.01,
+   "dur": 1.105417,
+   "db": -31.92
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 4698.21,
+   "start": 13.235417,
+   "dur": 1.098292,
+   "db": -7.7
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 4698.21,
+   "start": 14.453708,
+   "dur": 1.098292,
+   "db": -29.86
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 5597.67,
+   "start": 15.672,
+   "dur": 1.093312,
+   "db": -2.53
+  },
+  {
+   "id": "off5",
+   "kind": "off",
+   "rpm": 5597.67,
+   "start": 16.885313,
+   "dur": 1.093312,
+   "db": -28.18
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 6501.13,
+   "start": 18.098625,
+   "dur": 1.1075,
+   "db": -7.36
+  },
+  {
+   "id": "off6",
+   "kind": "off",
+   "rpm": 6501.13,
+   "start": 19.326125,
+   "dur": 1.1075,
+   "db": -29.02
+  },
+  {
+   "id": "on8",
+   "kind": "on",
+   "rpm": 7403.6,
+   "start": 20.553625,
+   "dur": 1.102167,
+   "db": -11.81
+  },
+  {
+   "id": "off7",
+   "kind": "off",
+   "rpm": 7403.6,
+   "start": 21.775792,
+   "dur": 1.102167,
+   "db": -28.95
+  },
+  {
+   "id": "on9",
+   "kind": "on",
+   "rpm": 8299.71,
+   "start": 22.997958,
+   "dur": 1.098833,
+   "db": -11.49
+  },
+  {
+   "id": "off8",
+   "kind": "off",
+   "rpm": 8299.71,
+   "start": 24.216792,
+   "dur": 1.098833,
+   "db": -27.89
+  },
+  {
+   "id": "on10",
+   "kind": "on",
+   "rpm": 9099.53,
+   "start": 25.435625,
+   "dur": 1.094563,
+   "db": -10.53
+  },
+  {
+   "id": "off9",
+   "kind": "off",
+   "rpm": 9099.53,
+   "start": 26.650188,
+   "dur": 1.094563,
+   "db": -26.54
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 27.87475,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 28.34475,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 28.81475,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 29.28475,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 29.75475,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 30.47475,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 31.29475,
+   "dur": 0.37
+  },
+  {
+   "id": "start7",
+   "kind": "start",
+   "start": 31.78475,
+   "dur": 3.5
+  }
+ ]
+}
