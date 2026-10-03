@@ -10,6 +10,8 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 
 // under the terrain, so nothing of the track shows through
 export const GARAGE_ORIGIN = new THREE.Vector3(0, -3000, 0);
+// the turntable plate's top, what the car stands on
+export const TURNTABLE_TOP = 0.03;
 const WIDTH = 18;
 const DEPTH = 16;
 const HEIGHT = 6;
@@ -476,9 +478,9 @@ export default class GarageScene {
 
         // the turntable: a gloss black plate with a light ring round its edge
         const plate = std(0x0c0d0f, 0.38, 0.4);
-        put(new THREE.CylinderGeometry(3.3, 3.34, 0.03, 96), plate, at(0, 0.015, 0));
+        put(new THREE.CylinderGeometry(3.3, 3.34, TURNTABLE_TOP, 96), plate, at(0, TURNTABLE_TOP / 2, 0));
         const ring = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xe8f4ff, emissiveIntensity: 2.4, roughness: 1 });
-        put(new THREE.TorusGeometry(3.32, 0.016, 8, 160), ring, at(0, 0.03, 0, 0, Math.PI / 2));
+        put(new THREE.TorusGeometry(3.32, 0.016, 8, 160), ring, at(0, TURNTABLE_TOP, 0, 0, Math.PI / 2));
 
         const unlit = new Set<THREE.Material>([ceiling, walls, sideWalls, glow, strip, panel, ring]);
         buckets.forEach((geometries, material) => {

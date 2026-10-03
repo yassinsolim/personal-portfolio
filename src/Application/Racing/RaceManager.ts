@@ -11,7 +11,7 @@ import SectorTimer from './Lap/SectorTimer';
 import DriftScore, { type DriftEvent } from './Lap/DriftScore';
 import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
 import { carHasCalipers, kitsThatFit } from './Garage/carLook';
-import GarageScene, { GARAGE_ORIGIN } from './Garage/GarageScene';
+import GarageScene, { GARAGE_ORIGIN, TURNTABLE_TOP } from './Garage/GarageScene';
 import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
@@ -895,12 +895,18 @@ export default class RaceManager {
         scene.fog = null;
         scene.background = new THREE.Color(0x0b0c0e);
         garage.root.visible = true;
-        // the car's floor contact is rideHeight under its pivot
-        garage.stand.position.set(0, this.vehicle.rideHeight, 0);
+        this.placeOnStand();
         const model = this.vehicle.carModel;
         if (model) garage.stand.add(model);
         this.vehicle.modelHolder = garage.stand;
         this.chaseCamera.garageAnchor = GARAGE_ORIGIN.clone().add(garage.stand.position);
+    }
+
+    // the car's floor contact is rideHeight under its pivot, on the plate.
+    // again on every frame: a car picked in the garage has its own ride height
+    placeOnStand() {
+        const stand = this.garageScene?.stand;
+        if (stand) stand.position.set(0, this.vehicle.rideHeight + TURNTABLE_TOP, 0);
     }
 
     hideGarageScene() {
@@ -1718,6 +1724,7 @@ export default class RaceManager {
         } else {
             const telemetry = this.vehicle.getTelemetry();
             if (this.garageOpen) {
+                this.placeOnStand();
                 this.engineAudio.update(this.updateGarageRev(telemetry, delta), delta);
             } else {
                 this.engineAudio.update(
