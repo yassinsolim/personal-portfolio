@@ -193,11 +193,11 @@ export const RIG = {
 
 export const CREDITS: [string, string][] = [
     ['Yassin Soliman', 'development, 2025 to 2026'],
-    ['Henry Heffernan', 'original 3D portfolio (2022)'],
-    ['Dustin Brett', 'daedalOS, the base of yassinOS'],
+    ['Henry Heffernan', 'original 3D portfolio (2022), MIT'],
+    ['Dustin Brett', 'daedalOS, the base of yassinOS, MIT'],
     ['three.js', '3D rendering'],
     ['React', 'interface'],
-    ['hashikemu, Black Snow, Ddiaz Design, sultan, vecarz, friends of Yassin', 'car models'],
+    ['hashikemu, Black Snow, Ddiaz Design, sultan, vecarz, kevin, friends of Yassin', 'car models, each under its own license'],
     ['Pavel Zhovner', 'Flipper Zero model (Sketchfab)'],
     ['OpenStreetMap contributors', 'Nordschleife track data (ODbL)'],
 ];

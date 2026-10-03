@@ -1417,22 +1417,41 @@ body.race-mode-touch #ui-app {
 }
 
 .shell-credits {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 14px;
     margin: 0;
     color: rgba(255, 255, 255, 0.78);
     font-size: 11px;
     line-height: 1.45;
 }
 
+/* the global p rule is 16px monospace */
 .shell-credits p {
-    margin: 0 0 6px;
+    margin: 4px 0 0;
+    font: inherit;
+    color: inherit;
 }
 
 .shell-credits a {
     color: inherit;
 }
 
+.shell-credits .race-menu-credits {
+    margin: 0;
+}
+
+/* the open one takes the row, the other wraps under it */
+.shell-credits details[open] {
+    flex-basis: 100%;
+}
+
 .look-hint .shell-credits {
     padding-top: 2px;
+}
+
+.race-menu-panel .shell-credits {
+    margin: -6px 0 12px;
 }
 
 .race-menu-credits {
