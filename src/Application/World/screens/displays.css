@@ -455,10 +455,12 @@
     margin-bottom: 14px;
 }
 
+/* a key wider than the screen (the credits' car model authors) used to push
+   the grid sideways and scroll the whole log out of view */
 .room-display .rd-grid {
     column-gap: 2ch;
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
+    grid-template-columns: fit-content(40%) minmax(0, 1fr);
 }
 
 /* ls: one line per project */
