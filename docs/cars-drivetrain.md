@@ -85,6 +85,7 @@ The mean is 0.970. Rolling radius = circumference / 2 pi. Sizes used by the cars
 | Senna | 315/30 R20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
 | SF90 Stradale | 315/30 ZR20 | 0.3380 m | D: 0.970 x 697.0 mm / 2 |
 | Valkyrie | 325/30 ZR21 | 0.3533 m | D: 0.970 x 728.4 mm / 2 |
+| Supra MK4 | 255/40 ZR17 | 0.3084 m | D: 0.970 x 635.8 mm / 2 |
 
 The model based radius the physics used before was 0.328 to 0.360 m, up to 7% off (the C63 507's
 model wheels gave 0.331 m, the real tyre rolls at 0.308 m).
@@ -501,6 +502,26 @@ the LaFerrari. Estimated: the gearing, the torque curve's shape, the mass (1,355
 weight usually quoted), the aero (drag area 1.1 m2, downforce area 1.3 m2) and so the sim's 0-100
 of 2.7 s.
 
+### Toyota Supra MK4 (JZA80 Turbo, export, 1993-1998)
+
+| Figure | Value | Mark | Source |
+| --- | --- | --- | --- |
+| Engine | 2JZ-GTE 3.0 inline six, sequential twin turbos | P | [mkiv.supras.org.nz](http://mkiv.supras.org.nz/specs.htm) |
+| Transmission | Getrag V160 6-speed manual | P | mkiv.supras.org.nz |
+| Gear ratios | 3.827, 2.360, 1.685, 1.312, 1.000, 0.793, reverse 3.280 | P | mkiv.supras.org.nz |
+| Final drive | 3.133 (export twin turbo, Torsen; Japanese cars 3.266) | P | mkiv.supras.org.nz |
+| Tyres | 235/45 ZR17, 255/40 ZR17 | P | [Car and Driver](https://www.caranddriver.com/news/a27452748/2020-toyota-supra-vs-1993-toyota-supra-turbo-test-numbers/) |
+| Idle | 600 to 700 rpm | P | mkiv.supras.org.nz |
+| Redline | 6,800 rpm | P | Toyota |
+| Power | 239 kW (320 hp) at 5,600 rpm | P | Car and Driver |
+| Torque | 427 Nm at 4,000 rpm; 407 Nm from 1,800 rpm on the first turbo | P | Car and Driver, [Wikipedia](https://en.wikipedia.org/wiki/Toyota_Supra) |
+| Top speed | 257 km/h (160 mph), governor limited | T | Car and Driver |
+| 0-60 / 100 / 130 / 150 mph | 4.6 / 11.1 / 19.9 / 29.6 s (+0.3 s rollout) | T | Car and Driver |
+| Mass | 1,565 kg (6-speed), 53 / 47 split | P | Wikipedia |
+
+Estimated: the torque curve between the published points and the drag area (0.76 m2; Cd 0.32 on
+about 1.9 m2 would be 0.61, fitted to the 130 and 150 mph times like the C63 507's).
+
 ## Transmissions
 
 Estimated from the gearbox type, not measured on these cars:
@@ -522,6 +543,7 @@ Estimated from the gearbox type, not measured on these cars:
 | Sequential, single clutch | Huayra | 0.15 s | 0 | 3,500 |
 | Dual clutch with motors filling the gap | SF90 Stradale | 0.08 s | 80% | 3,000 |
 | Sequential, single clutch, with a motor | Valkyrie | 0.08 s | 30% | 6,000 |
+| 6-speed manual | Supra MK4 | 0.30 s (a quick driver) | 0 | 4,000 |
 
 ## Tolerances
 
@@ -570,6 +592,7 @@ top speeds to the hundredth. Road test times include the 0.3 s rollout.
 | Senna | 2.67 / 2.8 | 6.53 / 6.8 | 337.4 / 335 | 1,784 / 1,781 | |
 | SF90 Stradale | 2.40 / 2.5 | 6.45 / 6.7 | 341.1 / 340 | 1,907 / 1,904 | 0-97: 2.30 / 2.3 T |
 | Valkyrie | 2.73 / - | 5.85 / - | 353.2 / 354 | 3,005 / 3,000 | |
+| Supra MK4 | 5.07 / - | 18.28 / - | 256.3 / 257 T | 2,141 / 2,137 | 0-97: 4.85 / 4.9 T, 0-161: 11.55 / 11.4 T, 0-209: 20.25 / 20.2 T, 0-241: 30.32 / 29.9 T |
 
 Max speed per gear at the limiter, km/h (road speed in game / from the published gearing). The
 driven wheels match the published figure within 1 km/h in every gear; road speed is a little lower
@@ -597,6 +620,7 @@ in the low gears because the wheels slip. A dash is a gear the car can't reach t
 | Senna | 80/82, 122/125, 168/172, 217/221, 277/282, -/361, -/477 |
 | SF90 Stradale | 88/90, 127/130, 169/172, 211/215, 256/260, 306/310, -/360, -/420 |
 | Valkyrie | 97/100, 140/145, 185/190, 229/235, 274/280, 319/325, -/370 |
+| Supra MK4 | 65/66, 105/107, 148/150, 190/192, 249/252, -/318 |
 
 The per gear runs take the speed limiter out, so the gears above the stock limit show where drag
 stops them.

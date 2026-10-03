@@ -40,6 +40,7 @@ export const ENGINES: Record<string, EngineDef> = {
     m840: { label: 'McLaren M840TR V8', detail: '4.0 L twin turbo flat-plane', sound: 'mclaren-senna', turbo: true, massKg: 200, car: 'mclaren-senna' },
     f154: { label: 'Ferrari V8 hybrid', detail: '4.0 L twin turbo flat-plane with three motors', sound: 'ferrari-sf90-stradale', turbo: true, massKg: 300, car: 'ferrari-sf90-stradale' },
     cv12: { label: 'Cosworth V12 hybrid', detail: '6.5 L, naturally aspirated, 11,100 rpm', sound: 'aston-martin-valkyrie', turbo: false, massKg: 240, car: 'aston-martin-valkyrie' },
+    '2jz': { label: 'Toyota 2JZ-GTE inline six', detail: '3.0 L sequential twin turbo, iron block', sound: 'toyota-supra-mk4', turbo: true, massKg: 230, car: 'toyota-supra-mk4' },
 };
 
 export const ENGINE_IDS = Object.keys(ENGINES);
@@ -66,6 +67,7 @@ export const STOCK_ENGINE: Record<string, string> = {
     'mclaren-senna': 'm840',
     'ferrari-sf90-stradale': 'f154',
     'aston-martin-valkyrie': 'cv12',
+    'toyota-supra-mk4': '2jz',
 };
 
 const engineOf = (carId: string, engine: string) =>

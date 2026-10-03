@@ -67,6 +67,13 @@ export const WHEEL_GROUPS = {
         calipers: /^Object_(14|15|29)$/,
         forward: 1,
     },
+    // one mesh per material for all four corners: the tyres, rims and discs
+    // spin, the calipers stay
+    'toyota-supra-mk4': {
+        wheels: /^Object_(10|18|19)$/,
+        calipers: /^Object_11$/,
+        forward: 1,
+    },
 };
 
 const EMPTY_BOX = () => ({ min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] });

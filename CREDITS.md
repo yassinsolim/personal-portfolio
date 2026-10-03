@@ -211,6 +211,13 @@ original downloads, unmodified, are in `models-src/`.
   - Source: https://sketchfab.com/3d-models/2021-aston-martin-valkyrie-0ad5999a62be459c8f883ea0b58cf876
   - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
   - Changes: as the Pagani Huayra
+- Toyota Supra MK4 (`static/models/Cars/toyota_supra_mk4/`)
+  - Title: "Toyota Supra (A80) 1993"
+  - Author: Lexyc16 (https://sketchfab.com/Lexyc16)
+  - Source: https://sketchfab.com/3d-models/toyota-supra-a80-1993-dd897d7823784bc5893c183c1328e8cb
+  - License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
+  - Changes: as the Pagani Huayra; the tyres, rims, discs and calipers came as one mesh each
+    for all four wheels and are cut apart per corner
 
 The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has
 no ads, sales or sponsorship.
@@ -432,3 +439,8 @@ Used to check order structure and tone by spectrum analysis. Nothing from them i
 - Cosworth V12 (Aston Martin Valkyrie): 6.5 na 65 degree V12, 1,200 rpm idle, 11,100 rpm limit
   (astonmartin.com Valkyrie specifications). Even 60 degree firing; the firing order isn't
   published, the synth uses 1-7-5-11-3-9-6-12-2-8-4-10.
+- Toyota 2JZ-GTE (Supra MK4): 2,997 cc inline six with sequential twin turbos, firing order
+  1-5-3-6-2-4, 239 kW at 5,600 rpm and 427 Nm at 4,000 for export cars, 600-700 rpm idle
+  (http://mkiv.supras.org.nz/specs.htm, https://en.wikipedia.org/wiki/Toyota_Supra). The
+  synth takes the sound of the usual single turbo build (one twin-scroll turbo and a straight
+  through system), and the lift-off flutter is that build's, with no valve to vent the boost.

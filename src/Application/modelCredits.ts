@@ -223,4 +223,12 @@ export const MODEL_CREDITS: ModelCredit[] = [
         CC_BY,
         `${REGROUPED}; ${carChanges(true)}`,
     ),
+    sketchfabCar(
+        'Toyota Supra MK4',
+        'Toyota Supra (A80) 1993',
+        sketchfabAuthor('Lexyc16', 'Lexyc16'),
+        'toyota-supra-a80-1993-dd897d7823784bc5893c183c1328e8cb',
+        CC_BY_NC,
+        `${REGROUPED}; ${carChanges(true)}`,
+    ),
 ];

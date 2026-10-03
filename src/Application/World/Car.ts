@@ -37,6 +37,7 @@ const KEEP_EXPORT_MATERIALS = new Set([
     'mclaren-senna',
     'ferrari-sf90-stradale',
     'aston-martin-valkyrie',
+    'toyota-supra-mk4',
 ]);
 const BODY_BLUE = legacyColor(0x050f2f);
 const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);

@@ -2713,6 +2713,22 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     color: #ff6b5e;
 }
 
+/* what became of the run at the line */
+.drift-hud-result {
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.drift-hud-result.ok {
+    color: #6be38a;
+}
+
+.drift-hud-result.off {
+    color: #ffb36b;
+}
+
 .drift-hud-runs {
     display: flex;
     justify-content: center;

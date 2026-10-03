@@ -31,6 +31,7 @@ const PAINT: Record<string, string[]> = {
     'bugatti-chiron-super-sport': ['paint_material'],
     'mclaren-senna': ['paint_material'],
     'ferrari-sf90-stradale': ['paint_material'],
+    'toyota-supra-mk4': ['carpaint'],
 };
 // the amg one's painted panels are plain 'black' too, which only counts as
 // paint off the wheels. the p1 and aventador name their black trim after the
@@ -670,6 +671,90 @@ const sidePart = (donor: THREE.Object3D, parts: Part[], side: number) => {
         .filter((part): part is Part => part !== null);
 };
 
+type Line = { center: THREE.Vector3; axis: THREE.Vector3 };
+
+// the line the race turns a wheel node about (its spin centre and axis), in
+// the model's parent frame. spin and steer both turn the node about it, so it
+// holds in any pose. a model's wheels are drawn true to it, cambered or not
+const spinLine = (model: THREE.Object3D, root: THREE.Object3D): Line | null => {
+    const meta = (model.userData.raceWheelMeta || []) as Array<{
+        objectName: string;
+        spinCenter?: number[];
+        spinAxis?: number[];
+    }>;
+    const entry = meta.find((item) => item.objectName === root.name);
+    if (!entry?.spinCenter || !entry.spinAxis || !root.parent) return null;
+    const toFrame = new THREE.Matrix4()
+        .compose(new THREE.Vector3(), model.quaternion, model.scale)
+        .multiply(new THREE.Matrix4().copy(model.matrixWorld).invert());
+    const center = root.parent
+        .localToWorld(new THREE.Vector3().fromArray(entry.spinCenter))
+        .applyMatrix4(toFrame);
+    const axis = new THREE.Vector3()
+        .fromArray(entry.spinAxis)
+        .transformDirection(new THREE.Matrix4().multiplyMatrices(toFrame, root.matrixWorld));
+    if (!(axis.lengthSq() > 0.5)) return null;
+    return { center, axis };
+};
+
+// a wheel's size about the line it turns on, through a frame: its outer
+// radius, its width along the line, and the point on the line halfway across
+// it. without a line, its box with the axle across the car (frame x)
+const measureWheel = (parts: Part[], frame: THREE.Matrix4, line: Line | null) => {
+    if (!line) {
+        const box = partsBox(parts).applyMatrix4(frame);
+        const size = box.getSize(new THREE.Vector3());
+        return {
+            center: box.getCenter(new THREE.Vector3()),
+            axis: new THREE.Vector3(1, 0, 0),
+            radius: Math.max(size.y, size.z) / 2,
+            width: size.x,
+        };
+    }
+    const point = new THREE.Vector3();
+    let low = Infinity;
+    let high = -Infinity;
+    let radius = 0;
+    parts.forEach((part) => {
+        const position = part.geometry.getAttribute('position');
+        const index = part.geometry.index;
+        if (!position) return;
+        const matrix = frame.clone().multiply(part.matrix);
+        // the vertices the triangles use: a cut half keeps the whole attribute
+        const count = index ? index.count : position.count;
+        const step = Math.max(1, Math.floor(count / 6000));
+        for (let i = 0; i < count; i += step) {
+            point
+                .fromBufferAttribute(position, index ? index.getX(i) : i)
+                .applyMatrix4(matrix)
+                .sub(line.center);
+            const along = point.dot(line.axis);
+            low = Math.min(low, along);
+            high = Math.max(high, along);
+            radius = Math.max(radius, Math.sqrt(Math.max(0, point.lengthSq() - along * along)));
+        }
+    });
+    if (!(high >= low)) return measureWheel(parts, frame, null);
+    return {
+        center: line.center.clone().addScaledVector(line.axis, (low + high) / 2),
+        axis: line.axis.clone(),
+        radius,
+        width: high - low,
+    };
+};
+
+// along times along a unit axis, across times across it
+const scaleAlong = (axis: THREE.Vector3, along: number, across: number) => {
+    const d = along - across;
+    const { x, y, z } = axis;
+    return new THREE.Matrix4().set(
+        across + d * x * x, d * x * y, d * x * z, 0,
+        d * y * x, across + d * y * y, d * y * z, 0,
+        d * z * x, d * z * y, across + d * z * z, 0,
+        0, 0, 0, 1
+    );
+};
+
 // rims from another car: its wheel meshes, scaled to this car's wheel size
 // and placed where this car's wheels are. the originals are only hidden
 const setWheels = (
@@ -715,60 +800,74 @@ const setWheels = (
                   ];
         let theirTire = false;
         let fitted = false;
+        const spin = spinLine(model, root);
         sides.forEach((mySide) => {
             const myParts = sides.length > 1 ? sidePart(model, own, mySide) : own;
-            const myBox = partsBox(myParts);
-            if (myBox.isEmpty()) return;
+            if (partsBox(myParts).isEmpty()) return;
             // the donor wheel on the same side, cut to that side when the donor
             // keeps a whole axle in one node
             let theirParts: Part[] = [];
+            let theirRoot: THREE.Object3D | null = null;
             for (const candidate of donorRoots) {
                 theirParts = sidePart(donor, wheelParts(donor, candidate), mySide);
+                theirRoot = candidate;
                 if (theirParts.length) break;
             }
-            const theirBox = partsBox(theirParts);
-            if (theirBox.isEmpty()) return;
+            if (!theirRoot || partsBox(theirParts).isEmpty()) return;
             // a donor wheel node can hold only the rim (the e92's): then it's
             // sized by its real tire and goes inside this car's tire
             theirTire = theirTire || theirParts.some((part) => part.part === 'tire');
-            const mySize = myBox.getSize(new THREE.Vector3()).applyMatrix4(toParent(model));
-            const theirSize = theirBox
-                .getSize(new THREE.Vector3())
-                .applyMatrix4(toParent(donor));
-            // diameter is the larger of the height and length in the parent
-            // frame. this car sits on its wheels as they are drawn; a donor node
-            // well short of its race wheel radius holds only the rim, which is
-            // sized by that radius so it lands inside this car's tire
-            const myDiameter = Math.max(Math.abs(mySize.y), Math.abs(mySize.z));
-            const theirOwn = Math.max(Math.abs(theirSize.y), Math.abs(theirSize.z));
-            const theirRace = 2 * (Number(donor.userData.raceWheelRadius) || 0);
-            const theirDiameter =
-                theirOwn >= theirRace * RIM_ONLY_SHARE ? theirOwn : theirRace;
-            if (!(myDiameter > 0 && theirDiameter > 0)) return;
-            const k = myDiameter / theirDiameter;
+            // each wheel about the line its car turns it on, in its parent frame
+            // (x across the car). a model can draw its wheels cambered or tipped
+            // off the car's axes; the donor wheel's own line is stood on this
+            // one's, or it wobbles as it turns
+            const mine = measureWheel(myParts, toParent(model), spin);
+            const theirs = measureWheel(theirParts, toParent(donor), spinLine(donor, theirRoot));
+            // a donor node well short of its race wheel radius holds only the
+            // rim, which is sized by that radius so it lands inside this car's tire
+            const theirRace = Number(donor.userData.raceWheelRadius) || 0;
+            const theirRadius =
+                theirs.radius >= theirRace * RIM_ONLY_SHARE ? theirs.radius : theirRace;
+            if (!(mine.radius > 0 && theirRadius > 0)) return;
+            const k = mine.radius / theirRadius;
             // the new rim and tyre take this car's tyre width, so they sit in the
             // arch like the factory ones instead of poking out or sinking in
             const kx = THREE.MathUtils.clamp(
-                Math.abs(mySize.x) / Math.max(1e-6, Math.abs(theirSize.x) * k),
+                mine.width / Math.max(1e-6, theirs.width * k),
                 0.7,
                 1.5
             ) * k;
-            // donor model frame -> parent frame, rescaled about the wheel center
-            // -> this model -> this wheel root
-            const theirCenter = theirBox.getCenter(new THREE.Vector3());
-            const myCenter = myBox.getCenter(new THREE.Vector3());
+            // both axles pointing out of their cars
+            const outward = (axis: THREE.Vector3) =>
+                axis.x * mySide < 0 ? axis.clone().negate() : axis.clone();
+            const myAxis = outward(mine.axis);
+            const theirAxis = outward(theirs.axis);
+            // donor model frame -> its parent frame -> donor wheel at the origin,
+            // resized along and across its axle -> turned onto this axle -> this
+            // wheel's middle -> this model -> this wheel root
             const transform = new THREE.Matrix4()
-                .makeTranslation(myCenter.x, myCenter.y, myCenter.z)
-                .multiply(toParent(model).invert())
-                .multiply(new THREE.Matrix4().makeScale(kx, k, k))
-                .multiply(toParent(donor))
+                .copy(toParent(model).invert())
                 .multiply(
                     new THREE.Matrix4().makeTranslation(
-                        -theirCenter.x,
-                        -theirCenter.y,
-                        -theirCenter.z
+                        mine.center.x,
+                        mine.center.y,
+                        mine.center.z
                     )
-                );
+                )
+                .multiply(
+                    new THREE.Matrix4().makeRotationFromQuaternion(
+                        new THREE.Quaternion().setFromUnitVectors(theirAxis, myAxis)
+                    )
+                )
+                .multiply(scaleAlong(theirAxis, kx, k))
+                .multiply(
+                    new THREE.Matrix4().makeTranslation(
+                        -theirs.center.x,
+                        -theirs.center.y,
+                        -theirs.center.z
+                    )
+                )
+                .multiply(toParent(donor));
             const toRoot = new THREE.Matrix4()
                 .copy(root.matrixWorld)
                 .invert()

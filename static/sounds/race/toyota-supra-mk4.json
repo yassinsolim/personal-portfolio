@@ -1,0 +1,180 @@
+{
+ "version": 1,
+ "carId": "toyota-supra-mk4",
+ "sampleRate": 48000,
+ "source": "synth",
+ "notes": "toyota-2jz-gte",
+ "files": {
+  "opus": "toyota-supra-mk4.webm",
+  "aac": "toyota-supra-mk4.m4a"
+ },
+ "bytes": {
+  "opus": 147447,
+  "aac": 181872
+ },
+ "duration": 22.044,
+ "loops": [
+  {
+   "id": "idle0",
+   "kind": "idle",
+   "rpm": 699.96,
+   "start": 0.08,
+   "dur": 1.542938,
+   "db": -23.4
+  },
+  {
+   "id": "on0",
+   "kind": "on",
+   "rpm": 1299.93,
+   "start": 1.742938,
+   "dur": 1.10775,
+   "db": -6.43
+  },
+  {
+   "id": "on1",
+   "kind": "on",
+   "rpm": 2099.89,
+   "start": 2.970687,
+   "dur": 1.085771,
+   "db": -4.09
+  },
+  {
+   "id": "on2",
+   "kind": "on",
+   "rpm": 2900.3,
+   "start": 4.176458,
+   "dur": 1.117125,
+   "db": -2.27
+  },
+  {
+   "id": "on3",
+   "kind": "on",
+   "rpm": 3699.42,
+   "start": 5.413583,
+   "dur": 1.102875,
+   "db": -2.76
+  },
+  {
+   "id": "on4",
+   "kind": "on",
+   "rpm": 4500.0,
+   "start": 6.636458,
+   "dur": 1.093333,
+   "db": -2.48
+  },
+  {
+   "id": "on5",
+   "kind": "on",
+   "rpm": 5298.99,
+   "start": 7.849792,
+   "dur": 1.109646,
+   "db": 0.0
+  },
+  {
+   "id": "on6",
+   "kind": "on",
+   "rpm": 6101.69,
+   "start": 9.079437,
+   "dur": 1.101333,
+   "db": -0.68
+  },
+  {
+   "id": "on7",
+   "kind": "on",
+   "rpm": 6697.67,
+   "start": 10.300771,
+   "dur": 1.092917,
+   "db": -3.09
+  },
+  {
+   "id": "off0",
+   "kind": "off",
+   "rpm": 1299.93,
+   "start": 11.513687,
+   "dur": 1.10775,
+   "db": -25.74
+  },
+  {
+   "id": "off1",
+   "kind": "off",
+   "rpm": 2800.19,
+   "start": 12.741437,
+   "dur": 1.114208,
+   "db": -21.46
+  },
+  {
+   "id": "off2",
+   "kind": "off",
+   "rpm": 4298.51,
+   "start": 13.975646,
+   "dur": 1.08875,
+   "db": -20.87
+  },
+  {
+   "id": "off3",
+   "kind": "off",
+   "rpm": 5800.6,
+   "start": 15.184396,
+   "dur": 1.096437,
+   "db": -17.94
+  },
+  {
+   "id": "off4",
+   "kind": "off",
+   "rpm": 6697.67,
+   "start": 16.400833,
+   "dur": 1.092917,
+   "db": -23.19
+  }
+ ],
+ "shots": [
+  {
+   "id": "pop0",
+   "kind": "pop",
+   "start": 17.62375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop1",
+   "kind": "pop",
+   "start": 18.09375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop2",
+   "kind": "pop",
+   "start": 18.56375,
+   "dur": 0.35
+  },
+  {
+   "id": "pop3",
+   "kind": "pop",
+   "start": 19.03375,
+   "dur": 0.35
+  },
+  {
+   "id": "crackle4",
+   "kind": "crackle",
+   "start": 19.50375,
+   "dur": 0.6
+  },
+  {
+   "id": "crackle5",
+   "kind": "crackle",
+   "start": 20.22375,
+   "dur": 0.7
+  },
+  {
+   "id": "shift6",
+   "kind": "shift",
+   "start": 21.04375,
+   "dur": 0.37
+  },
+  {
+   "id": "bov7",
+   "kind": "bov",
+   "start": 21.53375,
+   "dur": 0.45
+  }
+ ]
+}

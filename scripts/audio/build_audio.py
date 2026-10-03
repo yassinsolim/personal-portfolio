@@ -344,6 +344,14 @@ def car_valkyrie():
                      idle_rpm=1200, muffle=0.1, seed=650)
 
 
+def car_supra():
+    sp = specs.toyota_2jz()
+    # the turbo's flutter on lift is made live (EngineVoice.playFlutter), the
+    # bank keeps a valve's release for the garage's other turbo setups
+    return synth_car(sp, [1300, 2100, 2900, 3700, 4500, 5300, 6100, 6700], off_rpms=[1300, 2800, 4300, 5800, 6700],
+                     idle_rpm=700, muffle=0.2, turbo=True, seed=280)
+
+
 def car_s63(variant):
     sp = specs.s63_m5_m8(variant)
     rec = ("flysound-bmw-x5m/exhaust_start_idle_stop.wav", 5, 26, 950, 1200, "v8x", "mix")
@@ -510,6 +518,7 @@ CARS = {
     "koenigsegg-jesko": car_jesko,
     "pagani-huayra": car_huayra,
     "aston-martin-valkyrie": car_valkyrie,
+    "toyota-supra-mk4": car_supra,
 }
 
 

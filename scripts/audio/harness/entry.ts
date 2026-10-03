@@ -4,6 +4,7 @@
 import CarAudio from '../../../src/Application/Racing/Audio/CarAudio';
 import { carOptionsById } from '../../../src/Application/carOptions';
 import { carRollingRadius } from '../../../src/Application/Racing/Vehicle/carPhysics';
+import type { EngineSound } from '../../../src/Application/Racing/Garage/engines';
 
 type Frame = {
     t: number;
@@ -135,12 +136,23 @@ const seeded = (seed: number) => () => {
     return seed / 4294967296;
 };
 
-const render = async (carId: string) => {
+// garage options on top of the car's own engine (exhaust, turbos), or none
+const render = async (carId: string, options: Partial<EngineSound> = {}) => {
     const frames = planDrive(carId);
     const duration = frames[frames.length - 1].t + 0.6;
     const context = new OfflineAudioContext(2, Math.ceil(duration * SR), SR);
     const audio = new CarAudio({ context, random: seeded(carId.length * 7919) });
-    await audio.setCar(carId);
+    const race = carOptionsById[carId].race;
+    const engine: EngineSound = {
+        sound: carId,
+        idleRpm: race.idleRpm,
+        redlineRpm: race.redlineRpm,
+        turbo: 'stock',
+        supercharger: false,
+        exhaust: 'stock',
+        ...options,
+    };
+    await audio.setCar(carId, engine);
     for (let i = 0; i < 200 && !audio.isReady(); i++) {
         await new Promise((r) => setTimeout(r, 25));
     }
@@ -157,6 +169,7 @@ const render = async (carId: string) => {
                 grounded: true,
                 shifting: f.shifting,
                 limiter: f.limiter,
+                engine,
             },
             STEP
         );
