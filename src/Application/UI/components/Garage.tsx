@@ -129,6 +129,7 @@ const WHEELS = [
     'mclaren-senna',
     'ferrari-sf90-stradale',
     'aston-martin-valkyrie',
+    'toyota-supra-mk4',
 ];
 const carName = (id: string) =>
     carOptions.find((car) => car.id === id)?.label || id;

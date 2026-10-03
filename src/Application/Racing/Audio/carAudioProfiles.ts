@@ -15,7 +15,24 @@ export type TurboProfile = {
     // lift-off release level (diverter valves are soft, the amg one's
     // wastegate is not)
     releaseGain: number;
-    hissGain: number;
+    // air rushing in while the turbo spools up. it dies away once the boost
+    // is built: a turbo at steady boost is a faint whistle, not a hiss
+    whooshGain: number;
+    // what lifting does with the boost: a valve lets it go, or with no valve
+    // the air surges back out through the compressor (the "stu-tu-tu")
+    release?: 'valve' | 'flutter';
+};
+
+// what an exhaust does to the engine's sound on its way out: bass, the rasp
+// band and the top (db), how hard the pulses clip without a muffler to round
+// them, and the overall level
+export type ExhaustTone = {
+    lowDb: number;
+    midDb: number;
+    midHz: number;
+    highDb: number;
+    drive: number;
+    levelDb: number;
 };
 
 export type CarAudioProfile = {
@@ -36,6 +53,8 @@ export type CarAudioProfile = {
     motorWhine: { hzPerMps: number; gain: number } | null;
     // supercharger whine from the garage, hz per engine rev per second
     superWhine?: { ratio: number; gain: number } | null;
+    // the exhaust's tone, from the garage. stock leaves the loops as they are
+    tone?: ExhaustTone | null;
     limiterHz: number;
 };
 
@@ -45,7 +64,7 @@ const subtleTurbo = (overrides: Partial<TurboProfile> = {}): TurboProfile => ({
     spool: [1800, 3200],
     spoolTime: 0.35,
     releaseGain: 0.18,
-    hissGain: 0.02,
+    whooshGain: 0.02,
     ...overrides,
 });
 
@@ -55,7 +74,7 @@ const MCLAREN_TURBO: TurboProfile = {
     spool: [2200, 4000],
     spoolTime: 0.3,
     releaseGain: 0.55,
-    hissGain: 0.05,
+    whooshGain: 0.05,
 };
 
 export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
@@ -74,7 +93,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
             spool: [2500, 5000],
             spoolTime: 0.18,
             releaseGain: 0.45,
-            hissGain: 0.05,
+            whooshGain: 0.05,
         },
         motorWhine: { hzPerMps: 14, gain: 0.018 },
         limiterHz: 16,
@@ -264,7 +283,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
             spool: [2200, 3800],
             spoolTime: 0.45,
             releaseGain: 0.7,
-            hissGain: 0.06,
+            whooshGain: 0.06,
         },
         motorWhine: null,
         limiterHz: 12,
@@ -284,7 +303,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
             spool: [2700, 4500],
             spoolTime: 0.3,
             releaseGain: 0.65,
-            hissGain: 0.06,
+            whooshGain: 0.06,
         },
         motorWhine: null,
         limiterHz: 14,
@@ -299,7 +318,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         pops: { rate: 1.5, minRpm: 3000, window: 1.2, gain: 0.55 },
         shiftCrackle: 0.6,
         // the wastegates chatter on every lift
-        turbo: subtleTurbo({ whistleGain: 0.03, spool: [1800, 2800], releaseGain: 0.75, hissGain: 0.05 }),
+        turbo: subtleTurbo({ whistleGain: 0.03, spool: [1800, 2800], releaseGain: 0.75, whooshGain: 0.05 }),
         motorWhine: null,
         limiterHz: 12,
     },
@@ -331,7 +350,7 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         offDb: [-22, -12],
         pops: { rate: 1, minRpm: 3500, window: 1, gain: 0.45 },
         shiftCrackle: 0.4,
-        turbo: subtleTurbo({ whistleHz: [2200, 6800], whistleGain: 0.025, spool: [2000, 3500], releaseGain: 0.4, hissGain: 0.04 }),
+        turbo: subtleTurbo({ whistleHz: [2200, 6800], whistleGain: 0.025, spool: [2000, 3500], releaseGain: 0.4, whooshGain: 0.04 }),
         motorWhine: { hzPerMps: 18, gain: 0.02 },
         limiterHz: 15,
     },
@@ -348,6 +367,31 @@ export const CAR_AUDIO_PROFILES: Record<string, CarAudioProfile> = {
         motorWhine: { hzPerMps: 16, gain: 0.016 },
         limiterHz: 18,
     },
+    // it drives like the factory car, but sounds like the way most of them
+    // ended up: one big turbo and nothing to vent it, so it whistles as it
+    // comes on boost late and chatters the boost back out through the
+    // compressor on every lift
+    'toyota-supra-mk4': {
+        engine: 'Toyota 2JZ-GTE 3.0 twin turbo inline-6, 6,800 rpm',
+        idleRpm: 700,
+        limiterRpm: 6800,
+        gain: 1,
+        onDb: [-9, 0],
+        offDb: [-21, -12],
+        pops: { rate: 1.8, minRpm: 3200, window: 1.1, gain: 0.55 },
+        shiftCrackle: 0.35,
+        turbo: {
+            whistleHz: [1900, 6200],
+            whistleGain: 0.045,
+            spool: [2900, 4300],
+            spoolTime: 0.5,
+            releaseGain: 0.85,
+            whooshGain: 0.06,
+            release: 'flutter',
+        },
+        motorWhine: null,
+        limiterHz: 12,
+    },
 };
 
 export const DEFAULT_CAR_AUDIO_PROFILE = CAR_AUDIO_PROFILES['bmw-e92-m3'];
@@ -361,6 +405,12 @@ export const bankOf = (carId: string) => CAR_AUDIO_PROFILES[carId]?.bank || carI
 const DEFAULT_POPS = { rate: 1.8, minRpm: 3000, window: 1.2, gain: 0.55 };
 const louder = (pair: [number, number], db: [number, number]): [number, number] => [pair[0] + db[0], pair[1] + db[1]];
 
+// a valved sport system: more bass with the valves open, a bit more bark
+const SPORT_TONE: ExhaustTone = { lowDb: 2.5, midDb: 3, midHz: 1700, highDb: 1.5, drive: 0.3, levelDb: 2 };
+// no mufflers or resonators: the blowdown pulses come out sharp, so the rasp
+// band and the top end jump, the pulses clip, and there's boom underneath
+const STRAIGHT_TONE: ExhaustTone = { lowDb: 3, midDb: 7, midHz: 2300, highDb: 4, drive: 0.75, levelDb: 3.5 };
+
 // a bank's mix with the garage's induction and exhaust on top
 export const engineProfile = (sound: EngineSound): CarAudioProfile => {
     const base = getCarAudioProfile(sound.sound);
@@ -370,14 +420,14 @@ export const engineProfile = (sound: EngineSound): CarAudioProfile => {
     if (sound.turbo === 'twin') {
         profile.turbo =
             base.turbo ||
-            subtleTurbo({ whistleGain: 0.022, hissGain: 0.035, releaseGain: 0.35, spool: [0.3 * redline, 0.5 * redline] });
+            subtleTurbo({ whistleGain: 0.022, whooshGain: 0.035, releaseGain: 0.35, spool: [0.3 * redline, 0.5 * redline] });
     }
     if (sound.turbo === 'quad') {
         const t = base.turbo || subtleTurbo();
         profile.turbo = {
             ...t,
             whistleGain: t.whistleGain * 2.2 + 0.01,
-            hissGain: t.hissGain * 2,
+            whooshGain: t.whooshGain * 2,
             releaseGain: Math.max(0.6, t.releaseGain),
             spool: [0.4 * redline, 0.62 * redline],
             spoolTime: 0.6,
@@ -386,16 +436,24 @@ export const engineProfile = (sound: EngineSound): CarAudioProfile => {
     if (sound.supercharger) profile.superWhine = { ratio: 9, gain: 0.018 };
     const pops = base.pops || DEFAULT_POPS;
     if (sound.exhaust === 'sport') {
-        profile.gain = base.gain * 1.1;
-        profile.onDb = louder(base.onDb, [1, 1.5]);
-        profile.pops = { ...pops, rate: pops.rate * 1.6, gain: Math.min(1, pops.gain * 1.2) };
-        profile.shiftCrackle = base.shiftCrackle + 0.2;
+        profile.tone = SPORT_TONE;
+        profile.onDb = louder(base.onDb, [1.5, 1.5]);
+        profile.offDb = louder(base.offDb, [1, 2]);
+        profile.pops = { ...pops, rate: pops.rate * 1.8, window: pops.window * 1.2, gain: Math.min(1, pops.gain * 1.3) };
+        profile.shiftCrackle = base.shiftCrackle + 0.25;
     } else if (sound.exhaust === 'straight') {
-        profile.gain = base.gain * 1.2;
-        profile.onDb = louder(base.onDb, [2, 3]);
-        profile.offDb = louder(base.offDb, [3, 3]);
-        profile.pops = { ...pops, rate: pops.rate * 2.6, window: pops.window * 1.4, gain: Math.min(1, pops.gain * 1.5) };
-        profile.shiftCrackle = base.shiftCrackle + 0.45;
+        profile.tone = STRAIGHT_TONE;
+        // overrun and idle come up the most: nothing left to quiet them
+        profile.onDb = louder(base.onDb, [3, 2]);
+        profile.offDb = louder(base.offDb, [4, 5]);
+        profile.pops = {
+            ...pops,
+            rate: pops.rate * 3.2,
+            minRpm: pops.minRpm * 0.8,
+            window: pops.window * 1.8,
+            gain: Math.min(1, pops.gain * 1.7),
+        };
+        profile.shiftCrackle = base.shiftCrackle + 0.6;
     }
     return profile;
 };

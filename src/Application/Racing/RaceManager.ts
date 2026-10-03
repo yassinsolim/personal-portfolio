@@ -34,6 +34,14 @@ type Laps = { lapTimer: LapTimer; sectors: SectorTimer };
 // a drift park lap can't be under this
 const DRIFT_MIN_LAP_MS = 30_000;
 
+// a drift run at the line: on its way to the board, saved there (or on this
+// device when offline), or not counted and why
+type DriftResult = {
+    kind: 'saving' | 'saved' | 'device' | 'short' | 'cut' | 'empty';
+    score: number;
+    at: number;
+};
+
 type RaceModeState = {
     active: boolean;
     paused: boolean;
@@ -176,6 +184,9 @@ export default class RaceManager {
     driftEvent: (DriftEvent & { at: number }) | null = null;
     driftLastRun: { score: number; lapTimeMs: number } | null = null;
     pendingDrift: { score: number; lapTimeMs: number } | null = null;
+    // what became of the last run at the line, shown under the score
+    driftResult: DriftResult | null = null;
+    tmpTravel = new THREE.Vector3();
 
     // built when constructed, or with defer by running pending (the
     // homepage builds it a slice a frame)
@@ -615,6 +626,7 @@ export default class RaceManager {
         this.driftEvent = null;
         this.driftLastRun = null;
         this.pendingDrift = null;
+        this.driftResult = null;
         if (mode === 'drift') {
             // the park is solo: no lobby and no ghost
             void this.multiplayer.suspend();
@@ -650,6 +662,13 @@ export default class RaceManager {
             isStockSetup(tune, look) ? undefined : tuneCode(tune, look)
         );
         await this.refreshDriftBoard();
+        // online it's on everyone's board, offline only on this device's
+        if (this.driftResult?.kind === 'saving' && this.driftResult.score === run.score) {
+            this.driftResult = {
+                ...this.driftResult,
+                kind: entry.source === 'remote' ? 'saved' : 'device',
+            };
+        }
         UIEventBus.dispatch('race:driftSubmitted', { entry });
     }
 
@@ -1037,6 +1056,7 @@ export default class RaceManager {
                           drifting: this.driftScore.drifting,
                           event: this.driftEvent,
                           lastRun: this.driftLastRun,
+                          result: this.driftResult,
                       }
                     : null,
         });
@@ -1587,11 +1607,18 @@ export default class RaceManager {
             // held throttle, or reverse. not the smoothed input: it's still
             // ramping down for a moment after a restart with the key let go
             const intent = this.vehicle.input.intent;
+            // the line counts the way the car travels, not where it points:
+            // a drift can cross it well sideways
+            const groundSpeed = this.vehicle.velocity.length();
+            const travel =
+                groundSpeed > 2
+                    ? this.tmpTravel.copy(this.vehicle.velocity).divideScalar(groundSpeed)
+                    : telemetry.forward;
             const lapUpdate = this.lapTimer.update(
                 nowMs,
                 telemetry.position,
-                telemetry.speedMps,
-                telemetry.forward,
+                groundSpeed > 2 ? groundSpeed : telemetry.speedMps,
+                travel,
                 intent.throttle > 0.05 || (telemetry.gear < 0 && intent.brake > 0.05)
             );
             this.lapArmed = Boolean(lapUpdate.armed);
@@ -1658,6 +1685,19 @@ export default class RaceManager {
                         lapTimeMs: lapUpdate.completedLapTimeMs,
                         valid,
                     });
+                    // a lap that doesn't count says why, so a run never just
+                    // vanishes at the line
+                    this.driftResult = {
+                        kind: !valid
+                            ? lapUpdate.completedLapTimeMs < DRIFT_MIN_LAP_MS
+                                ? 'short'
+                                : 'cut'
+                            : score > 0
+                              ? 'saving'
+                              : 'empty',
+                        score,
+                        at: nowMs,
+                    };
                     if (valid && score > 0) {
                         this.pendingDrift = { score, lapTimeMs: lapUpdate.completedLapTimeMs };
                         void this.submitPendingDrift();

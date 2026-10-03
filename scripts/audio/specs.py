@@ -242,3 +242,20 @@ def cosworth_v12():
         rasp=0.2, rasp_hz=4800, mech=0.025, jitter_amp=0.03, jitter_deg=0.16,
         cyl_spread=0.02, low_boost_db=0.0, crowding=0.35, seed=650,
     )
+
+
+def toyota_2jz():
+    # toyota 2jz-gte (supra a80): 3.0 inline six, firing order 1-5-3-6-2-4,
+    # even 120 degree firing. sounds like the usual single turbo build: a
+    # twin scroll manifold (1-2-3 and 4-5-6) into one big turbo, then a
+    # straight through 3.5 inch system. smooth, a metallic rasp on top
+    fire = firing_angles([1, 5, 3, 6, 2, 4], [120])
+    # both scrolls meet in the turbine: one pipe out of it
+    pipe = Path([1, 2, 3, 4, 5, 6], [0.52, 0.49, 0.47, 0.47, 0.49, 0.52], pipe_m=2.9, tail_m=0.40, gain=1.0)
+    return EngineSpec(
+        name="toyota-2jz-gte", cylinders=6, fire_deg=fire, paths=[pipe],
+        redline=6800, idle=700, turbo=0.5, muffler_hz=2500, pipe_reflect=-0.30,
+        runner_reflect=-0.42, blowdown_ms=0.95, intake=0.07, intake_hz=800,
+        rasp=0.11, rasp_hz=3400, mech=0.03, jitter_amp=0.045, jitter_deg=0.24,
+        cyl_spread=0.03, low_boost_db=2.0, crowding=0.25, seed=2,
+    )

@@ -11,6 +11,11 @@ export type DriftHudState = {
         | { kind: 'lost'; points: number; reason: 'wall' | 'grass' | 'spin'; at: number }
         | null;
     lastRun: { score: number; lapTimeMs: number } | null;
+    result?: {
+        kind: 'saving' | 'saved' | 'device' | 'short' | 'cut' | 'empty';
+        score: number;
+        at: number;
+    } | null;
 };
 
 const LOST: Record<string, string> = {
@@ -21,8 +26,19 @@ const LOST: Record<string, string> = {
 
 // how long a banked or lost chain stays up, ms
 const FLASH_MS = 1600;
+// and what became of a run at the line
+const RESULT_MS = 5000;
 
 const points = (value: number) => Math.round(value).toLocaleString('en-US');
+
+const RESULT: Record<string, (score: number) => string> = {
+    saving: (score) => `Saving run, ${points(score)}`,
+    saved: (score) => `Run saved, ${points(score)}`,
+    device: (score) => `Saved on this device, ${points(score)} (board offline)`,
+    short: () => 'Lap too short to count',
+    cut: () => 'Lap not counted: drive the whole course',
+    empty: () => 'No drift points that lap',
+};
 
 const lapTime = (ms: number) => {
     const minutes = Math.floor(ms / 60000);
@@ -35,6 +51,8 @@ const lapTime = (ms: number) => {
 const DriftHud = ({ drift, best }: { drift: DriftHudState; best: number }) => {
     const [flash, setFlash] = useState<DriftHudState['event']>(null);
     const key = drift.event ? `${drift.event.kind}:${drift.event.at}` : '';
+    const [result, setResult] = useState<DriftHudState['result']>(null);
+    const resultKey = drift.result ? `${drift.result.kind}:${drift.result.at}` : '';
 
     useEffect(() => {
         if (!drift.event) return;
@@ -42,6 +60,13 @@ const DriftHud = ({ drift, best }: { drift: DriftHudState; best: number }) => {
         const timer = window.setTimeout(() => setFlash(null), FLASH_MS);
         return () => window.clearTimeout(timer);
     }, [key]);
+
+    useEffect(() => {
+        if (!drift.result) return;
+        setResult(drift.result);
+        const timer = window.setTimeout(() => setResult(null), RESULT_MS);
+        return () => window.clearTimeout(timer);
+    }, [resultKey]);
 
     const chaining = drift.chain > 0;
     return (
@@ -58,6 +83,17 @@ const DriftHud = ({ drift, best }: { drift: DriftHudState; best: number }) => {
                     {flash.kind === 'banked'
                         ? `Banked +${points(flash.points)}`
                         : `${LOST[flash.reason]}${flash.points ? `, lost ${points(flash.points)}` : ''}`}
+                </div>
+            )}
+            {result && (
+                <div
+                    className={`drift-hud-result ${
+                        result.kind === 'saved' || result.kind === 'device' || result.kind === 'saving'
+                            ? 'ok'
+                            : 'off'
+                    }`}
+                >
+                    {RESULT[result.kind](result.score)}
                 </div>
             )}
             <div className="drift-hud-runs">

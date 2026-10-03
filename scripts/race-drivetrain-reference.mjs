@@ -368,4 +368,23 @@ export const REFERENCE = {
         speedLimitKph: 354,
         times: [],
     },
+    'toyota-supra-mk4': {
+        variant: 'Toyota Supra Turbo (JZA80), export 6-speed (1993-1998)',
+        engine: '2JZ-GTE 3.0 sequential twin turbo inline six',
+        transmission: 'Getrag V160 6-speed manual',
+        idleRpm: 700,
+        redlineRpm: 6800,
+        gearRatios: [3.827, 2.36, 1.685, 1.312, 1.0, 0.793],
+        finalDrive: 3.133,
+        tyreRear: '255/40 ZR17',
+        // car and driver's car hit its governor at 160 mph
+        topSpeedKph: 257,
+        speedLimitKph: 257,
+        times: [
+            { kph: 60 * MPH, s: cd(4.6), kind: 'test' },
+            { kph: 100 * MPH, s: cd(11.1), kind: 'test' },
+            { kph: 130 * MPH, s: cd(19.9), kind: 'test' },
+            { kph: 150 * MPH, s: cd(29.6), kind: 'test' },
+        ],
+    },
 };

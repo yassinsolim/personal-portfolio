@@ -1867,6 +1867,103 @@ export const carOptions: CarOption[] = [
             ],
         },
     },
+    {
+        id: 'toyota-supra-mk4',
+        label: 'Toyota Supra MK4',
+        resourceName: 'carModelToyotaSupraMk4',
+        modelPath: 'models/Cars/toyota_supra_mk4/source/toyota_supra_mk4.glb',
+        lengthMeters: 4.52,
+        windowTint: {
+            materials: ['glass'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        // super red iv: solid red under a glossy clearcoat. the hex is read
+        // as linear (LegacyColor), this is srgb #aa1018
+        paint: {
+            materials: ['carpaint'],
+            color: 0x660102,
+            metalness: 0,
+            roughness: 0.3,
+            clearcoatRoughness: 0.04,
+        },
+        race: {
+            visualForwardAxis: 'positiveZ',
+            wheelNodeMap: {
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
+            },
+            drivetrain: 'RWD',
+            allowRwdDrift: true,
+            // car and driver's car hit its governor at 160 mph; japanese
+            // cars are held at 180 km/h
+            topSpeedKph: 257,
+            zeroToHundredSec: 5.1,
+            speedLimitKph: 257,
+            massKg: 1565,
+            wheelRadiusMeters: 0.33,
+            tyres: { front: '235/45 ZR17', rear: '255/40 ZR17' },
+            transmission: {
+                type: 'manual',
+                name: 'Getrag V160 6-speed manual',
+                shiftTime: 0.3,
+                shiftTorque: 0,
+                launchRpm: 4000,
+            },
+            idleRpm: 700,
+            redlineRpm: 6800,
+            tachMaxRpm: 9000,
+            shiftUpRpm: 6700,
+            shiftDownRpm: 2600,
+            // the export twin turbo's torsen diff (japanese cars: 3.266)
+            finalDrive: 3.133,
+            gearRatios: [3.827, 2.36, 1.685, 1.312, 1.0, 0.793],
+            reverseRatio: 3.28,
+            steerRateLow: 0.72,
+            steerRateHigh: 1.55,
+            maxSteerAngleDeg: 35,
+            brakeDecel: 40,
+            physics: {
+                powerKw: 239,
+                powerRpm: 5600,
+                torqueNm: 427,
+                torqueRpm: 4000,
+                // export 2jz-gte: 239 kW at 5,600 and 427 Nm at 4,000 are
+                // toyota's. the sequential turbos give 407 Nm from 1,800 on
+                // the first turbo alone, the second joins at 4,000
+                torqueCurve: [
+                    [700, 230],
+                    [1300, 300],
+                    [1800, 407],
+                    [3000, 410],
+                    [3500, 400],
+                    [4000, 427],
+                    [4800, 422],
+                    [5600, 407.6],
+                    [6200, 372],
+                    [6800, 330],
+                ],
+                weightFront: 0.53,
+                cgHeight: 0.47,
+                tireGrip: 1.05,
+                // cd 0.32 on about 1.9 m2 would be 0.61; fitted to car and
+                // driver's 130 and 150 mph times like the 507's
+                cdA: 0.76,
+            },
+            references: [
+                {
+                    label: 'Toyota Supra (A80) specifications, export and Japanese',
+                    url: 'http://mkiv.supras.org.nz/specs.htm',
+                },
+                {
+                    label: 'Car and Driver 1993 Supra Turbo test (via Wikipedia)',
+                    url: 'https://en.wikipedia.org/wiki/Toyota_Supra#Fourth_generation_(A80;_1993)',
+                },
+            ],
+        },
+    },
 ];
 
 export const defaultCarId = 'amg-one';

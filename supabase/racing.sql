@@ -41,7 +41,7 @@ as $$
     || 'toyota-crown-platinum|lamborghini-huracan|lamborghini-aventador-s|'
     || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder|bugatti-chiron-super-sport|'
     || 'koenigsegg-jesko|pagani-huayra|mclaren-senna|ferrari-sf90-stradale|'
-    || 'aston-martin-valkyrie)@v[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
+    || 'aston-martin-valkyrie|toyota-supra-mk4)@v[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
 $$;
 
 alter table public.nordschleife_leaderboard enable row level security;
@@ -216,7 +216,7 @@ as $$
     || 'toyota-crown-platinum|lamborghini-huracan|lamborghini-aventador-s|'
     || 'ferrari-laferrari|mclaren-p1|porsche-918-spyder|bugatti-chiron-super-sport|'
     || 'koenigsegg-jesko|pagani-huayra|mclaren-senna|ferrari-sf90-stradale|'
-    || 'aston-martin-valkyrie)@d[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
+    || 'aston-martin-valkyrie|toyota-supra-mk4)@d[0-9]{1,3}(~t[0-9a-z]{1,16})?$');
 $$;
 
 alter table public.drift_park_scores enable row level security;

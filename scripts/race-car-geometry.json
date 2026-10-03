@@ -118,5 +118,11 @@
         "trackFront": 1.66,
         "trackRear": 1.59,
         "modelWheelRadius": 0.36
+    },
+    "toyota-supra-mk4": {
+        "wheelbase": 2.533,
+        "trackFront": 1.568,
+        "trackRear": 1.568,
+        "modelWheelRadius": 0.331
     }
 }
