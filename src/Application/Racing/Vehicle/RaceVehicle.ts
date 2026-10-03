@@ -5173,16 +5173,19 @@ export default class RaceVehicle {
                 compression: 1,
             });
             const physicalContacts = contacts.filter((contact) => !contact.predictive);
-            const wheelTargets = physicalContacts.map(
-                (contact) =>
-                    contact.hit.point.y + this.rideHeight + WHEEL_PROBE_CLEARANCE_BIAS
-            );
             const centerTargetY = hit.point.y + this.rideHeight + WHEEL_PROBE_CLEARANCE_BIAS;
-            const maxWheelTargetY = wheelTargets.length
-                ? Math.max(...wheelTargets)
-                : centerTargetY;
+            // the road under each wheel against the plane the car is tilted to:
+            // measured straight up, any slope lifted every wheel off the road
+            const normal = this.surfaceNormal;
+            const normalY = Math.max(normal.y, MIN_SURFACE_NORMAL_Y);
+            const wheelRise = physicalContacts.map((contact) => {
+                const dx = contact.hit.point.x - hit.point.x;
+                const dz = contact.hit.point.z - hit.point.z;
+                const planeY = hit.point.y - (normal.x * dx + normal.z * dz) / normalY;
+                return contact.hit.point.y - planeY;
+            });
             const antiSinkLift = THREE.MathUtils.clamp(
-                maxWheelTargetY - centerTargetY,
+                Math.max(0, ...wheelRise),
                 0,
                 MAX_WHEEL_ANTI_SINK_LIFT
             );

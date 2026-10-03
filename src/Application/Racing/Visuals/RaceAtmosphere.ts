@@ -35,6 +35,9 @@ export default class RaceAtmosphere {
     fog: THREE.FogExp2;
     shadowSize: number;
     private snap: THREE.Vector3;
+    // the shadow camera's own right and up, what its texels line up with
+    private lightRight: THREE.Vector3;
+    private lightUp: THREE.Vector3;
 
     constructor(parent: THREE.Object3D) {
         this.root = new THREE.Group();
@@ -63,8 +66,9 @@ export default class RaceAtmosphere {
         uniforms.sunPosition.value.copy(this.sunDirection);
         this.root.add(this.sky);
 
-        // warm, low sun. physical units: the pmrem sky does most of the fill
-        this.sun = new THREE.DirectionalLight(0xffdcb8, 2.6);
+        // warm, low sun. physical units. it has to outshine the sky's fill by
+        // a good margin or the shadows it casts barely darken the road
+        this.sun = new THREE.DirectionalLight(0xffdcb8, 5);
         this.sun.name = 'race-sun';
         this.sun.castShadow = true;
         // the forest's shadow only casters live on their own layer
@@ -74,13 +78,20 @@ export default class RaceAtmosphere {
         this.root.add(this.sun);
         this.root.add(this.sun.target);
 
-        this.hemi = new THREE.HemisphereLight(0xa8c0dc, 0x4a5236, 0.55);
+        this.hemi = new THREE.HemisphereLight(0xa8c0dc, 0x4a5236, 0.2);
         this.hemi.name = 'race-hemi';
         this.root.add(this.hemi);
 
         this.fog = new THREE.FogExp2(FOG_COLOR.getHex(), FOG_DENSITY);
         this.environment = null;
         this.snap = new THREE.Vector3();
+        this.lightRight = new THREE.Vector3()
+            .crossVectors(new THREE.Vector3(0, 1, 0), this.sunDirection)
+            .normalize();
+        this.lightUp = new THREE.Vector3().crossVectors(
+            this.sunDirection,
+            this.lightRight
+        );
     }
 
     configureShadow(size: number) {
@@ -172,14 +183,17 @@ export default class RaceAtmosphere {
     }
 
     // keeps the shadow camera around the car, snapped to whole shadow texels
-    // so the edges don't crawl as it moves
+    // so the edges don't crawl as it moves. snapped across the light's view:
+    // a world grid step lands between its texels
     follow(focus: THREE.Vector3) {
         const texel = (SHADOW_EXTENT * 2) / this.shadowSize;
-        this.snap.set(
-            Math.round(focus.x / texel) * texel,
-            Math.round(focus.y / texel) * texel,
-            Math.round(focus.z / texel) * texel
-        );
+        const snapped = (axis: THREE.Vector3) =>
+            Math.round(focus.dot(axis) / texel) * texel;
+        this.snap
+            .copy(this.sunDirection)
+            .multiplyScalar(focus.dot(this.sunDirection))
+            .addScaledVector(this.lightRight, snapped(this.lightRight))
+            .addScaledVector(this.lightUp, snapped(this.lightUp));
         this.sun.target.position.copy(this.snap);
         this.sun.position
             .copy(this.snap)
