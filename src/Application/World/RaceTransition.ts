@@ -8,9 +8,7 @@ import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { copyCarLook, finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
-import { loadLook } from '../Racing/Garage/garage';
-import { getStoredCarId } from '../carOptions';
-import { isLowPowerDevice } from '../Utils/Device';
+import { dressRoomCarAtStart } from '../sources';
 import { reportStage } from '../Utils/loadStages';
 import { HYBRID } from '../UI/loaders/hybridConfig';
 import { prefersReducedMotion } from '../UI/loaders/variant';
@@ -32,8 +30,8 @@ const FLY_EASE = BezierEasing(0.45, 0, 0.12, 1);
 const COMPILE_WAIT_MS = 2500;
 const JOIN_WAIT_MS = 4000;
 const NAME_KEY = 'yassinverse:nordschleife:multiplayer:name:v1';
-// after the intro, so the build doesn't cost the first frames
-const ROOM_DRESS_DELAY_MS = 2500;
+// the longest a returning visitor's car waits out of sight for its look
+const DRESS_WAIT_MS = 4000;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 // leaving the race: the startup's pull-back off the terminal screen again
 const RETURN_MS = 1300;
@@ -159,25 +157,6 @@ export default class RaceTransition {
             this.returning = this.returnHome(hold);
         });
         UIEventBus.on('carChange', () => window.setTimeout(() => void this.dressRoomCar(), 0));
-        // a returning visitor's saved rims, kit and ride height need the race's
-        // prepared car: capable devices build it once the room is up, phones
-        // show them after their first visit to the race
-        UIEventBus.on('loadingScreenDone', () => {
-            const look = loadLook(getStoredCarId());
-            const fitted =
-                look.wheels !== 'stock' || look.spoiler !== 'none' || look.ride !== 0 || look.rims;
-            if (!fitted || isLowPowerDevice()) return;
-            const dress = () =>
-                void this.application.world
-                    .ensureRaceManager()
-                    .then(() => this.dressRoomCar())
-                    .catch(() => undefined);
-            window.setTimeout(() => {
-                if (typeof window.requestIdleCallback === 'function')
-                    window.requestIdleCallback(dress, { timeout: 5000 });
-                else dress();
-            }, ROOM_DRESS_DELAY_MS);
-        });
 
         // capture phase, ahead of the camera's own click handler
         document.addEventListener(
@@ -1026,6 +1005,29 @@ export default class RaceTransition {
         else pull();
     }
 
+    // a returning visitor's saved rims, kit and ride height need the race's
+    // prepared car. capable devices build it once the room has warmed up and
+    // the car stays out of sight until it's dressed (or DRESS_WAIT_MS), with
+    // the loading screen waiting for it (PipelineIntro), so it's never seen
+    // stock first. phones show them after their first visit to the race
+    dressAtStart(warming: Promise<void> | null): Promise<void> | null {
+        if (!dressRoomCarAtStart) return null;
+        const world = this.application.world;
+        const car = world.car?.model;
+        if (!car) return null;
+        car.visible = false;
+        const dressed = Promise.resolve(warming)
+            .then(() => world.ensureRaceManager())
+            .then(() => this.dressRoomCar())
+            .catch(() => undefined);
+        return Promise.race([
+            dressed,
+            new Promise<void>((resolve) => window.setTimeout(resolve, DRESS_WAIT_MS)),
+        ]).then(() => {
+            car.visible = true;
+        });
+    }
+
     // the room car takes the saved look off the race's prepared model of
     // the same car (wheel names, rims, body kit), see copyCarLook
     async dressRoomCar() {
@@ -1040,7 +1042,12 @@ export default class RaceTransition {
         if (wheels !== 'stock' && wheels !== carId) await vehicle.ensurePreparedModel(wheels);
         if (!model || manager.active || room.currentCarId !== carId || !room.model) return;
         vehicle.applyLookTo(model, carId, vehicle.look);
-        copyCarLook(model, room.model, carId, vehicle.look);
+        const target = room.model;
+        const copy = () => copyCarLook(model, target, carId, vehicle.look);
+        // while the loading screen's stages are up, it takes the new parts in
+        const intro = this.application.world.intro;
+        if (intro) intro.alter(copy);
+        else copy();
     }
 
     finish(manager: RaceManager) {

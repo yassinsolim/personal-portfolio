@@ -11,7 +11,7 @@ import RaceTransition from './RaceTransition';
 import CarTag from './CarTag';
 import Flipper from './Flipper';
 import UIEventBus from '../UI/EventBus';
-import { raceSources } from '../sources';
+import { dressRoomCarAtStart, raceSources } from '../sources';
 import { isLowPowerDevice } from '../Utils/Device';
 import { reportStage } from '../Utils/loadStages';
 import { afterFrame } from '../Racing/slicing';
@@ -54,6 +54,9 @@ export default class World {
     pendingRaceAction: RaceAction | null;
     // set while the room's textures and programs get ready (warmUp)
     warming: Promise<void> | null = null;
+    // a returning visitor's car being dressed in its saved look, which the
+    // loading screen waits for (RaceTransition.dressAtStart)
+    carDressing: Promise<void> | null = null;
     // the hybrid loading screen draws its pipeline stages while the room
     // warms up, and has the real materials compiled instead of its stand ins
     drawWhileWarming = false;
@@ -70,6 +73,9 @@ export default class World {
         this.pendingRaceAction = null;
         this.screens = new Screens();
         this.bindRaceManagerLoader();
+        // the race code a returning visitor's car look needs comes down with
+        // the room's files
+        if (dressRoomCarAtStart) void this.loadRace().catch(() => undefined);
         UIEventBus.on('loadingScreenDone', () => this.prefetchRaceWhenIdle());
         // Wait for resources
         this.resources.on('ready', () => {
@@ -86,6 +92,7 @@ export default class World {
             // const hb = new Hitboxes();
             // this.cursor = new Cursor();
             this.warming = this.warmUp();
+            this.carDressing = this.raceTransition.dressAtStart(this.warming);
             void this.warming.then(async () => {
                 this.warming = null;
                 // the room is drawn in the next frame

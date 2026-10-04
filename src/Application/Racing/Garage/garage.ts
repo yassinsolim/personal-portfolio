@@ -335,6 +335,9 @@ const write = (key: string, value: unknown) => {
 };
 
 export const loadLook = (carId: string) => sanitizeLook(read(LOOK_KEY + carId));
+// what the homepage car can only wear off the race's prepared model
+export const needsRaceModel = (look: CarLook) =>
+    look.wheels !== 'stock' || look.spoiler !== 'none' || look.ride !== 0 || Boolean(look.rims);
 export const loadTune = (carId: string) => sanitizeTune(read(TUNE_KEY + carId));
 export const saveLook = (carId: string, look: CarLook) =>
     write(LOOK_KEY + carId, look);
