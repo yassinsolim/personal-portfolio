@@ -1,11 +1,19 @@
 import { carOptions, getStoredCarId } from './carOptions';
 import { roomTier } from './Utils/roomTier';
+import { isLowPowerDevice } from './Utils/Device';
+import { loadLook, needsRaceModel } from './Racing/Garage/garage';
 
 const initialCarId = getStoredCarId();
 const preloadIds = new Set(
     carOptions.filter((car) => car.preload).map((car) => car.id)
 );
 preloadIds.add(initialCarId);
+// a returning visitor's look that needs the race's prepared car: the room car
+// is dressed before it's shown (RaceTransition.dressAtStart), and a car whose
+// wheels it wears loads with the room
+const initialLook = loadLook(initialCarId);
+export const dressRoomCarAtStart = needsRaceModel(initialLook) && !isLowPowerDevice();
+if (dressRoomCarAtStart) preloadIds.add(initialLook.wheels);
 
 const carModelSources: Resource[] = carOptions
     .filter((car) => preloadIds.has(car.id))

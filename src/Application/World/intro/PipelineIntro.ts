@@ -207,6 +207,8 @@ export default class PipelineIntro {
     private styles = new Map<HTMLElement, string>();
     private standIns: Promise<unknown> | null = null;
     private standInsPrimed = false;
+    private dressWait: Promise<void> | null = null;
+    private dressed = false;
     // the stages left when the camera move began, and the last announced
     private pull: { progress: () => number; from: number; front: number; announced: number } | null = null;
 
@@ -376,6 +378,16 @@ export default class PipelineIntro {
 
     private checkLighting() {
         if (!this.warmed || !this.framed || this.released) return;
+        // a returning visitor's car comes into view in its saved look, not
+        // stock and then fitted (World.carDressing, capped there)
+        const dressing = this.application.world?.carDressing;
+        if (dressing && !this.dressed) {
+            this.dressWait ||= dressing.then(() => {
+                this.dressed = true;
+                this.checkLighting();
+            });
+            return;
+        }
         this.raise(S.lighting);
         this.raise(S.output);
         // the work is done: the room takes input now, the last stages finish
@@ -544,6 +556,36 @@ export default class PipelineIntro {
             });
             this.apply();
         };
+    }
+
+    // a change to the car while the stages are up (a returning visitor's
+    // look): made on the real materials, then the materials it swapped and
+    // the parts it added are taken in like the rest
+    alter(change: () => void) {
+        if (this.finished) {
+            change();
+            return;
+        }
+        const restore = this.swapReal();
+        try {
+            change();
+        } finally {
+            this.managed.forEach((m) => {
+                m.real = m.mesh.material;
+                // a part it hid with an invisible material (a wheel node that
+                // is a mesh itself) leaves the stages, or its stand ins show it
+                if (firstMaterial(m.real)?.visible === false) this.drop(m);
+            });
+            const car = this.application.world.car?.model;
+            if (car) this.manageTree(car, 'car');
+            restore();
+        }
+    }
+
+    private drop(m: Managed) {
+        m.mesh.remove(m.points, m.twin);
+        [m.pointsMaterial, m.wire, m.flat, m.albedo].forEach((material) => material.dispose());
+        this.managed.delete(m.mesh);
     }
 
     // the highest stage a mesh can show with what has loaded
