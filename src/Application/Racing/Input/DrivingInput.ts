@@ -1,4 +1,5 @@
 import UIEventBus from '../../UI/EventBus';
+import { BUTTON, currentPad, padShared, stick } from '../../Gamepad/pad';
 
 // steer is positive to the left (toward positive yaw): A and the left arrow
 // give +1, D and the right arrow give -1
@@ -33,17 +34,20 @@ const HANDBRAKE_RISE = 16;
 const HANDBRAKE_RELEASE = 12;
 
 // standard gamepad layout
-const PAD_A = 0;
-const PAD_Y = 3;
-const PAD_LB = 4;
-const PAD_RB = 5;
-const PAD_LT = 6;
-const PAD_RT = 7;
-const PAD_VIEW = 8;
-const PAD_MENU = 9;
-const PAD_LEFT = 14;
-const PAD_RIGHT = 15;
+const PAD_A = BUTTON.A;
+const PAD_B = BUTTON.B;
+const PAD_X = BUTTON.X;
+const PAD_Y = BUTTON.Y;
+const PAD_LB = BUTTON.LB;
+const PAD_RB = BUTTON.RB;
+const PAD_LT = BUTTON.LT;
+const PAD_RT = BUTTON.RT;
+const PAD_VIEW = BUTTON.VIEW;
+const PAD_MENU = BUTTON.MENU;
+const PAD_LEFT = BUTTON.LEFT;
+const PAD_RIGHT = BUTTON.RIGHT;
 const STICK_DEADZONE = 0.08;
+const LOOK_DEADZONE = 0.2;
 const TRIGGER_DEADZONE = 0.04;
 // a little curve so small stick moves stay small at speed
 const STICK_CURVE = 1.35;
@@ -89,9 +93,11 @@ export default class DrivingInput {
     // what the driver asks for this step before any smoothing (a held key,
     // a pad trigger), so a lap clock can tell real input from a ramp down
     intent = { throttle: 0, brake: 0 };
+    // the right stick looks around the car and B looks back, read by the
+    // chase camera
+    look = { x: 0, y: 0, back: false };
     source: InputSource;
     padButtons: boolean[];
-    padIndex: number;
     pendingShift: number;
     rumbleEnabled: boolean;
     lastRumbleAt: number;
@@ -100,7 +106,6 @@ export default class DrivingInput {
     blurHandler: () => void;
     visibilityChangeHandler: () => void;
     pointerLockChangeHandler: () => void;
-    gamepadHandler: () => void;
 
     constructor() {
         this.enabled = false;
@@ -120,7 +125,6 @@ export default class DrivingInput {
         };
         this.source = 'keyboard';
         this.padButtons = [];
-        this.padIndex = -1;
         this.pendingShift = 0;
         this.rumbleEnabled = true;
         this.lastRumbleAt = 0;
@@ -164,10 +168,6 @@ export default class DrivingInput {
             }
         };
 
-        this.gamepadHandler = () => {
-            this.padIndex = -1;
-        };
-
         document.addEventListener('keydown', this.keyDownHandler);
         document.addEventListener('keyup', this.keyUpHandler);
         window.addEventListener('blur', this.blurHandler);
@@ -179,8 +179,6 @@ export default class DrivingInput {
             'pointerlockchange',
             this.pointerLockChangeHandler
         );
-        window.addEventListener('gamepadconnected', this.gamepadHandler);
-        window.addEventListener('gamepaddisconnected', this.gamepadHandler);
 
         UIEventBus.on('race:inputReset', () => {
             this.reset();
@@ -233,7 +231,12 @@ export default class DrivingInput {
         this.enabled = enabled;
         if (!enabled) {
             this.reset();
+            return;
         }
+        // a button still held from the menu that started or resumed the
+        // race isn't a new press
+        const pad = this.getGamepad();
+        if (pad) this.syncPad(pad);
     }
 
     reset() {
@@ -250,29 +253,25 @@ export default class DrivingInput {
         this.smoothState.steer = 0;
         this.smoothState.handbrake = 0;
         this.pendingShift = 0;
+        this.look.x = 0;
+        this.look.y = 0;
+        this.look.back = false;
     }
 
     anyKey(codes: string[]) {
         return codes.some((code) => this.keyState[code]);
     }
 
+    // the pad in use, shared with the page (Gamepad/pad.ts): any layout, the
+    // last one used
     getGamepad(): Gamepad | null {
-        if (typeof navigator === 'undefined' || !navigator.getGamepads) {
-            return null;
-        }
-        const pads = navigator.getGamepads();
-        if (this.padIndex >= 0 && pads[this.padIndex]?.connected) {
-            return pads[this.padIndex];
-        }
-        for (let i = 0; i < pads.length; i++) {
-            const pad = pads[i];
-            if (pad && pad.connected && pad.mapping === 'standard') {
-                this.padIndex = i;
-                return pad;
-            }
-        }
-        this.padIndex = -1;
-        return null;
+        return currentPad();
+    }
+
+    syncPad(pad: Gamepad) {
+        pad.buttons.forEach((button, index) => {
+            this.padButtons[index] = button.pressed;
+        });
     }
 
     // edge-triggered buttons on the pad
@@ -285,14 +284,21 @@ export default class DrivingInput {
 
     readGamepad(): DrivingInputState | null {
         const pad = this.getGamepad();
-        if (!pad) return null;
-        const stick = pad.axes[0] ?? 0;
+        // a menu over the race (lobby card, garage) or the fly in has the pad
+        if (!pad || padShared.menuOpen) {
+            if (pad) this.syncPad(pad);
+            this.look.x = 0;
+            this.look.y = 0;
+            this.look.back = false;
+            return null;
+        }
+        const steerAxis = pad.axes[0] ?? 0;
         const magnitude = Math.max(
             0,
-            (Math.abs(stick) - STICK_DEADZONE) / (1 - STICK_DEADZONE)
+            (Math.abs(steerAxis) - STICK_DEADZONE) / (1 - STICK_DEADZONE)
         );
         let steer =
-            -Math.sign(stick) * Math.pow(Math.min(1, magnitude), STICK_CURVE);
+            -Math.sign(steerAxis) * Math.pow(Math.min(1, magnitude), STICK_CURVE);
         if (steer === 0) {
             if (pad.buttons[PAD_LEFT]?.pressed) steer = 1;
             if (pad.buttons[PAD_RIGHT]?.pressed) steer = -1;
@@ -319,12 +325,22 @@ export default class DrivingInput {
         }
         if (this.padPressed(pad, PAD_RB)) this.pendingShift = 1;
         if (this.padPressed(pad, PAD_LB)) this.pendingShift = -1;
+        if (this.padPressed(pad, PAD_X)) {
+            UIEventBus.dispatch('race:cycleCamera', { source: 'gamepad' });
+        }
+        const [lookX, lookY] = stick(pad.axes[2] ?? 0, pad.axes[3] ?? 0, LOOK_DEADZONE);
+        this.look.x = lookX;
+        this.look.y = lookY;
+        this.look.back = Boolean(pad.buttons[PAD_B]?.pressed);
 
         const active =
             state.throttle > 0 ||
             state.brake > 0 ||
             state.handbrake > 0 ||
-            Math.abs(steer) > 0;
+            Math.abs(steer) > 0 ||
+            lookX !== 0 ||
+            lookY !== 0 ||
+            this.look.back;
         if (active) this.source = 'gamepad';
         return state;
     }

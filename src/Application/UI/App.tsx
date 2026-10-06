@@ -23,6 +23,7 @@ import {
 import './style.css';
 import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
+import { padShared } from '../Gamepad/pad';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -670,7 +671,10 @@ const App = () => {
 
     const handleResumeRace = () => {
         eventBus.dispatch('race:setPaused', { paused: false });
-        eventBus.dispatch('race:requestPointerLock', { fromUI: true });
+        // a controller drives without the mouse, and a lock needs a click
+        if (!padShared.active) {
+            eventBus.dispatch('race:requestPointerLock', { fromUI: true });
+        }
     };
 
     const handleResetVehicle = () => {
@@ -1330,7 +1334,7 @@ const App = () => {
                 <div className="race-menu-overlay" data-prevent-click>
                     <div className="race-menu-panel" data-prevent-click>
                         <h3>{trackState.track === 'drift' ? 'Drift Park' : 'Nordschleife'} Pause</h3>
-                        <p>Esc opens this menu at any time during race mode.</p>
+                        <p>Esc, or Menu on a controller, opens this menu at any time during race mode.</p>
 
                         <div className="race-menu-row race-track-pick">
                             <span>Track</span>
@@ -1509,8 +1513,15 @@ const App = () => {
                         <p className="race-menu-controls">
                             W / S or arrows: throttle, brake (hold S to reverse).
                             A / D: steer. Space: handbrake. R: back on track. T:
-                            restart lap. G: garage. Gamepad: triggers, left
-                            stick, A handbrake, Y reset.
+                            restart lap. G: garage. C: camera.
+                        </p>
+                        <p className="race-menu-controls">
+                            Controller: right trigger gas, left trigger brake
+                            (hold to reverse), left stick steer, A handbrake, B
+                            look back, X camera, Y back on track, bumpers shift,
+                            right stick look around, View restart lap, Menu
+                            pause. In menus the d-pad or left stick moves, A
+                            picks, B goes back and the bumpers switch tabs.
                         </p>
                         <p className="race-menu-controls">
                             Drifting: turn in and tap Space, then feather W to
