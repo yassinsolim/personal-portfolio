@@ -17,6 +17,7 @@ import type Stats from 'stats.js';
 import Loading from './Utils/Loading';
 
 import UI from './UI';
+import GamepadController from './Gamepad/GamepadController';
 import type SceneExportController from './Utils/SceneExportController';
 
 // the glb export (GLTFExporter) and the fps panel are dev tools, only
@@ -39,6 +40,7 @@ export default class Application {
     mouse: Mouse;
     loading: Loading;
     ui: UI;
+    gamepad: GamepadController;
     sceneExportController: SceneExportController | undefined;
     stats: Stats | undefined;
 
@@ -76,6 +78,7 @@ export default class Application {
         this.world = new World();
 
         this.ui = new UI();
+        this.gamepad = new GamepadController();
 
         const urlParams = new URLSearchParams(window.location.search);
         if (EXPORT_FLAGS.some((flag) => urlParams.has(flag))) {
@@ -112,6 +115,7 @@ export default class Application {
     update() {
         if (this.stats) this.stats.begin();
         this.renderer.frameStats.beginTick();
+        this.gamepad.update();
         this.camera.update();
         this.world.update();
         // the room isn't drawn while its programs compile (the loading

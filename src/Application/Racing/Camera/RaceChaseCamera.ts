@@ -12,6 +12,9 @@ const RACE_CAMERA_FAR = 16000;
 const POINTER_LOCK_PENDING_TIMEOUT_MS = 650;
 // mouse look drifts back behind the car after this long without input
 const LOOK_RETURN_DELAY_S = 1.4;
+// how far the pad's right stick turns the view, full over
+const PAD_LOOK_YAW = 2.2;
+const PAD_LOOK_PITCH = 0.35;
 const REFERENCE_CAR_LENGTH = 4.7;
 
 type CameraView = {
@@ -487,12 +490,26 @@ export default class RaceChaseCamera {
             speed > 3
                 ? Math.atan2(vehicle.velocity.x, vehicle.velocity.z)
                 : carYaw;
-        // mouse look settles back behind the car when you let go
-        this.lookIdle += dt;
-        if (!this.pointerLocked || this.lookIdle > LOOK_RETURN_DELAY_S) {
-            const settle = Math.min(1, dt * 2.5);
-            this.yawOffset += (0 - this.yawOffset) * settle;
-            this.pitchOffset += (0 - this.pitchOffset) * settle;
+        // the pad's right stick (or B, to look back) points the view and it
+        // springs back when let go. mouse look settles back behind the car
+        // once the mouse stops
+        const padLook = vehicle.input.look;
+        if (padLook.back || padLook.x || padLook.y) {
+            this.lookIdle = 0;
+            const yaw = padLook.back ? Math.PI : -padLook.x * PAD_LOOK_YAW;
+            const pitch = padLook.back
+                ? 0
+                : THREE.MathUtils.clamp(padLook.y * PAD_LOOK_PITCH, MIN_PITCH, MAX_PITCH);
+            const follow = Math.min(1, dt * 12);
+            this.yawOffset += (yaw - this.yawOffset) * follow;
+            this.pitchOffset += (pitch - this.pitchOffset) * follow;
+        } else {
+            this.lookIdle += dt;
+            if (!this.pointerLocked || this.lookIdle > LOOK_RETURN_DELAY_S) {
+                const settle = Math.min(1, dt * (this.pointerLocked ? 2.5 : 5));
+                this.yawOffset += (0 - this.yawOffset) * settle;
+                this.pitchOffset += (0 - this.pitchOffset) * settle;
+            }
         }
 
         this.tmpUp.set(0, 1, 0);

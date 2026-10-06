@@ -367,6 +367,26 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `--swgl` (SwiftShader) and `--cpu-throttle 4`. `--profile` times the main per frame calls and
   `hitchLog` in the result lists slow frames with their context.
 
+## Controller Notes (2026-10-06)
+- `Gamepad/GamepadController.ts` (polled first thing in `Application.update`) runs the whole
+  site on a pad; the car still reads it in `Racing/Input/DrivingInput.ts`. Both pick the pad
+  through `Gamepad/pad.ts` (`currentPad`, any layout, the last one used). `padShared.menuOpen`
+  keeps the car off the pad while a menu or the fly in has it, and `padShared.active` (also
+  `html.pad-mode`) is on until a real mouse move, touch, wheel or key.
+- Contexts: room (the d-pad or left stick moves between the panel's buttons and the car, the
+  screens, the pc and the flipper, steered by their centres, `Gamepad/spatial.ts`), menus
+  (car picker, garage, pause menu, lobby card: A presses, B is Esc or resume, bumpers switch
+  tabs, left and right move sliders and selects), a focused m2 or m3 (their own buttons), m1
+  (a pointer inside yassinOS over the bridge, `yassinos:pointer`, yassinOS's
+  `utils/padPointer.ts`), the flipper (its keys), look around, the fly in (any face button
+  skips) and driving. B goes back through the page's own Esc handlers (synthetic keydown).
+- Driving adds X camera, B look back and the right stick looking around
+  (`RaceChaseCamera`, `input.look`). Resuming with a pad asks for no pointer lock. Touch
+  buttons hide in pad mode. A new tab needs a real click, so `target=_blank` links are skipped.
+- Test with a stubbed `navigator.getGamepads` on `?raceDebug=1` (`Application.gamepad`); wait
+  for `gamepad.prev[i]` to see a press, a long frame can swallow a short one. `npm test` has
+  the pure parts (`scripts/test/gamepad.test.mjs`).
+
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
 - `npm run build` passes (with existing large asset warnings).

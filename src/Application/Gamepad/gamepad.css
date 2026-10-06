@@ -1,0 +1,132 @@
+/* the controller's focus: a ring on the page's controls, a frame and a name
+   over the room's screens, the car, the pc and the flipper, and the buttons
+   for what's on screen along the bottom. only while the pad is in use */
+
+.pad-mode [data-pad-focus] {
+    outline: 2px solid #fff !important;
+    outline-offset: 3px;
+    box-shadow: 0 0 0 6px rgba(255, 179, 92, 0.45);
+}
+
+.pad-target {
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 29;
+    box-sizing: border-box;
+    border: 2px solid #ffb35c;
+    border-radius: 14px;
+    box-shadow:
+        0 0 0 4px rgba(255, 179, 92, 0.18),
+        0 0 28px rgba(255, 179, 92, 0.22);
+    pointer-events: none;
+    opacity: 0;
+    transition:
+        transform 0.16s ease,
+        width 0.16s ease,
+        height 0.16s ease,
+        opacity 0.15s ease;
+}
+
+.pad-target.on {
+    opacity: 1;
+}
+
+.pad-target span {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(12, 12, 16, 0.86);
+    color: #fff;
+    font:
+        500 13px/1.2 -apple-system,
+        'Segoe UI',
+        Roboto,
+        sans-serif;
+    white-space: nowrap;
+    transform: translate(-50%, calc(-100% - 8px));
+}
+
+.pad-hints {
+    position: fixed;
+    left: 50%;
+    bottom: 18px;
+    z-index: 70;
+    display: flex;
+    gap: 16px;
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+    padding: 7px 14px;
+    border-radius: 999px;
+    background: rgba(12, 12, 16, 0.8);
+    color: #e9e6e1;
+    font:
+        500 12px/20px -apple-system,
+        'Segoe UI',
+        Roboto,
+        sans-serif;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%);
+    transition: opacity 0.25s ease;
+}
+
+.pad-hints.on {
+    opacity: 1;
+}
+
+/* clear of the flipper's notes and the back button */
+.pad-hints.raised {
+    bottom: 64px;
+}
+
+/* menus sit in the middle or on one side, so their hints go in a corner */
+.pad-hints.corner {
+    left: 18px;
+    transform: none;
+}
+
+.pad-hints.corner.right {
+    left: auto;
+    right: 18px;
+}
+
+.pad-hints kbd {
+    display: inline-block;
+    min-width: 20px;
+    height: 20px;
+    margin-right: 6px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    font:
+        600 11px/20px -apple-system,
+        'Segoe UI',
+        Roboto,
+        sans-serif;
+    text-align: center;
+}
+
+/* a pad needs neither the touch buttons nor the mouse lock hint */
+.pad-mode .race-touch-controls,
+.pad-mode .race-lock-hint {
+    display: none !important;
+}
+
+@media (max-width: 560px) {
+    .pad-hints {
+        gap: 10px;
+        font-size: 11px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pad-target {
+        transition: opacity 0.15s ease;
+    }
+}
