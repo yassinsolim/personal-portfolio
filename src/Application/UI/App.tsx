@@ -28,6 +28,7 @@ import { readLineMode, type LineMode } from '../Racing/Track/lineMode';
 import { STEERING_KEY, readSteering } from '../Racing/Input/steering';
 import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Track/startTrack';
 import PauseMenu from './components/PauseMenu';
+import TrackMap from './components/TrackMap';
 import NameCard from './components/NameCard';
 import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
 
@@ -1055,6 +1056,7 @@ const App = () => {
                                         aria-pressed={startTrack === track}
                                         onClick={() => pickStartTrack(track)}
                                     >
+                                        <TrackMap track={track} />
                                         <strong>{label}</strong>
                                         <small>{hint}</small>
                                     </button>

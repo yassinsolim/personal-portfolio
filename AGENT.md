@@ -556,6 +556,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `yassinverse:startTrack:v1`), used by Play Solo and the car click (solo only, an invite
   is always the ring; the park comes on after the fly in). The controls and tips are in
   `RaceHelp.tsx` behind Help, its own pad scope (B closes it, the bumpers switch tabs).
+- Track cards (pause menu, room panel) draw each lap from `UI/trackOutlines.ts`, which
+  `node scripts/track/outlines.mjs` writes from the track data: rerun it when a track
+  changes.
 - Esc: with the mouse locked the browser eats the key and only unlocks, so losing the lock
   while driving pauses (`RaceChaseCamera`, our own unlocks set `releasing`). Esc in the menu
   resumes, but not the esc that paused: that one is default-prevented by the camera before

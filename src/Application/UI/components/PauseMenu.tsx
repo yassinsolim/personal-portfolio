@@ -5,6 +5,7 @@ import { carThumb } from './CarPicker';
 import { formatTime } from './RaceHudGauges';
 import GraphicsInfo from './GraphicsInfo';
 import RaceHelp from './RaceHelp';
+import TrackMap from './TrackMap';
 import type { RaceHud } from './LobbyRaceHud';
 import type { MultiplayerState } from '../../Racing/Multiplayer/MultiplayerService';
 import type { AssistPreset } from '../../Racing/Vehicle/assists';
@@ -270,6 +271,7 @@ const PauseMenu = (props: Props) => {
                                     disabled={props.building || inLobbyRace}
                                     onClick={() => pickTrack(id)}
                                 >
+                                    <TrackMap track={id} />
                                     <strong>{label}</strong>
                                     <small>{hint}</small>
                                     <em>
