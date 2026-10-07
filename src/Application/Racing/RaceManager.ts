@@ -4,7 +4,13 @@ import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack, { type TrackFrame } from './Track/NordschleifeTrack';
 import { buildDriftParkData, DRIFT_PARK_SPLITS } from './Track/driftPark';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
-import { peakOutput, predictTopSpeed, rpmAtSpeed, torqueAt } from './Vehicle/VehiclePhysics';
+import {
+    peakOutput,
+    predictStop,
+    predictTopSpeed,
+    rpmAtSpeed,
+    torqueAt,
+} from './Vehicle/VehiclePhysics';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import SectorTimer from './Lap/SectorTimer';
@@ -976,6 +982,8 @@ export default class RaceManager {
                 topLimitedBy: top.limitedBy,
                 downforce: Math.round(spec.clA * 100) / 100,
                 brakeFront: Math.round(spec.brakeBias * 100),
+                stop100: Math.round(predictStop(spec, 100 / 3.6)),
+                stop200: Math.round(predictStop(spec, 200 / 3.6)),
                 rpmAt100: Math.round(
                     rpmAtSpeed(spec, 100 / 3.6, spec.gearRatios.length)
                 ),

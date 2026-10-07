@@ -42,6 +42,8 @@ test('tune codes stay inside the board tag (16 characters)', () => {
         engine: engines.ENGINE_IDS[engines.ENGINE_IDS.length - 1],
         induction: 'super',
         exhaust: 'straight',
+        brakes: 'race',
+        brakePressure: 0.7,
     });
     const code = garage.tuneCode(everything, { ...garage.STOCK_LOOK, spoiler: 'wing', ride: -1 });
     assert.ok(/^[0-9a-z]{1,16}$/.test(code), code);

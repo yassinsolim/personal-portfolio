@@ -12,6 +12,7 @@ export type PaintFinish =
     'stock' | 'gloss' | 'metallic' | 'pearl' | 'matte' | 'chrome';
 export type Spoiler = 'none' | 'ducktail' | 'wing';
 export type TireCompound = 'street' | 'sport' | 'semi' | 'slick' | 'drift';
+export type BrakeKit = 'stock' | 'street' | 'sport' | 'race';
 
 export type CarLook = {
     // hex like #1f4fa8, null keeps the factory color
@@ -40,6 +41,10 @@ export type CarTune = {
     gearing: number;
     // share of brake force on the front axle
     brakeBias: number;
+    // calipers, rotors and pads, and the line pressure the sport and race
+    // kits let you set (1 is stock)
+    brakes: BrakeKit;
+    brakePressure: number;
     // false takes the electronic top speed limiter out
     speedLimiter: boolean;
     // angle kit: more steering lock, for countersteering big slides
@@ -71,6 +76,8 @@ export const STOCK_TUNE: CarTune = {
     diff: 0,
     gearing: 0,
     brakeBias: STOCK_BRAKE_BIAS,
+    brakes: 'stock',
+    brakePressure: 1,
     speedLimiter: true,
     angleKit: false,
     engine: 'stock',
@@ -98,6 +105,7 @@ export const LIMITS = {
     diff: [-1, 1],
     gearing: [-1, 1],
     brakeBias: [0.54, 0.74],
+    brakePressure: [0.7, 1.3],
     ride: [-1, 1],
 } as const;
 
@@ -120,6 +128,19 @@ const AERO: Record<Spoiler, { cl: number; cd: number }> = {
     ducktail: { cl: 0.06, cd: 0.01 },
     wing: { cl: 0.22, cd: 0.05 },
 };
+
+// brake torque on the same pedal. stock brakes already lock the tires, so
+// like in forza a bigger kit bites harder on part pedal and pays off once
+// grippier tires, downforce or big speed ask more than stock can give
+export const BRAKE_KITS: BrakeKit[] = ['stock', 'street', 'sport', 'race'];
+const BRAKE_TORQUE: Record<BrakeKit, number> = {
+    stock: 1,
+    street: 1.15,
+    sport: 1.3,
+    race: 1.5,
+};
+export const brakePressureTunable = (brakes: BrakeKit) =>
+    brakes === 'sport' || brakes === 'race';
 
 const RIDE_METERS = 0.03;
 const INDUCTIONS: Induction[] = ['stock', 'na', 'twin', 'quad', 'super'];
@@ -175,6 +196,9 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         fallback: number,
         [min, max]: readonly [number, number]
     ) => clamp(Number(value ?? fallback), min, max);
+    const brakes = BRAKE_KITS.includes(source.brakes as BrakeKit)
+        ? (source.brakes as BrakeKit)
+        : 'stock';
     return {
         power: num(source.power, 1, LIMITS.power),
         tires: (['street', 'sport', 'semi', 'slick', 'drift'] as const).includes(
@@ -188,6 +212,13 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         diff: num(source.diff, 0, LIMITS.diff),
         gearing: num(source.gearing, 0, LIMITS.gearing),
         brakeBias: num(source.brakeBias, STOCK_BRAKE_BIAS, LIMITS.brakeBias),
+        brakes,
+        // in tenths, and only on the kits that have the adjuster
+        brakePressure: brakePressureTunable(brakes)
+            ? Math.round(
+                  num(source.brakePressure, 1, LIMITS.brakePressure) * 10
+              ) / 10
+            : 1,
         speedLimiter: source.speedLimiter !== false,
         angleKit: source.angleKit === true,
         engine:
@@ -245,6 +276,9 @@ export const applyTune = (
         lsdLock: spec.lsdLock * Math.pow(2, tune.diff),
         finalDrive: spec.finalDrive * (1 + 0.1 * tune.gearing),
         brakeBias: tune.brakeBias,
+        brakeTorque:
+            spec.brakeTorque * BRAKE_TORQUE[tune.brakes] * tune.brakePressure,
+        brakeKit: BRAKE_TORQUE[tune.brakes] * tune.brakePressure,
         maxSteer: tune.angleKit
             ? Math.max(spec.maxSteer, ANGLE_KIT_LOCK)
             : spec.maxSteer,
@@ -266,6 +300,8 @@ export const isStockTune = (tune: CarTune) =>
     tune.diff === 0 &&
     tune.gearing === 0 &&
     Math.abs(tune.brakeBias - STOCK_BRAKE_BIAS) < 1e-6 &&
+    tune.brakes === 'stock' &&
+    tune.brakePressure === 1 &&
     tune.speedLimiter &&
     !tune.angleKit &&
     isStockEngine(tune);
@@ -277,17 +313,23 @@ export const isStockSetup = (tune: CarTune, look: CarLook) =>
 
 // a short code for the tuned board, one base 36 digit per setting. a removed
 // speed limiter adds a digit at the end and an angle kit an 'a', so older
-// codes keep their meaning
+// codes keep their meaning. the brake pressure rides in the tire digit and
+// the brake kit in the spoiler one, both 0 when stock, which keeps the code
+// inside the board's 16 characters
 export const tuneCode = (tune: CarTune, look: CarLook) => {
     const q = (value: number, min: number, max: number) =>
         Math.round(
             ((clamp(value, min, max) - min) / (max - min)) * 35
         ).toString(36);
+    // tenths off stock as 0, 1, 2.. for 1, 0.9, 1.1, 0.8, 1.2, 0.7, 1.3
+    const step = Math.round((tune.brakePressure - 1) * 10);
+    const pressure = step >= 0 ? step * 2 : -step * 2 - 1;
     return [
         q(tune.power, ...LIMITS.power),
-        ['street', 'sport', 'semi', 'slick', 'drift']
-            .indexOf(tune.tires)
-            .toString(36),
+        (
+            ['street', 'sport', 'semi', 'slick', 'drift'].indexOf(tune.tires) +
+            5 * pressure
+        ).toString(36),
         q(tune.springsFront, ...LIMITS.springs),
         q(tune.springsRear, ...LIMITS.springs),
         q(tune.damping, ...LIMITS.damping),
@@ -295,7 +337,10 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         q(tune.gearing, ...LIMITS.gearing),
         q(tune.brakeBias, ...LIMITS.brakeBias),
         q(look.ride, ...LIMITS.ride),
-        ['none', 'ducktail', 'wing'].indexOf(look.spoiler).toString(36),
+        (
+            ['none', 'ducktail', 'wing'].indexOf(look.spoiler) +
+            3 * BRAKE_KITS.indexOf(tune.brakes)
+        ).toString(36),
         tune.speedLimiter ? '' : '1',
         tune.angleKit ? 'a' : '',
         // an x and one digit each for the engine, induction and exhaust
