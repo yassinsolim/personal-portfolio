@@ -49,6 +49,12 @@ import RaceVisuals, { type TrackWorld } from './Visuals/RaceVisuals';
 import CarCollisions, { type RemoteCar } from './Multiplayer/CarCollisions';
 import { carOptionsById } from '../carOptions';
 import { drain, slice, type Steps } from './slicing';
+import RewindBuffer, {
+    captureVehicle,
+    restoreFields,
+    restoreVehicle,
+    snapshotFields,
+} from './Rewind';
 import type { DriftEntry } from './Leaderboard/LocalDriftBoard';
 
 export type TrackMode = 'ring' | 'drift';
@@ -174,6 +180,9 @@ export default class RaceManager {
     sectors: SectorTimer;
     garageOpen = false;
     photoMode = false;
+    rewind = new RewindBuffer();
+    // a lap that used rewind won't count, the hud says why
+    lapRewound = false;
     // the horn as last sent and when, a held one is sent again now and then
     hornOn = false;
     hornSentAt = 0;
@@ -404,6 +413,7 @@ export default class RaceManager {
             if (!this.active || this.paused) return;
             this.vehicle.resetToTrack();
             this.physicsAccumulator = 0;
+            this.rewind.clear();
             // a reset is a lost chain on the drift park
             if (this.trackMode === 'drift' && this.driftScore.chain > 0) {
                 this.driftEvent = {
@@ -530,6 +540,7 @@ export default class RaceManager {
 
         UIEventBus.on('carChange', (carId: string) => {
             if (!carId) return;
+            this.rewind.clear();
             this.multiplayer.setLocalCarId(carId);
             // the vehicle loads that car's garage setup on the same event
             window.setTimeout(() => {
@@ -546,6 +557,7 @@ export default class RaceManager {
             const open = Boolean(state?.open);
             if (open === this.garageOpen) return;
             this.garageOpen = open;
+            this.rewind.clear();
             this.chaseCamera.garage = open;
             if (open) this.showGarageScene();
             else this.hideGarageScene();
@@ -846,8 +858,10 @@ export default class RaceManager {
         if (this.trackMode === 'ring') this.ghostReplay.holdAtStart();
         this.lapDelta.reset();
         this.lapDirty = false;
+        this.lapRewound = false;
         this.offTrackSeconds = 0;
         this.lastStartResets = this.vehicle.startResets;
+        this.rewind.clear();
     }
 
     exitRaceMode() {
@@ -1343,6 +1357,8 @@ export default class RaceManager {
             lapDelta:
                 this.trackMode === 'ring' && this.lapRunning ? this.lapDelta.gap() : null,
             lapDirty: this.trackMode === 'ring' && this.lapDirty,
+            lapRewound: this.trackMode === 'ring' && this.lapRewound,
+            rewind: this.rewind.playhead !== null ? this.rewind.left() : null,
             lastLapDirty: this.lastLapDirty,
             ghost:
                 this.ghostReplay.active && this.ghostReplay.root.visible
@@ -1907,6 +1923,61 @@ export default class RaceManager {
         this.remoteSmoke.update(deltaSeconds);
     }
 
+    // rewind is for hot laps on the ring alone: in a lobby the others would
+    // see the car jump, and the drift park scores every second of a run
+    canRewind() {
+        return this.trackMode === 'ring' && !this.multiplayer.hasRemotePlayers();
+    }
+
+    // hold z or down on the d-pad: the car plays back its last 10 s, and
+    // letting go drives on from the frame on screen. true while it plays
+    updateRewind(nowMs: number, delta: number) {
+        const rewind = this.rewind;
+        const playing = rewind.playhead !== null;
+        if (this.paused || this.garageOpen || this.transitionHold || !this.canRewind()) {
+            if (playing) this.resumeFromRewind(nowMs);
+            return false;
+        }
+        // the physics isn't stepping, so the input is read here
+        if (playing) this.vehicle.input.update(delta);
+        if (this.vehicle.input.rewind) {
+            const frame = rewind.scrub(delta);
+            if (!frame) return false;
+            restoreVehicle(this.vehicle, frame);
+            const clock = frame.extra.clock;
+            this.currentLapTimeMs = clock.lapTimeMs as number;
+            this.lapProgress = clock.progress as number;
+            return true;
+        }
+        if (playing) this.resumeFromRewind(nowMs);
+        return false;
+    }
+
+    resumeFromRewind(nowMs: number) {
+        const frame = this.rewind.release();
+        if (!frame) return;
+        restoreVehicle(this.vehicle, frame);
+        const { lapTimer, sectors, clock } = frame.extra;
+        restoreFields(this.lapTimer, lapTimer);
+        restoreFields(this.sectors, sectors);
+        // the lap clock goes on from the frame's time: its start moves up by
+        // however long ago the frame was
+        const shift = nowMs - (clock.now as number);
+        this.lapTimer.lapStartMs += shift;
+        this.lapTimer.lastCrossTimestampMs += shift;
+        this.currentLapTimeMs = clock.lapTimeMs as number;
+        this.lapProgress = clock.progress as number;
+        this.lapRunning = clock.running as boolean;
+        this.lapArmed = clock.armed as boolean;
+        this.offTrackSeconds = 0;
+        if (this.lapRunning) {
+            this.lapDirty = true;
+            this.lapRewound = true;
+        }
+        this.physicsAccumulator = 0;
+        this.engineAudio.carAudio.resetMotion();
+    }
+
     // h or the left stick click. the others hear it from where the car is
     updateHorn(nowMs: number) {
         const on =
@@ -1977,7 +2048,14 @@ export default class RaceManager {
             Math.max(0, this.application.time.delta / 1000)
         );
         this.updateRemoteVehicles(delta);
-        if (!this.paused && !this.garageOpen && !this.transitionHold) {
+        const rewinding = this.updateRewind(nowMs, delta);
+        if (rewinding) {
+            // the engine plays back with the car
+            this.engineAudio.update(
+                { ...this.vehicle.getTelemetry(), throttle: 0, driftIntensity: 0 },
+                delta
+            );
+        } else if (!this.paused && !this.garageOpen && !this.transitionHold) {
             // equal steps. a leftover sliver (a frame just over 1/60 s) used
             // to run as a microsecond step, and the grounding divides height
             // changes by the step, which could launch the car into the sky
@@ -2056,6 +2134,7 @@ export default class RaceManager {
                 this.sectors.reset();
                 this.lapDelta.reset();
                 this.lapDirty = false;
+                this.lapRewound = false;
                 this.offTrackSeconds = 0;
             }
             this.sectors.update(this.lapProgress, this.currentLapTimeMs, this.lapRunning);
@@ -2092,7 +2171,10 @@ export default class RaceManager {
                     if (this.lapDelta.bestLapMs !== best) void this.syncGhost();
                     this.lastLapDirty = valid && this.lapDirty;
                     this.lapDirty = false;
+                    this.lapRewound = false;
                     this.offTrackSeconds = 0;
+                    // rewind can't reach back over the line
+                    this.rewind.clear();
                 } else {
                     // a drift run is a lap: what's building counts, then the
                     // next one starts from nothing
@@ -2143,6 +2225,21 @@ export default class RaceManager {
                 });
                 void this.submitPendingLap();
             }
+            if (this.canRewind()) {
+                this.rewind.record(delta * 1000, (at) =>
+                    captureVehicle(this.vehicle, at, {
+                        lapTimer: snapshotFields(this.lapTimer),
+                        sectors: snapshotFields(this.sectors),
+                        clock: {
+                            now: nowMs,
+                            lapTimeMs: this.currentLapTimeMs,
+                            progress: this.lapProgress,
+                            running: this.lapRunning,
+                            armed: this.lapArmed,
+                        },
+                    })
+                );
+            }
         } else {
             const telemetry = this.vehicle.getTelemetry();
             // stopped for the others too, or their last moving sample is guessed on
@@ -2191,6 +2288,7 @@ export default class RaceManager {
                 this.lineView.update(position.x, position.z, this.vehicle.velocity.length());
             }
         }
+        this.visuals.rewinding = rewinding;
         this.visuals.update(delta);
         this.updateWorldAudio(delta);
         this.updateHorn(nowMs);

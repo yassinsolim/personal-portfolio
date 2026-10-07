@@ -106,6 +106,9 @@ type HudState = {
     bestLapMs?: number;
     lapDelta?: number | null;
     lapDirty?: boolean;
+    lapRewound?: boolean;
+    // how much rewind is left while it plays back (0..1), null when it isn't
+    rewind?: number | null;
     lastLapDirty?: boolean;
     ghost?: GhostHud | null;
     redlineRpm?: number;
@@ -1192,10 +1195,22 @@ const App = () => {
                     bestLapMs={hud.bestLapMs || 0}
                     delta={hud.lapDelta ?? null}
                     dirty={Boolean(hud.lapDirty)}
+                    rewound={Boolean(hud.lapRewound)}
                     lastDirty={Boolean(hud.lastLapDirty)}
                     ghost={hud.ghost || null}
                     sectors={hud.sectors || null}
                 />
+            )}
+            {raceModeActive && typeof hud.rewind === 'number' && !photoMode && (
+                <div className="race-rewind" data-prevent-click>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M11 6v12l-8.5-6zM21 6v12l-8.5-6z" />
+                    </svg>
+                    <span>Rewind</span>
+                    <i>
+                        <b style={{ width: `${Math.round(hud.rewind * 100)}%` }} />
+                    </i>
+                </div>
             )}
             {raceModeActive && hud.map && !garageOpen && !photoMode && (
                 <Minimap
@@ -1656,7 +1671,7 @@ const App = () => {
                             reverse; manual gears: Q in first). A / D: steer.
                             Space: handbrake. R: back on track. T: restart lap.
                             G: garage. C: camera (chase, far, bumper, hood).
-                            H: horn.
+                            H: horn. Z (hold): rewind.
                         </p>
                         <p className="race-menu-controls">
                             Controller: right trigger gas, left trigger brake
@@ -1664,9 +1679,9 @@ const App = () => {
                             in first), left stick steer, A handbrake, B
                             look back, X camera, Y back on track, bumpers shift,
                             right stick look around, left stick click horn,
-                            View restart lap, Menu pause. In menus the d-pad or
-                            left stick moves, A picks, B goes back and the
-                            bumpers switch tabs.
+                            d-pad down (hold) rewind, View restart lap, Menu
+                            pause. In menus the d-pad or left stick moves, A
+                            picks, B goes back and the bumpers switch tabs.
                         </p>
                         <p className="race-menu-controls">
                             Drifting: turn in and tap Space, then feather W to
@@ -1691,7 +1706,9 @@ const App = () => {
                             on the leaderboard. The rival ghost is the lap just
                             faster than your best. The driving line turns
                             yellow where your speed says ease off and red where
-                            it says brake.
+                            it says brake. Holding rewind takes the car back up
+                            to 10 s (driving alone on the ring); a lap that uses
+                            it won't count either.
                         </p>
 
                         <p className="race-menu-credits">

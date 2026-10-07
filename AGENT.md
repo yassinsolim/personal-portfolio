@@ -515,6 +515,17 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `1` and `a` marks, with an engine swap as `z` and two digits (engine, induction + 5
   exhaust). Everything else writes exactly the old codes, and old codes read as before
   (`scripts/test/tune-share.test.mjs` pins one of each).
+- Rewind (hold Z or down on the d-pad, `Racing/Rewind.ts`): a frame every 1/30 s for the
+  last 10 s on its own clock (it stops while playing back). A frame is the vehicle's,
+  the physics model's, its surface's and both track frames' own numbers, flags, lists and
+  vectors (generic, so new state is caught; `tmp*` and the reset counter are left out),
+  the car pivot, and the lap timer and sectors; the test drives on from a restored frame
+  and gets the identical drive. Held, it plays back at real time, twice as fast after
+  0.6 s; let go, the frames after the one on screen are dropped, the lap clock's start
+  moves up by the time since, and a running lap is marked (dirty, "Rewind used") so it
+  won't count. Ring only, alone (not with other players connected), and the buffer clears
+  at the line, on a restart, a reset, a car change and the garage, so it never reaches
+  back over a lap or a setup.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
