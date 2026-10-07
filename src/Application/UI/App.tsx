@@ -18,27 +18,16 @@ import LobbyRaceHud, { RaceStandings, type RaceHud } from './components/LobbyRac
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
-import {
-    readAssistSettings,
-    type AssistPreset,
-} from '../Racing/Vehicle/assists';
+import { readAssistSettings } from '../Racing/Vehicle/assists';
 import './style.css';
 import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import { padShared } from '../Gamepad/pad';
-import {
-    GHOST_MODES,
-    readGhostMode,
-    type GhostMode,
-} from '../Racing/Ghost/ghostMode';
-import { LINE_MODES, readLineMode, type LineMode } from '../Racing/Track/lineMode';
-import {
-    STEERING_KEY,
-    STEERING_MAX,
-    STEERING_MIN,
-    clampSteering,
-    readSteering,
-} from '../Racing/Input/steering';
+import { readGhostMode, type GhostMode } from '../Racing/Ghost/ghostMode';
+import { readLineMode, type LineMode } from '../Racing/Track/lineMode';
+import { STEERING_KEY, readSteering } from '../Racing/Input/steering';
+import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Track/startTrack';
+import PauseMenu from './components/PauseMenu';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -49,30 +38,17 @@ const LAST_LOBBY_CODE_KEY = 'yassinverse:nordschleife:multiplayer:lastLobbyCode:
 
 type QualityMode = 'auto' | 'quality' | 'performance';
 
+// the room panel's two ways in, so the drift park isn't only behind a menu
+const START_TRACKS: Array<[StartTrack, string, string]> = [
+    ['ring', 'Nordschleife', 'Hot laps, ghosts and lobbies'],
+    ['drift', 'Drift park', 'Points for every drift'],
+];
+
 const RENDER_MODES: { mode: QualityMode; label: string }[] = [
     { mode: 'auto', label: 'Auto' },
     { mode: 'quality', label: 'Quality' },
     { mode: 'performance', label: 'Performance' },
 ];
-
-const ASSIST_OPTIONS: { preset: AssistPreset; label: string }[] = [
-    { preset: 'standard', label: 'Standard' },
-    { preset: 'sport', label: 'Sport (drift)' },
-    { preset: 'off', label: 'Off' },
-];
-
-const GHOST_MODE_LABEL: Record<GhostMode, string> = {
-    off: 'Off',
-    best: 'Your best',
-    rival: 'Rival',
-    record: 'Record',
-};
-
-const LINE_MODE_LABEL: Record<LineMode, string> = {
-    off: 'Off',
-    braking: 'Braking',
-    full: 'Full',
-};
 
 const RenderModeButtons = ({
     mode,
@@ -373,6 +349,11 @@ const App = () => {
         building: false,
     });
     const [driftBoard, setDriftBoard] = useState<DriftBoardEntry[]>([]);
+    const [startTrack, setStartTrack] = useState<StartTrack>(readStartTrack);
+    const pickStartTrack = (track: StartTrack) => {
+        setStartTrack(track);
+        writeStartTrack(track);
+    };
     const [garageState, setGarageState] = useState<GarageState | null>(null);
     const [garageTunes, setGarageTunes] = useState<GarageTunes | null>(null);
     // the lobby card comes back after the garage when it was opened from it
@@ -728,6 +709,7 @@ const App = () => {
         eventBus.dispatch('race:multiplayerPlaySolo', {
             playerName,
             startRace: true,
+            track: startTrack,
         });
     };
 
@@ -745,10 +727,6 @@ const App = () => {
 
     const handleResetVehicle = () => {
         eventBus.dispatch('race:resetVehicle', {});
-    };
-
-    const handleVolumeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        setVolume(Math.min(1, Math.max(0, Number(event.target.value))));
     };
 
     const handleMuteToggle = () => {
@@ -789,6 +767,7 @@ const App = () => {
         eventBus.dispatch('race:multiplayerPlaySolo', {
             playerName,
             startRace: true,
+            track: startTrack,
         });
     };
 
@@ -1038,7 +1017,26 @@ const App = () => {
                     )}
                     {!raceModeActive && (
                         <div className="multiplayer-menu" data-prevent-click>
-                            <span className="look-hint-label">Race the Nordschleife</span>
+                            <span className="look-hint-label">Drive</span>
+                            <div className="track-pick" role="group" aria-label="Track">
+                                {START_TRACKS.map(([track, label, hint]) => (
+                                    <button
+                                        type="button"
+                                        key={track}
+                                        className={startTrack === track ? 'on' : ''}
+                                        aria-pressed={startTrack === track}
+                                        onClick={() => pickStartTrack(track)}
+                                    >
+                                        <strong>{label}</strong>
+                                        <small>{hint}</small>
+                                    </button>
+                                ))}
+                            </div>
+                            {startTrack === 'drift' && (
+                                <p className="track-pick-note">
+                                    The drift park is solo. Lobbies drive the Nordschleife.
+                                </p>
+                            )}
                             <div className="multiplayer-row">
                                 <label htmlFor="multiplayer-name">Driver</label>
                                 <input
@@ -1448,391 +1446,48 @@ const App = () => {
                 <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
             </div>
             {raceModeActive && racePaused && !lobbyChoiceOpen && !photoMode && (
-                <div className="race-menu-overlay" data-prevent-click>
-                    <div className="race-menu-panel" data-prevent-click>
-                        <h3>{trackState.track === 'drift' ? 'Drift Park' : 'Nordschleife'} Pause</h3>
-                        <p>Esc, or Menu on a controller, opens this menu at any time during race mode.</p>
-
-                        <div className="race-menu-row race-track-pick">
-                            <span>Track</span>
-                            <div className="race-quality-buttons">
-                                {(
-                                    [
-                                        ['ring', 'Nordschleife'],
-                                        ['drift', 'Drift park'],
-                                    ] as const
-                                ).map(([track, label]) => (
-                                    <button
-                                        type="button"
-                                        key={track}
-                                        className={trackState.track === track ? 'active' : ''}
-                                        disabled={trackState.building}
-                                        onClick={() => {
-                                            if (trackState.track === track) return;
-                                            eventBus.dispatch('race:setTrack', { track });
-                                            handleResumeRace();
-                                        }}
-                                    >
-                                        {label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        {trackState.track === 'drift' && (
-                            <div className="race-menu-drift-board">
-                                <h4>Drift park scores</h4>
-                                {driftBoard.length === 0 ? (
-                                    <p>No runs yet. Drift a full lap to score.</p>
-                                ) : (
-                                    <ol>
-                                        {driftBoard.slice(0, 10).map((entry) => (
-                                            <li key={entry.id}>
-                                                <span>{entry.name}</span>
-                                                <span>{carOptions.find((car) => car.id === entry.carId)?.label || entry.carId}</span>
-                                                <span>{formatLapTime(entry.lapTimeMs)}</span>
-                                                <strong>{Math.round(entry.score).toLocaleString('en-US')}</strong>
-                                            </li>
-                                        ))}
-                                    </ol>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="race-menu-row">
-                            <label htmlFor="race-car-select">Car</label>
-                            <select
-                                id="race-car-select"
-                                value={selectedCar}
-                                onChange={handleCarChange}
-                            >
-                                {carOptions.map((car) => (
-                                    <option key={car.id} value={car.id}>
-                                        {car.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && (
-                            <div className="race-menu-row">
-                                <span>Lobby Code {multiplayer.lobbyCode}</span>
-                                <button type="button" onClick={handleCopyLobbyCode}>
-                                    {lobbyCodeCopyState || 'Copy Code'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleLeaveLobby}
-                                    disabled={multiplayerBusy}
-                                >
-                                    Leave Lobby
-                                </button>
-                            </div>
-                        )}
-
-                        <div className="race-menu-row">
-                            <label htmlFor="race-volume-range">
-                                Master Volume
-                            </label>
-                            <input
-                                id="race-volume-range"
-                                type="range"
-                                min="0"
-                                max="1"
-                                step="0.01"
-                                value={volume}
-                                onChange={handleVolumeChange}
-                            />
-                            <span>{Math.round(volume * 100)}%</span>
-                        </div>
-
-                        <div className="race-menu-row">
-                            <button type="button" onClick={handleMuteToggle}>
-                                {muted ? 'Unmute' : 'Mute'}
-                            </button>
-                        </div>
-
-                        <div className="race-menu-row">
-                            <span>
-                                Render Mode
-                                {qualityMode === 'auto' && renderScale ? (
-                                    <span className="race-quality-scale">
-                                        {renderScale.toFixed(2)}x
-                                    </span>
-                                ) : null}
-                            </span>
-                            <div className="race-quality-buttons">
-                                <RenderModeButtons
-                                    mode={qualityMode}
-                                    onChange={handleQualityChange}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="race-menu-row">
-                            <button
-                                type="button"
-                                onClick={() => setGraphicsInfoOpen((v) => !v)}
-                            >
-                                {graphicsInfoOpen
-                                    ? 'Hide graphics info'
-                                    : 'Graphics info'}
-                            </button>
-                        </div>
-                        {graphicsInfoOpen && <GraphicsInfo />}
-
-                        <div className="race-menu-row">
-                            <span>Assists</span>
-                            <div className="race-quality-buttons">
-                                {ASSIST_OPTIONS.map((option) => (
-                                    <button
-                                        key={option.preset}
-                                        type="button"
-                                        className={
-                                            assists.preset === option.preset
-                                                ? 'active'
-                                                : ''
-                                        }
-                                        onClick={() =>
-                                            eventBus.dispatch('race:assists', {
-                                                preset: option.preset,
-                                            })
-                                        }
-                                    >
-                                        {option.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="race-menu-row">
-                            <span>Gearbox</span>
-                            <div className="race-quality-buttons">
-                                {[true, false].map((auto) => (
-                                    <button
-                                        key={auto ? 'auto' : 'manual'}
-                                        type="button"
-                                        className={
-                                            assists.autoGears === auto
-                                                ? 'active'
-                                                : ''
-                                        }
-                                        onClick={() =>
-                                            eventBus.dispatch('race:assists', {
-                                                autoGears: auto,
-                                            })
-                                        }
-                                    >
-                                        {auto ? 'Auto' : 'Manual (Q / E)'}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {trackState.track === 'ring' && (
-                            <div className="race-menu-row">
-                                <span>Ghost</span>
-                                <div className="race-quality-buttons">
-                                    {GHOST_MODES.map((mode) => (
-                                        <button
-                                            key={mode}
-                                            type="button"
-                                            className={ghostMode === mode ? 'active' : ''}
-                                            onClick={() => {
-                                                setGhostMode(mode);
-                                                eventBus.dispatch('race:ghostMode', { mode });
-                                            }}
-                                        >
-                                            {GHOST_MODE_LABEL[mode]}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {trackState.track === 'ring' && (
-                            <div className="race-menu-row">
-                                <span>Driving line</span>
-                                <div className="race-quality-buttons">
-                                    {LINE_MODES.map((mode) => (
-                                        <button
-                                            key={mode}
-                                            type="button"
-                                            className={lineMode === mode ? 'active' : ''}
-                                            onClick={() => {
-                                                setLineMode(mode);
-                                                eventBus.dispatch('race:lineMode', { mode });
-                                            }}
-                                        >
-                                            {LINE_MODE_LABEL[mode]}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-
-                        {trackState.track === 'ring' &&
-                            multiplayer.mode === 'lobby' &&
-                            multiplayer.connected && (
-                                <div className="race-menu-row">
-                                    <span>Lobby race</span>
-                                    {!multiplayer.isHost ? (
-                                        hud.race?.entered && hud.race.phase === 'finished' ? (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    eventBus.dispatch('race:lobbyRaceLeave', {})
-                                                }
-                                            >
-                                                Back to free drive
-                                            </button>
-                                        ) : (
-                                            <em className="race-menu-note">
-                                                {inLobbyRace
-                                                    ? 'Racing'
-                                                    : 'The host starts races'}
-                                            </em>
-                                        )
-                                    ) : inLobbyRace ? (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                eventBus.dispatch('race:lobbyRaceEnd', {})
-                                            }
-                                        >
-                                            End race
-                                        </button>
-                                    ) : (
-                                        <div className="race-quality-buttons">
-                                            {[1, 2, 3].map((laps) => (
-                                                <button
-                                                    type="button"
-                                                    key={laps}
-                                                    disabled={multiplayer.players.length < 2}
-                                                    onClick={() =>
-                                                        eventBus.dispatch('race:lobbyRaceStart', {
-                                                            laps,
-                                                        })
-                                                    }
-                                                >
-                                                    {laps === 1 ? '1 lap' : `${laps} laps`}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                        <div className="race-menu-row">
-                            <label htmlFor="race-steering-range">Steering</label>
-                            <input
-                                id="race-steering-range"
-                                type="range"
-                                min={STEERING_MIN}
-                                max={STEERING_MAX}
-                                step="0.1"
-                                value={steering}
-                                onChange={(event) =>
-                                    setSteering(
-                                        clampSteering(Number(event.target.value))
-                                    )
-                                }
-                            />
-                            <span>{Math.round(steering * 100)}%</span>
-                        </div>
-
-                        <p className="race-menu-controls">
-                            W / S or arrows: throttle, brake (stopped, hold S to
-                            reverse; manual gears: Q in first). A / D: steer.
-                            Space: handbrake. R: back on track. T: restart lap.
-                            G: garage. C: camera (chase, far, bumper, hood).
-                            H: horn. Z (hold): rewind.
-                        </p>
-                        <p className="race-menu-controls">
-                            Controller: right trigger gas, left trigger brake
-                            (stopped, hold to reverse; manual gears: left bumper
-                            in first), left stick steer, A handbrake, B
-                            look back, X camera, Y back on track, bumpers shift,
-                            right stick look around, left stick click horn,
-                            d-pad down (hold) rewind, View restart lap, Menu
-                            pause. In menus the d-pad or left stick moves, A
-                            picks, B goes back and the bumpers switch tabs.
-                        </p>
-                        <p className="race-menu-controls">
-                            Drifting: turn in and tap Space, then feather W to
-                            hold the slide. Steer into the corner for more angle
-                            and a tighter line. Tap the other way to trim the
-                            angle and widen the line, hold it there on the
-                            throttle to swing into a drift the other way, lift
-                            off to straighten up. Off assists leave it all to
-                            you, the garage's drift build helps there.
-                        </p>
-                        <p className="race-menu-controls">
-                            Drift park: every drift builds a chain of points,
-                            more for angle and speed, and the longer you hold
-                            it the bigger the multiplier. Straighten up to bank
-                            it; a wall, the grass or a spin loses it. Each lap
-                            is a run on the scoreboard.
-                        </p>
-                        <p className="race-menu-controls">
-                            Hot laps: the number next to the clock is the gap
-                            to your best lap with this car. All four wheels off
-                            the road makes a lap dirty, and dirty laps don't go
-                            on the leaderboard. The rival ghost is the lap just
-                            faster than your best. The driving line turns
-                            yellow where your speed says ease off and red where
-                            it says brake. Holding rewind takes the car back up
-                            to 10 s (driving alone on the ring); a lap that uses
-                            it won't count either.
-                        </p>
-                        <p className="race-menu-controls">
-                            Lobby races: the host picks the laps here. Everyone
-                            lines up on the grid in the order they joined, counts
-                            down to the same green light and races; places go by
-                            who is furthest round, and the result shows at the
-                            flag.
-                        </p>
-
-                        <p className="race-menu-credits">
-                            Track: © OpenStreetMap contributors (ODbL).
-                            Elevation: © GeoBasis-DE / LVermGeoRP, dl-de/by-2-0,
-                            www.lvermgeo.rlp.de [Daten bearbeitet]; Copernicus GLO-30 DEM.
-                        </p>
-                        <ShellCredits />
-
-                        <div className="race-menu-actions">
-                            <button
-                                type="button"
-                                className="race-menu-primary"
-                                onClick={handleResumeRace}
-                            >
-                                Resume Race
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setLobbyChoiceOpen(true)}
-                            >
-                                Drive with others
-                            </button>
-                            <button
-                                type="button"
-                                disabled={inLobbyRace}
-                                onClick={() => {
-                                    eventBus.dispatch('race:setPaused', { paused: false });
-                                    openGarage(false);
-                                }}
-                            >
-                                Garage
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => eventBus.dispatch('race:photoMode', { on: true })}
-                            >
-                                Photo mode
-                            </button>
-                            <button type="button" onClick={handleRaceToggle}>
-                                Exit Race Mode
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <PauseMenu
+                    track={trackState.track}
+                    building={trackState.building}
+                    carId={selectedCar}
+                    bestLapMs={hud.bestLapMs || 0}
+                    driftBoard={driftBoard}
+                    multiplayer={multiplayer}
+                    multiplayerBusy={multiplayerBusy}
+                    lobbyCodeCopyState={lobbyCodeCopyState}
+                    race={hud.race || null}
+                    inLobbyRace={inLobbyRace}
+                    volume={volume}
+                    muted={muted}
+                    qualityMode={qualityMode}
+                    renderScale={renderScale}
+                    assists={assists}
+                    ghostMode={ghostMode}
+                    lineMode={lineMode}
+                    steering={steering}
+                    onResume={handleResumeRace}
+                    onExit={handleRaceToggle}
+                    onGarage={() => {
+                        eventBus.dispatch('race:setPaused', { paused: false });
+                        openGarage(false);
+                    }}
+                    onPickCar={openPicker}
+                    onDriveWithOthers={() => setLobbyChoiceOpen(true)}
+                    onCopyLobbyCode={handleCopyLobbyCode}
+                    onLeaveLobby={handleLeaveLobby}
+                    onVolume={(next) => setVolume(Math.min(1, Math.max(0, next)))}
+                    onMuteToggle={handleMuteToggle}
+                    onQuality={handleQualityChange}
+                    onGhost={(mode) => {
+                        setGhostMode(mode);
+                        eventBus.dispatch('race:ghostMode', { mode });
+                    }}
+                    onLine={(mode) => {
+                        setLineMode(mode);
+                        eventBus.dispatch('race:lineMode', { mode });
+                    }}
+                    onSteering={setSteering}
+                />
             )}
             {raceModeActive && photoMode && <PhotoMode />}
         </div>

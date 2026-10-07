@@ -60,6 +60,7 @@ import LobbyRace, {
     raceDistance,
     type RaceEntrant,
 } from './Multiplayer/LobbyRace';
+import { readGraphicsOff } from './Visuals/graphicsOptions';
 import type { LobbyRaceMessage } from './Multiplayer/MultiplayerService';
 import type { DriftEntry } from './Leaderboard/LocalDriftBoard';
 
@@ -108,6 +109,7 @@ type MultiplayerActionPayload = {
     playerName?: string;
     lobbyCode?: string;
     startRace?: boolean;
+    track?: string;
 };
 
 const MAX_VEHICLE_SUBSTEP_SECONDS = 1 / 60;
@@ -186,6 +188,8 @@ export default class RaceManager {
     sectors: SectorTimer;
     garageOpen = false;
     photoMode = false;
+    // a track to switch to as soon as the fly in from the room is done
+    startTrack: TrackMode | null = null;
     rewind = new RewindBuffer();
     // a lap that used rewind won't count, the hud says why
     lapRewound = false;
@@ -348,6 +352,7 @@ export default class RaceManager {
         this.remoteSmoke = new DriftSmoke(this.raceRoot);
         this.remoteSmoke.root.name = 'race-remote-drift-smoke-root';
         this.remoteSmoke.setActive(false);
+        this.setSmokeOn(!readGraphicsOff().includes('smoke'));
         this.multiplayer = new MultiplayerService();
         this.collisions.sendBump = (bump) => this.multiplayer.sendBump(bump);
         this.multiplayer.onBump((bump) => {
@@ -462,6 +467,10 @@ export default class RaceManager {
             this.setPhotoMode(Boolean(state?.on));
         });
 
+        UIEventBus.on('race:graphicsOff', (state: { off?: string[] } | undefined) => {
+            this.setSmokeOn(!(state?.off || []).includes('smoke'));
+        });
+
         UIEventBus.on('race:lobbyRaceStart', (state: { laps?: number } | undefined) => {
             this.startLobbyRace(Number(state?.laps) || 1);
         });
@@ -510,6 +519,8 @@ export default class RaceManager {
                 const telemetry = this.vehicle.getTelemetry();
                 await this.multiplayer.setSoloMode(playerName, telemetry.carId);
                 if (startRace) {
+                    // the room's drift park button: on to it once the camera is in
+                    this.startTrack = payload?.track === 'drift' ? 'drift' : null;
                     this.enterRaceMode();
                 }
             }
@@ -901,6 +912,7 @@ export default class RaceManager {
 
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
+        this.startTrack = null;
         this.setPhotoMode(false);
         if (this.garageOpen) {
             this.garageOpen = false;
@@ -1002,6 +1014,16 @@ export default class RaceManager {
         }
         UIEventBus.dispatch('race:pauseState', { paused });
         this.dispatchState();
+    }
+
+    // the advanced graphics switch for tire smoke, this car's and the others'
+    setSmokeOn(on: boolean) {
+        this.vehicle.smoke.enabled = on;
+        this.remoteSmoke.enabled = on;
+        if (!on) {
+            this.vehicle.smoke.clear();
+            this.remoteSmoke.clear();
+        }
     }
 
     // the race stays paused under it, the menus hide and the camera orbits
@@ -2228,6 +2250,11 @@ export default class RaceManager {
             Math.max(0, this.application.time.delta / 1000)
         );
         this.updateRemoteVehicles(delta);
+        if (this.startTrack && !this.transitionHold) {
+            const track = this.startTrack;
+            this.startTrack = null;
+            void this.setTrackMode(track);
+        }
         const rewinding = this.updateRewind(nowMs, delta);
         // a lobby race: held on the grid until the light goes green
         if (this.lobbyRace.tick(Date.now())) this.physicsAccumulator = 0;

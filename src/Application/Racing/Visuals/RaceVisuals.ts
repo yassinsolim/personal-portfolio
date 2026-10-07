@@ -30,6 +30,7 @@ import { useCheapMaterials } from './cheapMaterials';
 import { applyRevealTo, applySkyReveal } from './reveal';
 import RaceReveal from './RaceReveal';
 import { afterFrame, drain, slice, type Steps } from '../slicing';
+import { readGraphicsOff, withGraphicsOff, type GraphicsOption } from './graphicsOptions';
 
 // everything race mode looks like: sky and light, the land around the road,
 // sparks and skid marks, and the post chain it all renders through. the room
@@ -151,6 +152,8 @@ export default class RaceVisuals {
     photo = false;
     // a rewind playing back: no new skid marks or sparks along the way
     rewinding = false;
+    // the advanced graphics switches that are off
+    graphicsOff = new Set<GraphicsOption>(readGraphicsOff());
     private lastImpact = 0;
     private lastHitAt = 0;
     private hitPoint = new THREE.Vector3();
@@ -282,6 +285,13 @@ export default class RaceVisuals {
                 // the world stays as built, the car can come back now
                 if (this.renderMode === 'quality' && this.calibratedDown)
                     this.vehicle.useFullMaterials();
+                this.applyQuality();
+            }
+        );
+        UIEventBus.on(
+            'race:graphicsOff',
+            (state: { off?: GraphicsOption[] } | undefined) => {
+                this.graphicsOff = new Set(state?.off || []);
                 this.applyQuality();
             }
         );
@@ -445,7 +455,10 @@ export default class RaceVisuals {
 
     applyQuality() {
         const preset = this.getPreset();
-        const settings = settingsFor(preset, this.settingsTier());
+        const settings = withGraphicsOff(
+            settingsFor(preset, this.settingsTier()),
+            this.graphicsOff
+        );
         this.settings = settings;
         this.post?.applyPreset(settings);
         // flipping this recompiles the lit materials, so only on a change
@@ -453,7 +466,8 @@ export default class RaceVisuals {
             this.atmosphere.sun.castShadow = settings.shadows;
         }
         this.atmosphere.setShadowSize(settings.shadowSize);
-        this.atmosphere.setClouds(settings.post);
+        this.atmosphere.setClouds(settings.post && settings.sky);
+        this.extras.root.visible = !this.graphicsOff.has('trackside');
         document.body.classList.toggle(
             'race-lite',
             this.active && (this.tier === 'low' || preset === 'performance')
@@ -905,7 +919,12 @@ export default class RaceVisuals {
 
         // sparks where the body grinds a barrier: a stream by the second while
         // it scrapes, and a burst with a flash when it hits
-        if (vehicle.barrierContact !== 0 && speedKph > 20 && !this.rewinding) {
+        if (
+            vehicle.barrierContact !== 0 &&
+            speedKph > 20 &&
+            !this.rewinding &&
+            !this.graphicsOff.has('sparks')
+        ) {
             const frame = vehicle.trackFrame;
             this.away
                 .set(frame.leftX, 0, frame.leftZ)
@@ -957,7 +976,9 @@ export default class RaceVisuals {
             const surface = vehicle.wheelSurfaces[index];
             const onRoad = surface === 'asphalt' || surface === 'kerb';
             const slide =
-                vehicle.grounded && onRoad && !this.rewinding ? this.wheelSlide(index) : 0;
+                vehicle.grounded && onRoad && !this.rewinding && !this.graphicsOff.has('skids')
+                    ? this.wheelSlide(index)
+                    : 0;
             this.wheelContact.copy(point);
             this.skids.track(index, this.wheelContact, up, slide);
         });

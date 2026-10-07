@@ -3,6 +3,7 @@ import Application from '../../Application';
 import UIEventBus from '../../UI/EventBus';
 import RaceVehicle from '../Vehicle/RaceVehicle';
 import { probeHood, type HoodSpot } from './hoodProbe';
+import { readGraphicsOff, type GraphicsOption } from '../Visuals/graphicsOptions';
 
 const MOUSE_SENSITIVITY_X = 0.0022;
 const MOUSE_SENSITIVITY_Y = 0.0016;
@@ -17,6 +18,10 @@ const LOOK_RETURN_DELAY_S = 1.4;
 const PAD_LOOK_YAW = 2.2;
 const PAD_LOOK_PITCH = 0.35;
 const REFERENCE_CAR_LENGTH = 4.7;
+// photo mode moves in m/s, shift for fast, and stays this close to the car
+const PHOTO_SPEED = 4;
+const PHOTO_FAST = 14;
+const PHOTO_REACH = 60;
 
 type CameraView = {
     name: string;
@@ -152,6 +157,15 @@ export default class RaceChaseCamera {
     photoPitch = 0.12;
     photoZoom = 1;
     photoFov = 50;
+    // photo mode: where the orbit's center has been moved to, off the car,
+    // and the way it's moving (right, up, forward, each -1..1)
+    photoPan = new THREE.Vector3();
+    photoMove = { x: 0, y: 0, z: 0, fast: false };
+    // advanced graphics switches
+    shakeOff = readGraphicsOff().includes('shake');
+    speedFovOff = readGraphicsOff().includes('speedFov');
+    // our own exitPointerLock, not the player's esc
+    releasing = false;
     // the hood cam's spot, probed once per car model
     hoodCache: { model: THREE.Object3D | null; spot: HoodSpot | null } = {
         model: null,
@@ -256,6 +270,23 @@ export default class RaceChaseCamera {
         UIEventBus.on('race:photoFov', (state: { fov?: number } | undefined) => {
             this.photoFov = Math.min(90, Math.max(15, Number(state?.fov) || 50));
         });
+        UIEventBus.on(
+            'race:photoMove',
+            (state: { x?: number; y?: number; z?: number; fast?: boolean } | undefined) => {
+                const axis = (value: unknown) => Math.min(1, Math.max(-1, Number(value) || 0));
+                this.photoMove = {
+                    x: axis(state?.x),
+                    y: axis(state?.y),
+                    z: axis(state?.z),
+                    fast: Boolean(state?.fast),
+                };
+            }
+        );
+        UIEventBus.on('race:graphicsOff', (state: { off?: GraphicsOption[] } | undefined) => {
+            const off = state?.off || [];
+            this.shakeOff = off.includes('shake');
+            this.speedFovOff = off.includes('speedFov');
+        });
         // the graphics preset's draw distance
         UIEventBus.on(
             'race:drawDistance',
@@ -313,6 +344,7 @@ export default class RaceChaseCamera {
         this.pointerLockChangeHandler = () => {
             this.clearPointerLockPendingTimeout();
             const element = this.application.renderer.instance.domElement;
+            const wasLocked = this.pointerLocked;
             this.pointerLockRequestPending = false;
             this.pointerLocked = document.pointerLockElement === element;
             UIEventBus.dispatch('race:pointerLockChanged', {
@@ -323,6 +355,20 @@ export default class RaceChaseCamera {
                     source: 'pointerLockChange',
                 });
             }
+            // esc with the mouse locked only unlocks it, the page never sees
+            // the key, so losing the lock while driving is the pause
+            if (
+                wasLocked &&
+                !this.pointerLocked &&
+                !this.releasing &&
+                this.active &&
+                !this.paused &&
+                !this.garage &&
+                !this.photo
+            ) {
+                UIEventBus.dispatch('race:pauseRequest', { source: 'pointerUnlock' });
+            }
+            this.releasing = false;
         };
 
         this.pointerLockErrorHandler = () => {
@@ -443,6 +489,7 @@ export default class RaceChaseCamera {
         this.pointerLockRequestPending = false;
         this.clearPointerLockPendingTimeout();
         if (document.pointerLockElement) {
+            this.releasing = true;
             document.exitPointerLock();
         }
     }
@@ -579,7 +626,7 @@ export default class RaceChaseCamera {
         const anchor = this.tmpAnchor.copy(vehicle.position);
 
         if (this.photo) {
-            this.updatePhoto(camera, anchor, carYaw);
+            this.updatePhoto(camera, anchor, carYaw, dt);
             return;
         }
 
@@ -759,14 +806,19 @@ export default class RaceChaseCamera {
             position.y = ground + 0.55;
         }
         up.set(0, 1, 0);
-        return view.fov + Math.max(0, telemetry.longitudinalG) * 3.5;
+        return (
+            view.fov +
+            (this.speedFovOff ? 0 : Math.max(0, telemetry.longitudinalG) * 3.5)
+        );
     }
 
-    // photo mode: drag orbits, scroll zooms, the fov comes from the slider
+    // photo mode: drag orbits, scroll zooms, wasd (or the left stick) moves
+    // the whole view, the fov comes from the slider
     updatePhoto(
         camera: THREE.PerspectiveCamera,
         anchor: THREE.Vector3,
-        carYaw: number
+        carYaw: number,
+        dt: number
     ) {
         const vehicle = this.vehicle;
         if (camera.view?.enabled) camera.clearViewOffset();
@@ -776,8 +828,24 @@ export default class RaceChaseCamera {
             (vehicle.bodySize.z * 0.8 + 1.8) * this.photoZoom
         );
         const angle = carYaw + Math.PI * 0.8 + this.photoAngle;
-        const center = this.tmpLook.copy(anchor);
+        const move = this.photoMove;
+        if (move.x || move.y || move.z) {
+            const speed = (move.fast ? PHOTO_FAST : PHOTO_SPEED) * dt;
+            // forward is the way the camera looks, flat on the ground
+            const fx = -Math.sin(angle);
+            const fz = -Math.cos(angle);
+            this.photoPan.x += (fx * move.z - fz * move.x) * speed;
+            this.photoPan.z += (fz * move.z + fx * move.x) * speed;
+            this.photoPan.y += move.y * speed;
+            // never out of sight of the car
+            if (this.photoPan.length() > PHOTO_REACH) this.photoPan.setLength(PHOTO_REACH);
+        }
+        const center = this.tmpLook.copy(anchor).add(this.photoPan);
         center.y += 0.4;
+        const centerGround = vehicle.track.sampleGround(center.x, center.z);
+        if (centerGround !== null && center.y < centerGround + 0.2) {
+            center.y = centerGround + 0.2;
+        }
         const position = this.tmpPosition.set(
             center.x + Math.sin(angle) * Math.cos(this.photoPitch) * radius,
             center.y + Math.sin(this.photoPitch) * radius,
@@ -798,11 +866,13 @@ export default class RaceChaseCamera {
     setPhoto(on: boolean) {
         this.photo = on;
         this.initialized = false;
+        this.photoMove = { x: 0, y: 0, z: 0, fast: false };
         if (!on) return;
         this.photoAngle = 0;
         this.photoPitch = 0.12;
         this.photoZoom = 1;
         this.photoFov = 50;
+        this.photoPan.set(0, 0, 0);
     }
 
     mount(view: CameraView) {
@@ -877,9 +947,10 @@ export default class RaceChaseCamera {
         const speedKick =
             Math.pow(Math.min(1, Math.max(0, (speed - 12) / 80)), 1.3) * 13;
         const accelKick = Math.max(0, telemetry.longitudinalG) * 3.5;
-        const target = this.paused
-            ? view.fov
-            : view.fov + speedKick + accelKick;
+        const target =
+            this.paused || this.speedFovOff
+                ? view.fov
+                : view.fov + speedKick + accelKick;
         [this.fov, this.fovVelocity] = spring(
             this.fov,
             this.fovVelocity,
@@ -900,7 +971,7 @@ export default class RaceChaseCamera {
         dt: number,
         scale = 1
     ) {
-        if (this.paused) return;
+        if (this.paused || this.shakeOff) return;
         if (telemetry.impact > this.lastImpact + 0.5) {
             this.impactShake = Math.min(
                 1,

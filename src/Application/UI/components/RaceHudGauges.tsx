@@ -211,7 +211,7 @@ const RaceHudGauges = (props: Props) => (
                 <div className="race-lap-dirty">
                     {props.rewound
                         ? "Rewind used: this lap won't count"
-                        : "Track limits: this lap won't count"}
+                        : "Off the road: this lap won't count"}
                 </div>
             )}
             <div className="race-lap-row">
