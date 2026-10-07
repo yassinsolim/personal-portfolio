@@ -416,6 +416,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   particular (the Valkyrie's merged spokes took no color, only its hub did). A report of the
   Huayra's rim color covering the tire didn't reproduce: the garage (full and lite models),
   remote clones, its rims on other cars and theirs on it, and the room car all kept the tire black.
+- Ride height on the homepage car: `copyCarLook` passes the race model's meters per unit
+  (`LookOptions.unit`). `localDelta` used the room car's own scale, and the room isn't in meters,
+  so the offset came out thousands of times too small and never showed.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

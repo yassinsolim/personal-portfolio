@@ -309,16 +309,17 @@ const isPaint = (carId: string, name: string) => {
 const localDelta = (
     model: THREE.Object3D,
     parent: THREE.Object3D,
-    up: number
+    up: number,
+    // meters in one of the model's units
+    unit = model.scale.y || 1
 ) => {
     model.updateMatrixWorld(true);
     const toParent = new THREE.Matrix4()
         .copy(parent.matrixWorld)
         .invert()
         .multiply(model.matrixWorld);
-    const scale = model.scale.y || 1;
     const a = new THREE.Vector3(0, 0, 0).applyMatrix4(toParent);
-    const b = new THREE.Vector3(0, up / scale, 0).applyMatrix4(toParent);
+    const b = new THREE.Vector3(0, up / unit, 0).applyMatrix4(toParent);
     return b.sub(a);
 };
 
@@ -326,7 +327,8 @@ const localDelta = (
 const applyRide = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    meters: number
+    meters: number,
+    unit?: number
 ) => {
     const moved: THREE.Object3D[] = [];
     model.traverse((child) => {
@@ -357,7 +359,7 @@ const applyRide = (
         const base = child.userData.garageBase as THREE.Vector3;
         child.position.copy(base);
         if (meters !== 0 && child.parent)
-            child.position.add(localDelta(model, child.parent, meters));
+            child.position.add(localDelta(model, child.parent, meters, unit));
     });
 };
 
@@ -1098,6 +1100,8 @@ export const finishOf = (finish: PaintFinish) =>
 export type LookOptions = {
     // a prepared model of the car whose rims look.wheels asks for
     donor?: THREE.Object3D | null;
+    // meters in one of the model's units, when its parent isn't in meters (the room)
+    unit?: number;
 };
 
 export const applyCarLook = (
@@ -1198,7 +1202,7 @@ export const applyCarLook = (
     // the kit is sized on the car at stock height, then moves with the body
     applyRide(model, roots, 0);
     setKit(model, roots, look.spoiler);
-    applyRide(model, roots, rideOffsetMeters(look));
+    applyRide(model, roots, rideOffsetMeters(look), options.unit);
 };
 
 // the homepage's car takes the look off the race's prepared model of the same
@@ -1229,12 +1233,17 @@ export const copyCarLook = (
         child.visible = true;
         delete child.userData.garageHiddenPart;
     });
-    applyCarLook(target, carId, {
-        ...look,
-        wheels: 'stock',
-        spoiler: 'none',
-        ride: complete ? look.ride : 0,
-    });
+    applyCarLook(
+        target,
+        carId,
+        {
+            ...look,
+            wheels: 'stock',
+            spoiler: 'none',
+            ride: complete ? look.ride : 0,
+        },
+        { unit: source.scale.y || 1 }
+    );
     if (!complete) return;
     const related = (a: THREE.Object3D, b: THREE.Object3D) => {
         for (let node: THREE.Object3D | null = a; node; node = node.parent) if (node === b) return true;
