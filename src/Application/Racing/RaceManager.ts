@@ -55,6 +55,12 @@ import RewindBuffer, {
     restoreVehicle,
     snapshotFields,
 } from './Rewind';
+import LobbyRace, {
+    RACE_LEAD_MS,
+    raceDistance,
+    type RaceEntrant,
+} from './Multiplayer/LobbyRace';
+import type { LobbyRaceMessage } from './Multiplayer/MultiplayerService';
 import type { DriftEntry } from './Leaderboard/LocalDriftBoard';
 
 export type TrackMode = 'ring' | 'drift';
@@ -183,6 +189,7 @@ export default class RaceManager {
     rewind = new RewindBuffer();
     // a lap that used rewind won't count, the hud says why
     lapRewound = false;
+    lobbyRace = new LobbyRace();
     // the horn as last sent and when, a held one is sent again now and then
     hornOn = false;
     hornSentAt = 0;
@@ -349,6 +356,7 @@ export default class RaceManager {
         this.multiplayer.onHorn((from, on) => {
             if (this.active) this.engineAudio.setRemoteHorn(from, on);
         });
+        this.multiplayer.onRace((message) => this.handleRaceMessage(message));
         this.remoteVehicles = new Map();
         this.remoteSmokeCooldownBySession = new Map();
         this.pendingRemoteCarLoads = new Set();
@@ -385,6 +393,10 @@ export default class RaceManager {
                     if (player.sessionId === state.localSessionId) return;
                     this.requestRemoteCarLoad(player.carId);
                 });
+            }
+            // out of the lobby, out of its race
+            if (this.lobbyRace.phase !== 'idle' && (state.mode !== 'lobby' || !state.connected)) {
+                this.endLobbyRace();
             }
             UIEventBus.dispatch('race:multiplayerState', state);
         });
@@ -433,6 +445,8 @@ export default class RaceManager {
 
         UIEventBus.on('race:restartLap', () => {
             if (!this.active || this.paused) return;
+            // the grid is behind you once the race is on
+            if (this.inLobbyRace()) return;
             this.restartLap();
         });
 
@@ -446,6 +460,26 @@ export default class RaceManager {
 
         UIEventBus.on('race:photoMode', (state: { on?: boolean } | undefined) => {
             this.setPhotoMode(Boolean(state?.on));
+        });
+
+        UIEventBus.on('race:lobbyRaceStart', (state: { laps?: number } | undefined) => {
+            this.startLobbyRace(Number(state?.laps) || 1);
+        });
+
+        // the host calls it off for everyone, anyone can leave a finished one
+        UIEventBus.on('race:lobbyRaceEnd', () => {
+            const state = this.multiplayer.getState();
+            if (!state.isHost || this.lobbyRace.phase === 'idle') return;
+            this.multiplayer.sendRace({
+                kind: 'end',
+                from: state.localSessionId,
+                raceId: this.lobbyRace.raceId,
+            });
+            this.endLobbyRace();
+        });
+
+        UIEventBus.on('race:lobbyRaceLeave', () => {
+            if (this.lobbyRace.phase === 'finished' || !this.inLobbyRace()) this.endLobbyRace();
         });
 
         UIEventBus.on('race:photoSave', () => {
@@ -534,6 +568,7 @@ export default class RaceManager {
         });
 
         UIEventBus.on('race:multiplayerLeaveLobby', async () => {
+            this.endLobbyRace();
             await this.multiplayer.leaveLobby();
             this.clearRemoteVehicles();
         });
@@ -1358,6 +1393,7 @@ export default class RaceManager {
                 this.trackMode === 'ring' && this.lapRunning ? this.lapDelta.gap() : null,
             lapDirty: this.trackMode === 'ring' && this.lapDirty,
             lapRewound: this.trackMode === 'ring' && this.lapRewound,
+            race: this.raceHud(),
             rewind: this.rewind.playhead !== null ? this.rewind.left() : null,
             lastLapDirty: this.lastLapDirty,
             ghost:
@@ -1923,6 +1959,150 @@ export default class RaceManager {
         this.remoteSmoke.update(deltaSeconds);
     }
 
+    // lined up or racing in a lobby race: the grid holds, and a restart would
+    // take the car out of it
+    inLobbyRace() {
+        const race = this.lobbyRace;
+        return (
+            (race.phase === 'countdown' || race.phase === 'racing') &&
+            race.entered(this.multiplayer.getState().localSessionId)
+        );
+    }
+
+    // the host: everyone in the lobby lines up by when they joined, the same
+    // order as the grid slots
+    startLobbyRace(laps: number) {
+        const state = this.multiplayer.getState();
+        if (!this.active || this.trackMode !== 'ring') return;
+        if (state.mode !== 'lobby' || !state.connected || !state.isHost) return;
+        if (this.inLobbyRace()) return;
+        const grid = [...state.players]
+            .sort(
+                (a, b) =>
+                    a.connectedAt.localeCompare(b.connectedAt) ||
+                    a.sessionId.localeCompare(b.sessionId)
+            )
+            .map((player) => player.sessionId);
+        const raceId = this.multiplayer.createRandomToken(8).toLowerCase();
+        const startAt = Date.now() + RACE_LEAD_MS;
+        const count = Math.round(Math.min(5, Math.max(1, laps)));
+        this.multiplayer.sendRace({
+            kind: 'start',
+            from: state.localSessionId,
+            raceId,
+            laps: count,
+            startAt,
+            grid,
+        });
+        this.beginLobbyRace(raceId, count, startAt, grid);
+    }
+
+    handleRaceMessage(message: LobbyRaceMessage) {
+        if (!this.active) return;
+        if (message.kind === 'start') {
+            if (this.trackMode === 'ring') {
+                this.beginLobbyRace(message.raceId, message.laps, message.startAt, message.grid);
+            }
+            return;
+        }
+        if (message.raceId !== this.lobbyRace.raceId) return;
+        if (message.kind === 'finish') this.lobbyRace.finish(message.from, message.timeMs);
+        else this.endLobbyRace();
+    }
+
+    // onto the grid slot and held there for the countdown. a player who isn't
+    // on the grid (joined after the start) just watches the standings
+    beginLobbyRace(raceId: string, laps: number, startAt: number, grid: string[]) {
+        const local = this.multiplayer.getState().localSessionId;
+        this.lobbyRace.start(raceId, laps, startAt, grid);
+        if (grid.includes(local)) {
+            if (this.photoMode) this.setPhotoMode(false);
+            if (this.garageOpen) UIEventBus.dispatch('race:garageOpen', { open: false });
+            if (this.paused) this.setPaused(false);
+            this.vehicle.spawnSlot = grid.indexOf(local);
+            this.vehicle.resetToStart();
+            this.startLapTimer();
+        }
+        UIEventBus.dispatch('race:lobbyRaceState', { phase: this.lobbyRace.phase });
+    }
+
+    endLobbyRace() {
+        if (this.lobbyRace.phase === 'idle') return;
+        this.lobbyRace.end();
+        UIEventBus.dispatch('race:lobbyRaceState', { phase: 'idle' });
+    }
+
+    // a lap done in a lobby race, and the finish when it was the last one
+    countRaceLap() {
+        const local = this.multiplayer.getState().localSessionId;
+        if (!this.lobbyRace.entered(local)) return;
+        const time = this.lobbyRace.completeLap(Date.now(), local);
+        if (time === null) return;
+        this.multiplayer.sendRace({
+            kind: 'finish',
+            from: local,
+            raceId: this.lobbyRace.raceId,
+            timeMs: time,
+        });
+        UIEventBus.dispatch('race:lobbyRaceState', { phase: this.lobbyRace.phase });
+    }
+
+    // how far this car has got in the race, null when it isn't in one
+    localRaceProgress() {
+        const race = this.lobbyRace;
+        if (!race.entered(this.multiplayer.getState().localSessionId)) return null;
+        return {
+            raceId: race.raceId,
+            raceDistance: raceDistance(race.lapsDone, this.lapProgress, this.lapRunning),
+        };
+    }
+
+    // what the race hud shows: the countdown, the lap, the places
+    raceHud() {
+        const race = this.lobbyRace;
+        if (race.phase === 'idle') return null;
+        const state = this.multiplayer.getState();
+        const local = state.localSessionId;
+        const now = Date.now();
+        const entrants: RaceEntrant[] = race.grid.map((sessionId) => {
+            const player = state.players.find((p) => p.sessionId === sessionId);
+            const distance =
+                sessionId === local
+                    ? raceDistance(race.lapsDone, this.lapProgress, this.lapRunning)
+                    : player?.raceId === race.raceId
+                      ? (player.raceDistance ?? -1)
+                      : -1;
+            return {
+                sessionId,
+                name: player?.name || 'Driver',
+                distance,
+                present: Boolean(player),
+            };
+        });
+        const standings = race.standings(entrants);
+        const mine = standings.find((standing) => standing.sessionId === local);
+        return {
+            phase: race.phase,
+            entered: race.grid.includes(local),
+            host: state.isHost,
+            laps: race.laps,
+            lap: Math.min(race.laps, race.lapsDone + 1),
+            countdown: race.phase === 'countdown' ? race.countdown(now) : 0,
+            clockMs:
+                race.phase === 'racing'
+                    ? now - race.startAt
+                    : (mine?.finishMs ?? 0),
+            place: mine?.place ?? 0,
+            standings: standings.map((standing) => ({
+                place: standing.place,
+                name: standing.name,
+                you: standing.sessionId === local,
+                finishMs: standing.finishMs,
+                gone: !standing.present,
+            })),
+        };
+    }
+
     // rewind is for hot laps on the ring alone: in a lobby the others would
     // see the car jump, and the drift park scores every second of a run
     canRewind() {
@@ -2049,13 +2229,16 @@ export default class RaceManager {
         );
         this.updateRemoteVehicles(delta);
         const rewinding = this.updateRewind(nowMs, delta);
+        // a lobby race: held on the grid until the light goes green
+        if (this.lobbyRace.tick(Date.now())) this.physicsAccumulator = 0;
+        const holding = this.inLobbyRace() && this.lobbyRace.phase === 'countdown';
         if (rewinding) {
             // the engine plays back with the car
             this.engineAudio.update(
                 { ...this.vehicle.getTelemetry(), throttle: 0, driftIntensity: 0 },
                 delta
             );
-        } else if (!this.paused && !this.garageOpen && !this.transitionHold) {
+        } else if (!this.paused && !this.garageOpen && !this.transitionHold && !holding) {
             // equal steps. a leftover sliver (a frame just over 1/60 s) used
             // to run as a microsecond step, and the grounding divides height
             // changes by the step, which could launch the car into the sky
@@ -2110,6 +2293,8 @@ export default class RaceManager {
             this.currentLapTimeMs = lapUpdate.lapTimeMs;
             this.lapRunning = lapUpdate.lapRunning;
             this.lapProgress = lapUpdate.progress;
+            // before the telemetry, so the others never see a lap go missing
+            if (lapUpdate.completedLapTimeMs && this.trackMode === 'ring') this.countRaceLap();
             this.multiplayer.publishTelemetry({
                 speedKph: telemetry.speedKph,
                 lapProgress: this.lapProgress,
@@ -2121,6 +2306,7 @@ export default class RaceManager {
                 velocity: { x: this.vehicle.velocity.x, z: this.vehicle.velocity.z },
                 yawRate: this.vehicle.physics.yawRate,
                 ghost: this.collisions.ghost,
+                ...(this.localRaceProgress() ?? {}),
             });
 
             this.sectors.setCar(telemetry.carId);
@@ -2243,7 +2429,7 @@ export default class RaceManager {
         } else {
             const telemetry = this.vehicle.getTelemetry();
             // stopped for the others too, or their last moving sample is guessed on
-            if (this.paused || this.garageOpen) {
+            if (this.paused || this.garageOpen || holding) {
                 this.multiplayer.publishTelemetry({
                     speedKph: 0,
                     lapProgress: this.lapProgress,
@@ -2255,6 +2441,7 @@ export default class RaceManager {
                     velocity: { x: 0, z: 0 },
                     yawRate: 0,
                     ghost: this.collisions.ghost,
+                    ...(this.localRaceProgress() ?? {}),
                 });
             }
             if (this.garageOpen) {
@@ -2264,6 +2451,11 @@ export default class RaceManager {
                     this.garageModel = this.vehicle.carModel;
                     this.dispatchGarage();
                 }
+                this.engineAudio.update(this.updateGarageRev(telemetry, delta), delta);
+            } else if (holding) {
+                // the throttle revs it on the grid, like on the stand
+                this.vehicle.input.update(delta);
+                this.garageRev.held = this.vehicle.input.intent.throttle > 0.1;
                 this.engineAudio.update(this.updateGarageRev(telemetry, delta), delta);
             } else {
                 this.engineAudio.update(
