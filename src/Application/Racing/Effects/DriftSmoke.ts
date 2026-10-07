@@ -81,6 +81,8 @@ export default class DriftSmoke {
     geometry: THREE.InstancedBufferGeometry;
     material: THREE.ShaderMaterial;
     active: boolean;
+    // the advanced graphics switch
+    enabled = true;
     lowQuality: boolean;
     capacity: number;
     cursor: number;
@@ -193,7 +195,7 @@ export default class DriftSmoke {
         speedMps: number,
         kind: PuffKind = 'smoke'
     ) {
-        if (!this.active || intensity <= 0.05) return;
+        if (!this.active || !this.enabled || intensity <= 0.05) return;
         const limit = this.getParticleLimit();
         const index = this.cursor % limit;
         this.cursor = (this.cursor + 1) % limit;

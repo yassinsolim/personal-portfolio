@@ -526,7 +526,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   won't count. Ring only, alone (not with other players connected), and the buffer clears
   at the line, on a restart, a reset, a car change and the garage, so it never reaches
   back over a lap or a setup.
-- Lobby races (`Multiplayer/LobbyRace.ts`, the pause menu's Lobby race row, host only, 2+
+- Lobby races (`Multiplayer/LobbyRace.ts`, the Race row under Online in the pause menu, host only, 2+
   players): one `race` broadcast starts it with the laps, the grid (the lobby by join
   order, the same order as the spawn slots) and the green light on the host's clock 6 s
   out, moved onto each player's clock with the skew `estimateSampleTime` already finds.
@@ -540,6 +540,31 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   while lined up or racing, and someone who joined after the start only sees the places.
   Two mock windows check it (`/tmp/lobbyrace.mjs`-style: the guest's flag is forced with
   `countRaceLap()`, a ring lap is 7 minutes).
+
+## UI Notes (2026-10-07)
+- The look is black glass, hairlines and white for whatever is picked or pressed, from the
+  `--ui-*` tokens at the top of `UI/style.css`. No orange anywhere in the ui: the colors
+  left mean something (pi classes, sector and delta colors, the tach's red line, the
+  driving line, warnings, other players in blue). Car paints and the world stay as they
+  are; the garage's neon is white now.
+- Pause menu (`UI/components/PauseMenu.tsx`): the actions along the top (resume, restart
+  lap, back on track, garage, photo mode, exit), then track / driving / sound and graphics
+  in three columns (two under 1000 px, one under 720 px). The track cards are where the
+  drift park shows; the room panel has the same pick (`Racing/Track/startTrack.ts`,
+  `yassinverse:startTrack:v1`), used by Play Solo and the car click (solo only, an invite
+  is always the ring; the park comes on after the fly in). The controls and tips are in
+  `RaceHelp.tsx` behind Help, its own pad scope (B closes it, the bumpers switch tabs).
+- Esc: with the mouse locked the browser eats the key and only unlocks, so losing the lock
+  while driving pauses (`RaceChaseCamera`, our own unlocks set `releasing`). Esc in the menu
+  resumes, but not the esc that paused: that one is default-prevented by the camera before
+  the menu's listener, which React can add while the same key is still going round.
+- Advanced graphics (`Racing/Visuals/graphicsOptions.ts`, `yassinverse:graphicsOff:v1`,
+  `race:graphicsOff`): switches that only take things away from the render mode's preset,
+  never add, so a weak gpu can't be pushed over by them. Smoke, skids, sparks, camera shake
+  and the speed fov are read where they happen.
+- Photo mode moves: W A S D along the ground the way the camera looks, Q and E down and up,
+  Shift faster (the left stick, the bumpers and a stick click on a pad), up to 60 m from the
+  car. The car's input is off while paused, so the keys don't drive or shift it.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

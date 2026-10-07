@@ -68,11 +68,13 @@ const OVERLAYS = [
     '.car-picker',
     '.garage',
     '.race-photo',
+    '.race-help',
     '.race-menu-overlay',
     '.race-lobby-choice',
 ];
 // where a menu's focus starts
 const DEFAULTS = [
+    '.race-help-tabs .on',
     '.race-menu-primary',
     '.race-photo-save',
     '.look-hint-primary',
@@ -82,7 +84,7 @@ const DEFAULTS = [
     '.race-lobby-actions button:last-child',
     '.room-overlay-close',
 ];
-const TABS = '.garage-tabs, .car-picker-filters';
+const TABS = '.garage-tabs, .car-picker-filters, .race-help-tabs';
 const TEXT_INPUTS = new Set([
     'text',
     'search',
@@ -163,6 +165,8 @@ export default class GamepadController {
     hintKey = '';
     flipperHeld = new Set<FlipperButton>();
     revving = false;
+    // the photo camera was moving last frame, so letting go sends one stop
+    photoMoving = false;
     carPrepared = false;
     // the pointer on yassinOS while m1 is the focus, and where it was left
     osPointer: { x: number; y: number } | null = null;
@@ -357,7 +361,22 @@ export default class GamepadController {
         const scope = this.overlay();
         if (!scope) return;
         const pause = scope.matches('.race-menu-overlay');
-        const direction = this.repeat.step(padDirection(frame.pad), frame.now);
+        const photo = scope.matches('.race-photo');
+        // photo mode's left stick moves the camera, so only the d-pad moves the focus
+        const direction = this.repeat.step(
+            padDirection(
+                photo
+                    ? {
+                          index: frame.pad.index,
+                          connected: frame.pad.connected,
+                          mapping: frame.pad.mapping,
+                          buttons: frame.pad.buttons,
+                          axes: [],
+                      }
+                    : frame.pad,
+            ),
+            frame.now,
+        );
         const element = this.current?.element;
         const sideways = direction === 'left' || direction === 'right';
         if (!(
@@ -376,8 +395,8 @@ export default class GamepadController {
             else this.pressKey('Escape');
         }
         if (pause && frame.pressed(BUTTON.MENU)) this.resume();
-        if (frame.pressed(BUTTON.LB)) this.switchTab(scope, -1);
-        if (frame.pressed(BUTTON.RB)) this.switchTab(scope, 1);
+        if (!photo && frame.pressed(BUTTON.LB)) this.switchTab(scope, -1);
+        if (!photo && frame.pressed(BUTTON.RB)) this.switchTab(scope, 1);
         if (scope.matches('.garage')) {
             if (frame.rx || frame.ry) {
                 UIEventBus.dispatch('race:garageOrbit', {
@@ -396,6 +415,18 @@ export default class GamepadController {
             // the triggers zoom, out on the left one
             const zoom = (frame.down[BUTTON.LT] ? 1 : 0) - (frame.down[BUTTON.RT] ? 1 : 0);
             if (zoom) UIEventBus.dispatch('race:photoZoom', { delta: zoom * PHOTO_ZOOM * frame.dt });
+            // the left stick moves it, the bumpers down and up, a stick click faster
+            const rise = (frame.down[BUTTON.RB] ? 1 : 0) - (frame.down[BUTTON.LB] ? 1 : 0);
+            const moving = Boolean(frame.lx || frame.ly || rise);
+            if (moving || this.photoMoving) {
+                UIEventBus.dispatch('race:photoMove', {
+                    x: frame.lx,
+                    y: rise,
+                    z: -frame.ly,
+                    fast: Boolean(frame.down[BUTTON.L3]),
+                });
+            }
+            this.photoMoving = moving;
         } else if (frame.ry) {
             this.scroll(scope, frame.ry * SCROLL_SPEED * frame.dt);
         }
@@ -1129,6 +1160,13 @@ export default class GamepadController {
                 if (scope?.querySelector(TABS)) list.push([bumpers, 'Tabs']);
                 if (scope?.matches('.garage'))
                     list.push(['RS', 'Turn'], [label('RT'), 'Rev']);
+                if (scope?.matches('.race-photo'))
+                    list.push(
+                        ['LS', 'Move'],
+                        ['RS', 'Orbit'],
+                        [bumpers, 'Down, up'],
+                        [`${label('LT')} ${label('RT')}`, 'Zoom'],
+                    );
                 return list;
             }
             case 'flipper':

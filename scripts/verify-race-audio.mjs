@@ -179,10 +179,11 @@ await phase('idle', 2500);
 await phase('full-throttle', 7000, ['KeyW']);
 await phase('lift-off', 3000);
 
-// switch car from the pause menu like a player would
+// switch car while paused like a player would (the panel's select stands in
+// for the picker)
 await page.keyboard.press('Escape');
 await sleep(700);
-await page.selectOption('#race-car-select', secondCar);
+await page.selectOption('#car-switcher', secondCar);
 await sleep(2500);
 const resume = page.getByRole('button', { name: /resume/i });
 if (await resume.count()) await resume.first().click();

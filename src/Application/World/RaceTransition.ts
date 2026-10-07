@@ -5,6 +5,7 @@ import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
 import { CameraKey } from '../Camera/Camera';
 import { getInviteLobbyCode } from '../Racing/Multiplayer/invite';
+import { readStartTrack } from '../Racing/Track/startTrack';
 import type RaceManager from '../Racing/RaceManager';
 import type { RevealPlate } from '../Racing/Visuals/RaceReveal';
 import { copyCarLook, finishOf, paintMaterialsOf } from '../Racing/Garage/carLook';
@@ -345,6 +346,9 @@ export default class RaceTransition {
         await nextFrame();
         if (!this.busy) return;
         const invite = getInviteLobbyCode();
+        // solo goes to the track picked on the room panel (the drift park
+        // comes on once the fly in is done); an invite is always the ring
+        manager.startTrack = !invite && readStartTrack() === 'drift' ? 'drift' : null;
         camera.currentKeyframe = undefined;
         camera.targetKeyframe = undefined;
         // the fly and the race start run inside the app's frame, before it

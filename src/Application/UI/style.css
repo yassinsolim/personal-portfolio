@@ -151,9 +151,28 @@ br {
     left: 64px;
 }
 
-/* the room's panel (and race mode's): a dark glass card. sections stack with
+/* the ui's palette: black glass, hairlines, and white for whatever is picked
+   or pressed, like the room's black desk and white pc */
+:root {
+    --ui-panel: rgba(12, 12, 13, 0.84);
+    --ui-panel-solid: rgba(14, 14, 15, 0.96);
+    --ui-line: rgba(255, 255, 255, 0.09);
+    --ui-line-strong: rgba(255, 255, 255, 0.24);
+    --ui-fill: rgba(255, 255, 255, 0.05);
+    --ui-fill-hover: rgba(255, 255, 255, 0.1);
+    --ui-text: #f4f4f4;
+    --ui-muted: rgba(255, 255, 255, 0.55);
+    --ui-accent: #fff;
+    --ui-accent-hover: #e2e2e2;
+    --ui-on-accent: #0c0c0d;
+    --ui-warn: rgb(255, 150, 150);
+    --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+}
+
+/* the room's panel (and race mode's): a black glass card. sections stack with
    small caps labels, the render modes are one segmented control, and the
-   race's call to action is the one orange button */
+   one white button is what to do next */
 .look-hint {
     position: fixed;
     top: 18px;
@@ -166,17 +185,14 @@ br {
     flex-direction: column;
     gap: 10px;
     padding: 14px;
-    background: linear-gradient(180deg, rgba(24, 25, 30, 0.8), rgba(12, 13, 16, 0.8));
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 14px;
-    box-shadow:
-        0 14px 34px rgba(0, 0, 0, 0.32),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    backdrop-filter: blur(14px) saturate(140%);
-    -webkit-backdrop-filter: blur(14px) saturate(140%);
-    color: rgba(255, 255, 255, 0.92);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: var(--ui-text);
+    font-family: var(--ui-font);
     font-size: 13px;
     line-height: 1.35;
     pointer-events: none;
@@ -207,21 +223,10 @@ br {
 
 .look-hint .look-hint-pulse {
     flex: none;
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: #ff8a16;
-    animation: look-hint-pulse 2.4s ease-out infinite;
-}
-
-@keyframes look-hint-pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(255, 138, 22, 0.55);
-    }
-    70%,
-    100% {
-        box-shadow: 0 0 0 8px rgba(255, 138, 22, 0);
-    }
+    background: var(--ui-accent);
 }
 
 .look-hint .look-hint-os {
@@ -255,8 +260,8 @@ br {
 
 .look-hint .look-hint-os:hover strong,
 .look-hint .look-hint-os:focus-visible strong {
-    color: #ffb35c;
-    border-color: #ff9a3c;
+    color: #fff;
+    border-color: #fff;
 }
 
 .look-hint label,
@@ -292,8 +297,8 @@ br {
 
 .look-hint .car-picker-open:hover,
 .look-hint .car-picker-open:focus-visible {
-    border-color: rgba(255, 138, 22, 0.6);
-    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--ui-line-strong);
+    background: var(--ui-fill-hover);
 }
 
 .car-picker-open img {
@@ -316,7 +321,7 @@ br {
 .car-picker-open em {
     font-style: normal;
     font-size: 11px;
-    color: #ffad55;
+    color: var(--ui-muted);
 }
 
 .look-hint .car-switcher-native {
@@ -349,10 +354,10 @@ br {
 .car-picker.live {
     inset: 18px auto 18px 18px;
     width: min(560px, calc(100vw - 36px));
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 14px;
-    background: linear-gradient(180deg, rgba(24, 25, 30, 0.92), rgba(12, 13, 16, 0.92));
-    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+    background: var(--ui-panel-solid);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(14px);
 }
 
@@ -376,9 +381,9 @@ br {
 .car-picker .car-picker-close {
     padding: 7px 14px;
     border: 0;
-    border-radius: 9px;
-    background: linear-gradient(180deg, #ffad55, #ff8a16);
-    color: #1a1006;
+    border-radius: 8px;
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
     font-weight: 600;
 }
 
@@ -397,8 +402,9 @@ br {
 }
 
 .car-picker-filters button.active {
-    border-color: rgba(255, 138, 22, 0.7);
-    background: rgba(255, 138, 22, 0.16);
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
 }
 
 .car-picker-grid {
@@ -429,8 +435,8 @@ br {
 }
 
 .car-card.selected {
-    border-color: #ff8a16;
-    background: rgba(255, 138, 22, 0.12);
+    border-color: var(--ui-accent);
+    background: rgba(255, 255, 255, 0.09);
 }
 
 .car-card img {
@@ -453,7 +459,7 @@ br {
     font-size: 10px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #ffad55;
+    color: var(--ui-muted);
 }
 
 .car-card-stats {
@@ -518,8 +524,8 @@ br {
 
 .look-hint select:focus-visible,
 .look-hint input:focus {
-    border-color: rgba(255, 154, 60, 0.85);
-    box-shadow: 0 0 0 3px rgba(255, 138, 22, 0.18);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: none;
 }
 
 .look-hint .render-mode {
@@ -564,9 +570,8 @@ br {
 }
 
 .look-hint .look-hint-segment button.active {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.17);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    color: var(--ui-on-accent);
+    background: var(--ui-accent);
 }
 
 .look-hint .render-mode-scale {
@@ -609,7 +614,7 @@ br {
 }
 
 .look-hint button:focus-visible {
-    outline: 2px solid rgba(255, 154, 60, 0.9);
+    outline: 2px solid rgba(255, 255, 255, 0.85);
     outline-offset: 2px;
 }
 
@@ -670,27 +675,12 @@ br {
     font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.look-hint .race-actions .race-garage {
-    border-color: rgba(255, 154, 60, 0.6);
-    background: linear-gradient(135deg, rgba(70, 38, 12, 0.9), rgba(30, 20, 12, 0.9));
-}
-
-.look-hint .race-actions .race-garage:hover {
-    border-color: #ffb35c;
-    background: linear-gradient(135deg, rgba(96, 52, 16, 0.95), rgba(40, 26, 14, 0.95));
-}
-
 .look-hint .race-actions .race-garage svg {
-    fill: #ff9a3c;
+    fill: #fff;
 }
 
 /* no garage in the middle of a lobby race */
 .look-hint .race-actions .race-garage:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-}
-
-.race-menu-actions button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
@@ -773,6 +763,58 @@ body.race-mode-touch #ui-app {
     pointer-events: auto;
 }
 
+/* the two tracks side by side, the picked one outlined in white */
+.look-hint .track-pick {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.look-hint .track-pick button {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid var(--ui-line);
+    border-radius: 10px;
+    background: var(--ui-fill);
+    color: var(--ui-muted);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.look-hint .track-pick button:hover {
+    border-color: var(--ui-line-strong);
+    background: var(--ui-fill-hover);
+}
+
+.look-hint .track-pick button.on {
+    border-color: var(--ui-accent);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px var(--ui-accent);
+}
+
+.look-hint .track-pick strong {
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.look-hint .track-pick small {
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.look-hint .track-pick-note {
+    margin: 0;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1.35;
+}
+
 .look-hint .multiplayer-row {
     display: flex;
     align-items: center;
@@ -807,17 +849,15 @@ body.race-mode-touch #ui-app {
     justify-content: center;
     gap: 7px;
     height: 36px;
-    border-color: rgba(255, 176, 100, 0.9);
-    background: linear-gradient(180deg, #ff9d33, #ff7b00);
-    color: #1c1105;
-    font-weight: 700;
-    box-shadow: 0 6px 16px rgba(255, 122, 0, 0.28);
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 600;
 }
 
 .look-hint .multiplayer-actions .look-hint-primary:hover {
-    border-color: #ffc285;
-    background: linear-gradient(180deg, #ffad55, #ff8a16);
-    transform: translateY(-1px);
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
 }
 
 .look-hint .multiplayer-actions .look-hint-primary svg {
@@ -889,147 +929,671 @@ body.race-mode-touch #ui-app {
     pointer-events: auto;
 }
 
-/* the pause menu, in the room panel's look */
+/* the pause menu: what to do next along the top, then three columns (one on a
+   phone). black glass, hairlines, white for what's picked */
 .race-menu-panel {
-    width: min(480px, calc(100vw - 32px));
-    max-height: calc(100vh - 32px);
+    width: min(1080px, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px);
     overflow-y: auto;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: linear-gradient(180deg, rgba(27, 28, 33, 0.95), rgba(14, 15, 18, 0.95));
-    color: rgba(255, 255, 255, 0.9);
+    border: 1px solid var(--ui-line);
+    background: var(--ui-panel-solid);
+    color: var(--ui-text);
     border-radius: 16px;
-    padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    padding: 22px 24px 16px;
+    font-family: var(--ui-font);
     font-size: 13px;
-    box-shadow:
-        0 24px 60px rgba(0, 0, 0, 0.5),
-        inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    transition: opacity 0.15s ease;
+}
+
+/* help is open over it */
+.race-menu-overlay.helping > .race-menu-panel {
+    opacity: 0.2;
+    pointer-events: none;
 }
 
 .race-menu-panel h3 {
     margin: 0;
     color: #fff;
     font-family: inherit;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.1px;
+    font-size: 20px;
+    font-weight: 650;
+    letter-spacing: -0.2px;
 }
 
 .race-menu-panel p {
-    margin-top: 6px;
-    margin-bottom: 16px;
-    color: rgba(255, 255, 255, 0.55);
+    margin: 0;
     font-family: inherit;
     font-size: 12.5px;
 }
 
-.race-menu-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 10px;
-    color: rgba(255, 255, 255, 0.78);
-}
-
-.race-menu-row input[type='range'] {
-    flex: 1;
-    accent-color: #ff8a16;
-}
-
-.race-menu-row select,
-.race-menu-row button,
-.race-menu-actions button {
+.race-menu-panel button,
+.race-help button {
     height: 32px;
     padding: 0 12px;
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.13);
-    color: #fff;
+    border: 1px solid var(--ui-line);
     border-radius: 9px;
+    background: var(--ui-fill);
+    color: var(--ui-text);
     font-family: inherit;
     font-size: 12.5px;
     font-weight: 500;
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.race-menu-row select {
-    appearance: none;
-    -webkit-appearance: none;
-    padding-right: 30px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-opacity='0.7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 10px center;
-    background-size: 13px;
+.race-menu-panel button:hover:not(:disabled),
+.race-help button:hover:not(:disabled) {
+    background: var(--ui-fill-hover);
+    border-color: var(--ui-line-strong);
 }
 
-.race-menu-row select option {
-    background: #17181d;
-    color: #fff;
+.race-menu-panel button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
 }
 
-.race-menu-row select:hover,
-.race-menu-row button:hover,
-.race-menu-actions button:hover {
-    background-color: rgba(255, 255, 255, 0.13);
-    border-color: rgba(255, 255, 255, 0.24);
+.race-menu-panel kbd,
+.race-photo-hint kbd {
+    display: inline-block;
+    min-width: 12px;
+    margin-left: 6px;
+    padding: 1px 5px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 5px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
 }
 
-.race-quality-buttons {
+.pm-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.pm-head p {
+    margin-top: 3px;
+    color: var(--ui-muted);
+}
+
+.pm-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 18px 0 4px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--ui-line);
+}
+
+.pm-actions button {
+    height: 38px;
+    padding: 0 14px;
+}
+
+.race-menu-panel .race-menu-primary {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 650;
+}
+
+.race-menu-panel .race-menu-primary:hover:not(:disabled) {
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
+}
+
+.race-menu-primary kbd {
+    border-color: rgba(0, 0, 0, 0.25);
+    color: rgba(0, 0, 0, 0.55);
+}
+
+/* exit sits apart, at the end of the row */
+.pm-actions .pm-exit {
+    margin-left: auto;
+    color: var(--ui-muted);
+}
+
+.pm-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px 28px;
+}
+
+@media (min-width: 720px) {
+    .pm-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1000px) {
+    .pm-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.pm-grid section {
+    min-width: 0;
+}
+
+.pm-grid h4,
+.pm-advanced h4 {
+    margin: 16px 0 8px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+}
+
+.pm-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
+    min-height: 34px;
+    margin-bottom: 6px;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+/* one segmented control, the picked one white */
+.pm-choice {
     display: flex;
     gap: 2px;
-    padding: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2px;
+    border: 1px solid var(--ui-line);
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--ui-fill);
 }
 
-.race-menu-row .race-quality-buttons button {
+.race-menu-panel .pm-choice button {
     height: 26px;
     padding: 0 10px;
     border: 0;
     border-radius: 7px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.62);
+    color: var(--ui-muted);
 }
 
-.race-menu-row .race-quality-buttons button:hover {
+.race-menu-panel .pm-choice button:hover:not(:disabled) {
+    background: var(--ui-fill-hover);
     color: #fff;
-    background: rgba(255, 255, 255, 0.06);
 }
 
-.race-quality-scale {
-    margin-left: 8px;
-    opacity: 0.6;
+.race-menu-panel .pm-choice button.on {
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 600;
+}
+
+.pm-slider {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    min-width: 150px;
+    max-width: 240px;
+}
+
+.pm-slider input[type='range'] {
+    flex: 1;
+    min-width: 0;
+    accent-color: var(--ui-accent);
+}
+
+.pm-slider > span {
+    min-width: 36px;
+    color: var(--ui-muted);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+/* the two tracks as cards, so the drift park can't be missed */
+.pm-tracks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.race-menu-panel .pm-track {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    height: auto;
+    padding: 10px 12px;
+    border-radius: 11px;
+    text-align: left;
+}
+
+.pm-track strong {
+    color: #fff;
+    font-size: 13.5px;
+    font-weight: 600;
+}
+
+.pm-track small,
+.pm-track em {
+    color: var(--ui-muted);
+    font-size: 11.5px;
+    font-style: normal;
+    line-height: 1.35;
+}
+
+.race-menu-panel .pm-track.on {
+    border-color: var(--ui-accent);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: inset 0 0 0 1px var(--ui-accent);
+}
+
+.race-menu-panel .pm-track.on:disabled {
+    opacity: 1;
+}
+
+.pm-board {
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: pm-board;
+}
+
+.pm-board li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--ui-line);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    counter-increment: pm-board;
+}
+
+.pm-board li::before {
+    content: counter(pm-board);
+    color: var(--ui-muted);
     font-variant-numeric: tabular-nums;
 }
 
-.race-menu-row .race-quality-buttons button.active {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.17);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+.pm-board li span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.race-menu-actions {
-    margin-top: 16px;
+.pm-board li strong {
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+.race-menu-panel .pm-car {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    height: auto;
+    padding: 6px 12px 6px 6px;
+    border-radius: 11px;
+    text-align: left;
+}
+
+.pm-car img {
+    width: 72px;
+    height: 40px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.04);
+    object-fit: cover;
+}
+
+.pm-car span {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pm-car em {
+    color: var(--ui-muted);
+    font-size: 12px;
+    font-style: normal;
+}
+
+.pm-inline {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    justify-content: flex-end;
+    gap: 6px;
 }
 
-.race-menu-actions .race-menu-primary {
-    border-color: rgba(255, 176, 100, 0.9);
-    background: linear-gradient(180deg, #ff9d33, #ff7b00);
-    color: #1c1105;
-    font-weight: 700;
+.race-menu-panel .pm-wide {
+    width: 100%;
 }
 
-.race-menu-actions .race-menu-primary:hover {
-    border-color: #ffc285;
-    background: linear-gradient(180deg, #ffad55, #ff8a16);
+.race-menu-panel .pm-note {
+    margin: -2px 0 8px;
+    color: var(--ui-muted);
+    font-size: 11.5px;
+    font-style: normal;
+    line-height: 1.4;
+}
+
+.pm-row .pm-note {
+    margin: 0;
+}
+
+.pm-graphics-links {
+    margin: 2px 0 6px;
+}
+
+.race-menu-panel .pm-graphics-links button[aria-expanded='true'] {
+    border-color: var(--ui-line-strong);
+    background: var(--ui-fill-hover);
+}
+
+/* the advanced switches: a block under the columns, the groups side by side */
+.pm-advanced {
+    margin-top: 16px;
+    padding: 0 16px 8px;
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+}
+
+.race-menu-panel .pm-advanced .pm-note {
+    margin: -4px 0 4px;
+}
+
+.pm-advanced-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0 28px;
+}
+
+.pm-switches h5 {
+    margin: 8px 0 2px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+/* a switch: the label, and a track whose knob goes right and white when on */
+.race-menu-panel .pm-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    min-height: 30px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--ui-muted);
+    text-align: left;
+}
+
+/* mute sits with the rows, so it reads like one */
+.race-menu-panel .pm-grid .pm-switch {
+    min-height: 34px;
+    margin-bottom: 6px;
+    padding: 0;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.race-menu-panel .pm-switch:hover:not(:disabled) {
+    background: var(--ui-fill);
+    color: #fff;
+}
+
+.race-menu-panel .pm-switch.on {
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.pm-switch i {
+    position: relative;
+    flex: none;
+    width: 30px;
+    height: 18px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 9px;
+    background: transparent;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.pm-switch i::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--ui-muted);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.pm-switch.on i {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+}
+
+.pm-switch.on i::after {
+    background: var(--ui-on-accent);
+    transform: translateX(12px);
+}
+
+.race-menu-panel .graphics-info {
+    margin-top: 8px;
+}
+
+.pm-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid var(--ui-line);
+    color: var(--ui-muted);
+    font-size: 10.5px;
+    line-height: 1.45;
+}
+
+.race-menu-panel .pm-foot button {
+    flex: none;
+    height: 26px;
+    font-size: 11.5px;
+}
+
+/* help: over the pause menu, wide on a desktop, one size for every tab */
+.race-help {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    width: min(880px, calc(100vw - 48px));
+    height: min(620px, calc(100vh - 48px));
+    height: min(620px, calc(100dvh - 48px));
+    transform: translate(-50%, -50%);
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 16px;
+    background: #0e0e0f;
+    color: var(--ui-text);
+    font-family: var(--ui-font);
+    font-size: 13px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.race-help header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px 0;
+}
+
+.race-help h3 {
+    margin: 0;
+    color: #fff;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 650;
+}
+
+.race-help-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--ui-line);
+}
+
+.race-help .race-help-tabs button {
+    height: 30px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--ui-muted);
+}
+
+.race-help .race-help-tabs button.on {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 600;
+}
+
+.race-help-body {
+    padding: 16px 22px 22px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.race-help-columns {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 8px 32px;
+}
+
+.race-help-keys h5 {
+    margin: 0 0 8px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+}
+
+.race-help-keys dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 7px 14px;
+    margin: 0;
+}
+
+.race-help-keys dt {
+    align-self: start;
+    justify-self: start;
+    padding: 1px 7px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 6px;
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: pre;
+}
+
+.race-help-keys dd {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.75);
+    line-height: 1.45;
+}
+
+.race-help-points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px 32px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.race-help-points li {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.race-help-points strong {
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.race-help-points span {
+    color: rgba(255, 255, 255, 0.72);
+    line-height: 1.5;
+}
+
+.race-help-credits > p {
+    margin: 0 0 10px;
+    color: rgba(255, 255, 255, 0.72);
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+@media (max-width: 719px) {
+    .race-menu-panel {
+        width: calc(100vw - 16px);
+        max-height: calc(100dvh - 16px);
+        padding: 16px 14px 12px;
+    }
+
+    .pm-actions button {
+        flex: 1 1 calc(50% - 4px);
+    }
+
+    .pm-actions .pm-exit {
+        margin-left: 0;
+    }
+
+    .pm-foot {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .race-help {
+        width: calc(100vw - 16px);
+        height: calc(100dvh - 16px);
+    }
+
+    .race-help header,
+    .race-help-tabs,
+    .race-help-body {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
 }
 
 /* photo mode: the whole screen drags the camera, one bar at the bottom */
@@ -1083,7 +1647,7 @@ body.race-mode-touch #ui-app {
 
 .race-photo-fov input {
     width: 120px;
-    accent-color: #ff8a16;
+    accent-color: var(--ui-accent);
 }
 
 .race-photo-fov span:last-child {
@@ -1110,10 +1674,26 @@ body.race-mode-touch #ui-app {
 }
 
 .race-photo-bar .race-photo-save {
-    border-color: rgba(255, 176, 100, 0.9);
-    background: linear-gradient(180deg, #ff9d33, #ff7b00);
-    color: #1c1105;
-    font-weight: 700;
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 650;
+}
+
+.race-photo-bar .race-photo-save:hover {
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
+}
+
+.race-photo-hint kbd {
+    margin: 0 1px;
+}
+
+/* no keyboard on a phone */
+@media (pointer: coarse) {
+    .race-photo-keys {
+        display: none;
+    }
 }
 
 .race-hud {
@@ -1187,7 +1767,7 @@ body.race-mode-touch #ui-app {
     color: rgba(255, 255, 255, 0.84);
 }
 
-/* a lobby race: the places, you in orange */
+/* a lobby race: the places, you picked out in white */
 .race-standings h4 {
     display: flex;
     justify-content: space-between;
@@ -1203,7 +1783,11 @@ body.race-mode-touch #ui-app {
 }
 
 .race-standings li.you {
-    color: #ffae5c;
+    margin: 0 -6px;
+    padding: 0 6px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
     font-weight: 700;
 }
 
@@ -1268,9 +1852,9 @@ body.race-mode-touch #ui-app {
     align-items: baseline;
     gap: 16px;
     padding: 6px 16px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--ui-line);
     border-radius: 999px;
-    background: rgba(12, 13, 16, 0.72);
+    background: var(--ui-panel);
     backdrop-filter: blur(6px);
     color: rgba(255, 255, 255, 0.85);
     font-family: monospace;
@@ -1279,7 +1863,7 @@ body.race-mode-touch #ui-app {
 }
 
 .race-pill strong {
-    color: #ffae5c;
+    color: #fff;
     font-size: 20px;
 }
 
@@ -1300,12 +1884,11 @@ body.race-mode-touch #ui-app {
     gap: 10px;
     width: min(340px, calc(100vw - 32px));
     padding: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--ui-line);
     border-radius: 16px;
-    background: linear-gradient(180deg, rgba(27, 28, 33, 0.95), rgba(14, 15, 18, 0.95));
+    background: var(--ui-panel-solid);
     color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--ui-font);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
     box-sizing: border-box;
 }
@@ -1326,7 +1909,7 @@ body.race-mode-touch #ui-app {
     margin: 0;
     font-family: monospace;
     font-size: 16px;
-    color: #ffae5c;
+    color: #fff;
 }
 
 .race-result .race-standings {
@@ -1337,18 +1920,17 @@ body.race-mode-touch #ui-app {
 .race-result button {
     height: 34px;
     padding: 0 16px;
-    border: 1px solid rgba(255, 176, 100, 0.9);
+    border: 1px solid var(--ui-accent);
     border-radius: 9px;
-    background: linear-gradient(180deg, #ff9d33, #ff7b00);
-    color: #1c1105;
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
     font-family: inherit;
-    font-weight: 700;
+    font-weight: 650;
     cursor: pointer;
 }
 
-.race-menu-note {
-    font-style: normal;
-    opacity: 0.6;
+.race-result button:hover {
+    background: var(--ui-accent-hover);
 }
 
 .race-touch-controls {
@@ -1604,17 +2186,6 @@ body.race-mode-touch #ui-app {
     .race-hud-board {
         display: none;
     }
-
-    .race-menu-panel {
-        max-height: calc(100dvh - 24px);
-        overflow: auto;
-        padding: 12px;
-    }
-
-    .race-menu-row {
-        align-items: stretch;
-        flex-wrap: wrap;
-    }
 }
 
 @media (orientation: landscape) and (max-height: 520px) {
@@ -1670,16 +2241,6 @@ body.race-mode-touch #ui-app {
     }
 }
 
-.race-menu-controls {
-    margin: 4px 0 12px;
-    font-size: 12px;
-    line-height: 1.55;
-}
-
-.race-menu-panel .race-menu-controls {
-    color: rgba(255, 255, 255, 0.72);
-}
-
 .shell-credits {
     display: flex;
     flex-wrap: wrap;
@@ -1714,10 +2275,6 @@ body.race-mode-touch #ui-app {
     padding-top: 2px;
 }
 
-.race-menu-panel .shell-credits {
-    margin: -6px 0 12px;
-}
-
 .race-menu-credits {
     margin: -6px 0 12px;
     font-size: 10.5px;
@@ -1748,6 +2305,7 @@ body.race-mode-touch #ui-app {
    frame for backdrop blur, so the panels go solid instead */
 .race-lite .race-hud-board,
 .race-lite .race-menu-overlay,
+.race-lite .race-lobby-card,
 .race-lite .race-touch-button,
 .race-lite .race-debug-panel {
     backdrop-filter: none;
@@ -1769,25 +2327,30 @@ body.race-mode-touch #ui-app {
 
 .race-lobby-card {
     pointer-events: auto;
-    max-width: min(900px, 94vw) !important;
-    background: rgba(0, 0, 0, 0.72);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
-    padding: 16px 18px;
-    color: #fff;
-    font-family: monospace;
+    max-width: min(980px, 94vw) !important;
+    background: var(--ui-panel);
+    border: 1px solid var(--ui-line);
+    border-radius: 14px;
+    padding: 18px 20px;
+    color: var(--ui-text);
+    font-family: var(--ui-font);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     animation: race-lobby-in 0.35s ease-out;
 }
 
 .race-lobby-card h3 {
-    margin: 0 0 12px;
-    font-size: 16px;
+    margin: 0 0 14px;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 650;
 }
 
 .race-lobby-options {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
 }
 
 .race-lobby-options button {
@@ -1797,16 +2360,19 @@ body.race-mode-touch #ui-app {
     gap: 4px;
     text-align: left;
     padding: 12px 12px 12px 38px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    border-radius: 8px;
+    background: var(--ui-fill);
+    border: 1px solid var(--ui-line);
+    border-radius: 11px;
     color: #fff;
     font-family: inherit;
+    font-size: 13px;
     cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .race-lobby-options button:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.16);
+    background: var(--ui-fill-hover);
+    border-color: var(--ui-line-strong);
 }
 
 .race-lobby-options button:disabled {
@@ -1814,9 +2380,14 @@ body.race-mode-touch #ui-app {
     cursor: default;
 }
 
+.race-lobby-options strong {
+    font-weight: 600;
+}
+
 .race-lobby-options small {
-    opacity: 0.75;
-    font-size: 11px;
+    color: var(--ui-muted);
+    font-size: 11.5px;
+    line-height: 1.35;
 }
 
 .race-lobby-key {
@@ -1825,9 +2396,11 @@ body.race-mode-touch #ui-app {
     top: 12px;
     width: 18px;
     height: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 4px;
-    font-size: 11px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 5px;
+    color: var(--ui-muted);
+    font-size: 10.5px;
+    font-weight: 600;
     line-height: 18px;
     text-align: center;
 }
@@ -1874,6 +2447,12 @@ body.race-mode-touch #ui-app {
     }
 }
 
+@media (max-width: 900px) {
+    .race-lobby-options {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
 @media (max-width: 640px) {
     .race-lobby-options {
         grid-template-columns: 1fr;
@@ -1914,7 +2493,7 @@ body.race-mode-touch #ui-app {
 
 .race-tach .fill {
     fill: none;
-    stroke: #7fd0ff;
+    stroke: #fff;
     stroke-width: 3;
     stroke-linecap: round;
 }
@@ -1939,7 +2518,7 @@ body.race-mode-touch #ui-app {
 }
 
 .race-tach .needle {
-    stroke: #ff5a3c;
+    stroke: #fff;
     stroke-width: 2.4;
     stroke-linecap: round;
 }
@@ -2015,13 +2594,12 @@ body.race-mode-touch #ui-app {
     align-items: center;
     gap: 10px;
     padding: 8px 14px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--ui-line);
     border-radius: 999px;
-    background: rgba(12, 13, 16, 0.72);
+    background: var(--ui-panel);
     backdrop-filter: blur(6px);
     color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--ui-font);
     font-size: 13px;
     font-weight: 600;
     letter-spacing: 0.04em;
@@ -2032,7 +2610,7 @@ body.race-mode-touch #ui-app {
 .race-rewind svg {
     width: 18px;
     height: 18px;
-    fill: #ff8a16;
+    fill: #fff;
 }
 
 .race-rewind i {
@@ -2047,7 +2625,7 @@ body.race-mode-touch #ui-app {
 .race-rewind b {
     display: block;
     height: 100%;
-    background: #ff8a16;
+    background: #fff;
 }
 
 .race-lap-row em {
@@ -2141,9 +2719,9 @@ body.race-mode-touch #ui-app {
 }
 
 .race-minimap .me {
-    fill: #ff5a3c;
-    stroke: #fff;
-    stroke-width: 0.8;
+    fill: #fff;
+    stroke: #000;
+    stroke-width: 1.2;
 }
 
 .race-lite .race-laps,
@@ -2314,7 +2892,7 @@ body.race-mode-touch .race-minimap {
 }
 
 .garage-car-pick em {
-    color: #ffad55;
+    color: var(--ui-muted);
     font-size: 11px;
     font-style: normal;
     white-space: nowrap;
@@ -2458,8 +3036,8 @@ body.race-mode-touch .race-minimap {
     margin-top: 14px;
     padding: 13px;
     border-radius: 8px;
-    border: 1px solid rgba(255, 90, 60, 0.7);
-    background: rgba(255, 90, 60, 0.16);
+    border: 1px solid var(--ui-line-strong);
+    background: var(--ui-fill);
     color: #fff;
     font-family: inherit;
     font-weight: bold;
@@ -2471,7 +3049,9 @@ body.race-mode-touch .race-minimap {
 }
 
 .garage-rev.on {
-    background: #ff5a3c;
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
 }
 
 .garage-slider {
@@ -2484,13 +3064,15 @@ body.race-mode-touch .race-minimap {
     font-size: 12px;
 }
 
-.garage-slider-head strong.changed {
-    color: #ffd34d;
+/* a value off its default gets a dot */
+.garage-slider-head strong.changed::before {
+    content: '\2022';
+    margin-right: 5px;
 }
 
 .garage-slider input {
     width: 100%;
-    accent-color: #ff5a3c;
+    accent-color: var(--ui-accent);
 }
 
 .garage-slider-ends {
@@ -2607,7 +3189,8 @@ body.race-mode-touch .race-minimap {
 }
 
 .garage-board.tuned {
-    color: #ffd34d;
+    color: #fff;
+    opacity: 1;
 }
 
 .garage-actions {
@@ -3053,8 +3636,8 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     }
 }
 
-/* the homepage's way into the garage: a lit pill in the corner, with a slow
-   glow so it's noticed */
+/* the homepage's way into the garage: a pill in the corner, with a slow
+   white glow so it's noticed */
 .garage-launch {
     position: fixed;
     right: max(18px, env(safe-area-inset-right));
@@ -3064,17 +3647,16 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     align-items: center;
     gap: 12px;
     padding: 11px 20px 11px 14px;
-    border: 1px solid rgba(255, 154, 60, 0.75);
+    border: 1px solid var(--ui-line-strong);
     border-radius: 999px;
-    background: linear-gradient(135deg, rgba(34, 22, 12, 0.88), rgba(14, 15, 18, 0.88));
+    background: var(--ui-panel);
     color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--ui-font);
     text-align: left;
     cursor: pointer;
     pointer-events: auto;
     backdrop-filter: blur(6px);
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 138, 22, 0.55);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 255, 255, 0.35);
     animation: garage-launch-glow 2.8s ease-in-out 1.5s 4;
     transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
 }
@@ -3082,8 +3664,8 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 .garage-launch:hover,
 .garage-launch:focus-visible {
     transform: translateY(-2px);
-    border-color: #ffb35c;
-    background: linear-gradient(135deg, rgba(64, 36, 14, 0.92), rgba(18, 19, 22, 0.92));
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(26, 26, 28, 0.92);
     outline: none;
 }
 
@@ -3092,8 +3674,8 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     height: 26px;
     padding: 7px;
     border-radius: 50%;
-    background: #ff8a16;
-    fill: #1a1208;
+    background: #fff;
+    fill: var(--ui-on-accent);
     flex: none;
 }
 
@@ -3116,10 +3698,10 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 @keyframes garage-launch-glow {
     0%,
     100% {
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 138, 22, 0.55);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 0 rgba(255, 255, 255, 0.35);
     }
     50% {
-        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 12px rgba(255, 138, 22, 0);
+        box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45), 0 0 0 12px rgba(255, 255, 255, 0);
     }
 }
 
@@ -3184,13 +3766,12 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     bottom: 16px;
     display: block;
     padding: 9px 15px;
-    border: 1px solid rgba(255, 154, 60, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 999px;
-    background: #141318;
+    background: #121214;
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
     color: #fff;
-    font: 600 13px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
+    font: 600 13px/1 var(--ui-font);
     letter-spacing: 0.2px;
     white-space: nowrap;
     transform: translateX(-50%);
@@ -3206,19 +3787,19 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     width: 10px;
     height: 10px;
     margin-left: -5px;
-    border-right: 1px solid rgba(255, 154, 60, 0.65);
-    border-bottom: 1px solid rgba(255, 154, 60, 0.65);
+    border-right: 1px solid rgba(255, 255, 255, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.4);
     background: inherit;
     transform: rotate(45deg);
 }
 
 .car-tag b {
-    color: #ff9a3c;
+    color: #fff;
 }
 
 .car-tag.hover span {
-    border-color: #ffb35c;
-    background: #2c1d10;
+    border-color: #fff;
+    background: #232326;
 }
 
 @keyframes car-tag-float {
@@ -3246,13 +3827,13 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     z-index: 22;
     min-width: 220px;
     padding: 10px 18px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--ui-line);
     border-radius: 14px;
-    background: linear-gradient(180deg, rgba(14, 16, 20, 0.72), rgba(8, 9, 12, 0.62));
+    background: var(--ui-panel);
     backdrop-filter: blur(6px);
     color: #fff;
     text-align: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--ui-font);
     font-variant-numeric: tabular-nums;
     pointer-events: none;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
@@ -3294,13 +3875,16 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 .drift-hud-points {
     font-size: 17px;
     font-weight: 700;
-    color: #ffd27a;
+    color: #fff;
 }
 
 .drift-hud-multiplier {
-    font-size: 14px;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ui-on-accent);
+    font-size: 13px;
     font-weight: 800;
-    color: #ff8a16;
 }
 
 .drift-hud-angle {
@@ -3337,7 +3921,7 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
 }
 
 .drift-hud-result.off {
-    color: #ffb36b;
+    color: var(--ui-warn);
 }
 
 .drift-hud-runs {
@@ -3383,42 +3967,6 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     font-size: 13px;
     pointer-events: none;
-}
-
-.race-menu-drift-board {
-    margin: 4px 0 14px;
-    padding: 10px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.04);
-}
-
-.race-menu-drift-board h4 {
-    margin: 0 0 6px;
-    font-size: 12px;
-    color: #fff;
-}
-
-.race-menu-drift-board p {
-    margin: 0;
-}
-
-.race-menu-drift-board ol {
-    margin: 0;
-    padding-left: 18px;
-}
-
-.race-menu-drift-board li {
-    display: grid;
-    grid-template-columns: 1fr 1.2fr auto auto;
-    gap: 10px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.78);
-    font-variant-numeric: tabular-nums;
-}
-
-.race-menu-drift-board li strong {
-    color: #ffd27a;
 }
 
 @media (max-width: 520px) {

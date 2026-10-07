@@ -5,7 +5,7 @@
 .pad-mode [data-pad-focus] {
     outline: 2px solid #fff !important;
     outline-offset: 3px;
-    box-shadow: 0 0 0 6px rgba(255, 179, 92, 0.45);
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.2);
 }
 
 .pad-target {
@@ -14,11 +14,11 @@
     top: 0;
     z-index: 29;
     box-sizing: border-box;
-    border: 2px solid #ffb35c;
+    border: 2px solid #fff;
     border-radius: 14px;
     box-shadow:
-        0 0 0 4px rgba(255, 179, 92, 0.18),
-        0 0 28px rgba(255, 179, 92, 0.22);
+        0 0 0 4px rgba(255, 255, 255, 0.14),
+        0 0 28px rgba(255, 255, 255, 0.18);
     pointer-events: none;
     opacity: 0;
     transition:

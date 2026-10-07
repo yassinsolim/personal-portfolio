@@ -223,12 +223,12 @@ const neonTexture = () =>
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = 'italic bold 120px "Brush Script MT", "Segoe Script", cursive';
-        ctx.shadowColor = '#ff6a1a';
+        ctx.shadowColor = '#dfe6ff';
         ctx.shadowBlur = 40;
-        ctx.strokeStyle = '#ffb27a';
+        ctx.strokeStyle = '#eef2ff';
         ctx.lineWidth = 10;
         ctx.strokeText('Yassin', w * 0.36, h * 0.5);
-        ctx.fillStyle = '#fff4e6';
+        ctx.fillStyle = '#ffffff';
         ctx.fillText('Yassin', w * 0.36, h * 0.5);
         ctx.font = 'bold 76px Impact, Arial Black, sans-serif';
         ctx.shadowColor = '#1ad5ff';
@@ -513,7 +513,8 @@ export default class GarageScene {
             fill.target.position.set(0, 0.6, 0);
             return fill;
         });
-        const warm = new THREE.PointLight(0xff8a3a, 8, 8, 2);
+        // the neon's glow on the back wall
+        const warm = new THREE.PointLight(0xeef2ff, 8, 8, 2);
         warm.position.set(2.6, 3.6, -DEPTH / 2 + 1.2);
         this.lights = [hemi, key, ...fills, warm];
         this.root.add(hemi, key, key.target, warm);
