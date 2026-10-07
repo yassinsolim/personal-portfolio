@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import Application from '../Application';
 import UIEventBus from '../UI/EventBus';
-import NordschleifeTrack from './Track/NordschleifeTrack';
+import NordschleifeTrack, { type TrackFrame } from './Track/NordschleifeTrack';
 import { buildDriftParkData, DRIFT_PARK_SPLITS } from './Track/driftPark';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
 import { peakOutput, predictTopSpeed, rpmAtSpeed, torqueAt } from './Vehicle/VehiclePhysics';
@@ -61,6 +61,13 @@ const AUDIO_LISTENER_FORWARD = new THREE.Vector3();
 const AUDIO_LISTENER_UP = new THREE.Vector3();
 const AUDIO_LISTENER_QUAT = new THREE.Quaternion();
 const AUDIO_REMOTE_POSITION = new THREE.Vector3();
+// how far past its last sample another player's car is guessed on
+const REMOTE_PREDICT_SECONDS = 0.45;
+// the tightest bend a guess follows, as sideways m/s² (a spin isn't a circle)
+const REMOTE_MAX_LATERAL_ACCEL = 20;
+// further than the car could have driven since the last sample: a respawn, so jump
+const REMOTE_JUMP_SLACK_METERS = 8;
+const REMOTE_UP = new THREE.Vector3(0, 1, 0);
 
 type RemoteLinkedWheelVisual = {
     object: THREE.Object3D;
@@ -93,6 +100,16 @@ type RemoteVehicleVisual = {
     model: THREE.Object3D;
     // the look applied last, as json, to spot changes
     lookKey: string;
+    halfLength: number;
+    halfWidth: number;
+    rideHeight: number;
+    // the last sample, its height kept over this client's road (builds can differ)
+    sampleAtMs: number;
+    samplePosition: THREE.Vector3;
+    sampleSpeed: number;
+    sampleLift: number | null;
+    lift: number | null;
+    frame: TrackFrame;
 };
 
 export default class RaceManager {
@@ -124,6 +141,8 @@ export default class RaceManager {
     // so it sits exactly where the room's last frame shows it
     transitionHold = false;
     garageSetupAtOpen = '';
+    // the car on the stand the garage screen last heard about
+    garageModel: THREE.Object3D | null = null;
     // the engine revved in neutral on the garage stand
     garageRev = { held: false, throttle: 0, rpm: 0, cutUntil: 0 };
     leaderboardBoard: 'stock' | 'tuned' = 'stock';
@@ -445,7 +464,10 @@ export default class RaceManager {
             if (!carId) return;
             this.multiplayer.setLocalCarId(carId);
             // the vehicle loads that car's garage setup on the same event
-            window.setTimeout(() => this.publishGarage(), 0);
+            window.setTimeout(() => {
+                this.publishGarage();
+                if (this.garageOpen) this.dispatchGarage();
+            }, 0);
         });
 
         UIEventBus.on('race:garageOpen', (state: { open?: boolean } | undefined) => {
@@ -1215,6 +1237,9 @@ export default class RaceManager {
         this.raceRoot.add(root);
         const wheelRig = this.buildRemoteWheelRig(model);
         const rearWheelRig = wheelRig.filter((wheel) => !wheel.front);
+        const size = model.userData.raceBodySize as number[] | undefined;
+        const frame = this.track.createFrame();
+        frame.index = -1;
 
         const visual: RemoteVehicleVisual = {
             sessionId: player.sessionId,
@@ -1228,6 +1253,16 @@ export default class RaceManager {
             targetQuaternion: new THREE.Quaternion(),
             model,
             lookKey: '',
+            // the same box the armco keeps the real car in
+            halfLength: (size ? size[2] : 4.7) * 0.48,
+            halfWidth: (size ? size[0] : 1.95) * 0.47,
+            rideHeight: Number(model.userData.raceRideHeight) || 0.33,
+            sampleAtMs: 0,
+            samplePosition: new THREE.Vector3(),
+            sampleSpeed: 0,
+            sampleLift: null,
+            lift: null,
+            frame,
         };
         this.remoteVehicles.set(player.sessionId, visual);
         return visual;
@@ -1431,57 +1466,126 @@ export default class RaceManager {
         } else {
             this.tmpRemoteQuaternion.normalize();
         }
+        const sample = this.tmpRemotePosition;
 
-        visual.targetPosition.copy(this.tmpRemotePosition);
-        visual.targetQuaternion.copy(this.tmpRemoteQuaternion);
         const sampleAt = player.sampleAtMs ?? Date.parse(player.lastSeenAt || '');
-        const telemetryAgeMs = Math.max(0, Date.now() - sampleAt);
-        const extrapolationSeconds = THREE.MathUtils.clamp(
-            telemetryAgeMs / 1000,
-            0,
-            0.45
-        );
-        if (extrapolationSeconds > 0 && player.velocity) {
-            // predicted along the real velocity, which in a slide isn't
-            // where the nose points
-            visual.targetPosition.x += player.velocity[0] * extrapolationSeconds;
-            visual.targetPosition.z += player.velocity[1] * extrapolationSeconds;
-        } else if (extrapolationSeconds > 0 && player.speedKph > 1) {
-            this.tmpRemoteForward
-                .set(0, 0, 1)
-                .applyQuaternion(visual.targetQuaternion)
-                .normalize();
-            visual.targetPosition.addScaledVector(
-                this.tmpRemoteForward,
-                (player.speedKph / 3.6) * extrapolationSeconds
-            );
-        }
-
-        if (!visual.root.userData.remotePoseInitialized) {
-            visual.root.position.copy(visual.targetPosition);
-            visual.root.quaternion.copy(visual.targetQuaternion);
-            visual.root.userData.remotePoseInitialized = true;
-        } else {
-            const teleportDistanceSq = Math.max(70, player.speedKph * 0.45) ** 2;
-            const distanceSq = visual.root.position.distanceToSquared(visual.targetPosition);
-            if (distanceSq > teleportDistanceSq) {
-                visual.root.position.copy(visual.targetPosition);
-                visual.root.quaternion.copy(visual.targetQuaternion);
-            } else {
-                // move with the car first, so the smoothing only eats
-                // corrections and doesn't trail a fast car by a few meters
-                if (player.velocity) {
-                    visual.root.position.x += player.velocity[0] * deltaSeconds;
-                    visual.root.position.z += player.velocity[1] * deltaSeconds;
-                }
-                const alpha = THREE.MathUtils.clamp(deltaSeconds * 16, 0, 1);
-                visual.root.position.lerp(visual.targetPosition, alpha);
-                visual.root.quaternion.slerp(visual.targetQuaternion, alpha);
+        let jumped = false;
+        if (sampleAt !== visual.sampleAtMs) {
+            const speed = player.speedKph / 3.6;
+            if (visual.sampleAtMs) {
+                const gap = THREE.MathUtils.clamp((sampleAt - visual.sampleAtMs) / 1000, 0, 2);
+                const reach =
+                    Math.max(speed, visual.sampleSpeed) * gap * 1.3 + REMOTE_JUMP_SLACK_METERS;
+                jumped = visual.samplePosition.distanceToSquared(sample) > reach * reach;
             }
+            visual.sampleAtMs = sampleAt;
+            visual.samplePosition.copy(sample);
+            visual.sampleSpeed = speed;
+            const ground = this.track.sampleGround(sample.x, sample.z);
+            visual.sampleLift = ground === null ? null : sample.y - ground;
         }
+        const ageSeconds = Math.max(0, (Date.now() - sampleAt) / 1000);
+        const predict = Math.min(ageSeconds, REMOTE_PREDICT_SECONDS) || 0;
+
+        // predicted along the real velocity, which in a slide isn't where the
+        // nose points
+        let vx = 0;
+        let vz = 0;
+        if (player.velocity) {
+            vx = player.velocity[0];
+            vz = player.velocity[1];
+        } else if (player.speedKph > 1) {
+            const forward = this.tmpRemoteForward
+                .set(0, 0, 1)
+                .applyQuaternion(this.tmpRemoteQuaternion);
+            const flat = Math.hypot(forward.x, forward.z) || 1;
+            vx = (forward.x / flat) * (player.speedKph / 3.6);
+            vz = (forward.z / flat) * (player.speedKph / 3.6);
+        }
+        // and around the bend it was in, not straight at the outside armco
+        const speed = Math.hypot(vx, vz);
+        const maxRate = speed > 1 ? REMOTE_MAX_LATERAL_ACCEL / speed : 0;
+        const pathRate = THREE.MathUtils.clamp(player.yawRate || 0, -maxRate, maxRate);
+        const turn = pathRate * predict;
+        const along = Math.abs(pathRate) > 1e-4 ? Math.sin(turn) / pathRate : predict;
+        const across = Math.abs(pathRate) > 1e-4 ? (1 - Math.cos(turn)) / pathRate : 0;
+        visual.targetPosition.set(
+            sample.x + vx * along + vz * across,
+            sample.y,
+            sample.z - vx * across + vz * along
+        );
+        const spin = THREE.MathUtils.clamp((player.yawRate || 0) * predict, -1.2, 1.2);
+        visual.targetQuaternion
+            .setFromAxisAngle(REMOTE_UP, spin)
+            .multiply(this.tmpRemoteQuaternion);
+
+        const root = visual.root;
+        const alpha = THREE.MathUtils.clamp(deltaSeconds * 16, 0, 1);
+        const teleport = Math.max(70, player.speedKph * 0.45);
+        if (
+            !root.userData.remotePoseInitialized ||
+            jumped ||
+            root.position.distanceToSquared(visual.targetPosition) > teleport * teleport
+        ) {
+            root.position.copy(visual.targetPosition);
+            root.quaternion.copy(visual.targetQuaternion);
+            root.userData.remotePoseInitialized = true;
+            visual.lift = visual.sampleLift;
+        } else {
+            // move with the car first, so the smoothing only eats corrections
+            // and doesn't trail a fast car by a few meters
+            if (ageSeconds < REMOTE_PREDICT_SECONDS) {
+                const cos = Math.cos(turn);
+                const sin = Math.sin(turn);
+                root.position.x += (vx * cos + vz * sin) * deltaSeconds;
+                root.position.z += (vz * cos - vx * sin) * deltaSeconds;
+            }
+            root.position.lerp(visual.targetPosition, alpha);
+            root.quaternion.slerp(visual.targetQuaternion, alpha);
+        }
+        this.keepRemoteOnTrack(visual, alpha);
         const speedMps = player.speedKph / 3.6;
         this.updateRemoteWheelVisuals(visual, speedMps, deltaSeconds);
         this.updateRemoteDriftSmoke(visual, player, speedMps, deltaSeconds);
+    }
+
+    // on this client's road at its sample's height, and between the armco
+    keepRemoteOnTrack(visual: RemoteVehicleVisual, alpha: number) {
+        const root = visual.root;
+        const track = this.track;
+        // its own place on the lap, the local car's search is left alone
+        const hint = track.frameHint;
+        const frame = track.queryFrame(
+            root.position.x,
+            root.position.z,
+            visual.frame,
+            visual.frame.index
+        );
+        track.frameHint = hint;
+        const forward = this.tmpRemoteForward.set(0, 0, 1).applyQuaternion(root.quaternion);
+        const yaw = Math.atan2(forward.x, forward.z);
+        const sin = Math.sin(yaw);
+        const cos = Math.cos(yaw);
+        const reach =
+            Math.abs(visual.halfLength * (sin * frame.leftX + cos * frame.leftZ)) +
+            Math.abs(visual.halfWidth * (cos * frame.leftX - sin * frame.leftZ));
+        const high = frame.barrierLeft - reach;
+        const low = reach - frame.barrierRight;
+        if (low < high) {
+            const lateral = frame.lateral;
+            const shift = lateral > high ? high - lateral : lateral < low ? low - lateral : 0;
+            root.position.x += frame.leftX * shift;
+            root.position.z += frame.leftZ * shift;
+        }
+
+        if (visual.sampleLift === null) return;
+        const ground = track.sampleGround(root.position.x, root.position.z);
+        if (ground === null) return;
+        visual.lift =
+            visual.lift === null
+                ? visual.sampleLift
+                : THREE.MathUtils.lerp(visual.lift, visual.sampleLift, alpha);
+        root.position.y = ground + Math.max(visual.lift, visual.rideHeight * 0.85);
     }
 
     updateRemoteVehicles(deltaSeconds: number) {
@@ -1723,8 +1827,28 @@ export default class RaceManager {
             }
         } else {
             const telemetry = this.vehicle.getTelemetry();
+            // stopped for the others too, or their last moving sample is guessed on
+            if (this.paused || this.garageOpen) {
+                this.multiplayer.publishTelemetry({
+                    speedKph: 0,
+                    lapProgress: this.lapProgress,
+                    lapTimeMs: this.currentLapTimeMs,
+                    position: telemetry.position,
+                    quaternion: telemetry.quaternion,
+                    gear: telemetry.gear,
+                    driftIntensity: 0,
+                    velocity: { x: 0, z: 0 },
+                    yawRate: 0,
+                    ghost: this.collisions.ghost,
+                });
+            }
             if (this.garageOpen) {
                 this.placeOnStand();
+                // a car picked in the garage: its body kits once its model is in
+                if (this.vehicle.carModel !== this.garageModel) {
+                    this.garageModel = this.vehicle.carModel;
+                    this.dispatchGarage();
+                }
                 this.engineAudio.update(this.updateGarageRev(telemetry, delta), delta);
             } else {
                 this.engineAudio.update(

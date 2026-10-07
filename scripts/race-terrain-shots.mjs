@@ -248,9 +248,10 @@ if (transition) {
     }
     log('frames', JSON.stringify(frames));
 } else {
-    // small screens fold the room panel to its menu button
+    // the room panel folds: small screens to its menu button, others until hovered
     await page.locator('.look-hint').waitFor({ timeout: 60000 });
     if (await page.locator('.look-hint.folded').count()) await page.locator('.look-hint-menu').click();
+    else await page.locator('.look-hint').hover();
     const playButton = page.getByRole('button', { name: /^Play Solo$/ });
     await playButton.waitFor({ timeout: 60000 });
     await playButton.click();

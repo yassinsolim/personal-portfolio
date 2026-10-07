@@ -356,6 +356,10 @@ br {
     backdrop-filter: blur(14px);
 }
 
+.car-picker.live.right {
+    inset: 18px 18px 18px auto;
+}
+
 .car-picker-head {
     display: flex;
     align-items: center;
@@ -1916,6 +1920,71 @@ body.race-mode-touch .race-minimap {
     opacity: 0.7;
 }
 
+/* the car on the stand, with the picker one click away */
+.garage-car {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    margin: 8px 0 6px;
+    pointer-events: auto;
+    text-shadow: none;
+}
+
+.garage-car button {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(8, 10, 14, 0.72);
+    color: #fff;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.garage-car button:hover,
+.garage-car button:focus-visible {
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(30, 32, 38, 0.86);
+}
+
+.garage-car-step {
+    width: 34px;
+    padding: 0;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.garage-car-pick {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 5px 12px 5px 5px;
+    text-align: left;
+}
+
+.garage-car-pick img {
+    flex: none;
+    width: 64px;
+    height: 36px;
+    border-radius: 5px;
+    object-fit: cover;
+}
+
+.garage-car-pick span {
+    max-width: 220px;
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: bold;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.garage-car-pick em {
+    color: #ffad55;
+    font-size: 11px;
+    font-style: normal;
+    white-space: nowrap;
+}
+
 .garage-panel {
     width: min(400px, 92vw);
     display: flex;
@@ -2144,11 +2213,88 @@ body.race-mode-touch .race-minimap {
         min-height: 34vh;
     }
 
+    /* half the screen at most, the car is framed in the other half */
     .garage-panel {
         width: 100%;
         border-left: none;
         border-top: 1px solid rgba(255, 255, 255, 0.14);
-        max-height: 66vh;
+        max-height: 52vh;
+        max-height: 52dvh;
+        padding: 12px;
+        gap: 8px;
+    }
+}
+
+/* phones on their side: a narrow panel, the car framed beside it */
+@media (orientation: landscape) and (max-height: 520px) {
+    .garage-panel {
+        width: min(330px, 42vw);
+        padding: 10px;
+        gap: 6px;
+    }
+
+    .garage-title {
+        left: 14px;
+        top: 10px;
+    }
+
+    .garage-title h2 {
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 760px), (orientation: landscape) and (max-height: 520px) {
+    .garage-tabs button {
+        padding: 6px 2px;
+        font-size: 11px;
+    }
+
+    .garage-board {
+        display: none;
+    }
+
+    /* power, grip and top speed, one row */
+    .garage-stats {
+        gap: 4px;
+        font-size: 10px;
+    }
+
+    .garage-stats div {
+        padding: 3px 5px;
+    }
+
+    .garage-stats div:nth-child(2),
+    .garage-stats div:nth-child(5),
+    .garage-stats div:nth-child(6) {
+        display: none;
+    }
+
+    .garage-actions button {
+        padding: 6px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+    }
+
+    .garage-title {
+        left: 14px;
+    }
+
+    .garage-car-pick {
+        gap: 8px;
+    }
+
+    .garage-car-pick img {
+        width: 48px;
+        height: 27px;
+    }
+
+    .garage-car-pick span {
+        max-width: 150px;
+        font-size: 13px;
+    }
+
+    .garage-car-pick em {
+        font-size: 10px;
     }
 }
 
@@ -2181,8 +2327,8 @@ body.race-mode-touch .race-minimap {
     color: #111;
 }
 
-/* the garage has the screen to itself */
-.garage-open > *:not(.garage):not(.garage-fade) {
+/* the garage has the screen to itself, and the car picker it opens */
+.garage-open > *:not(.garage):not(.garage-fade):not(.car-picker) {
     visibility: hidden;
 }
 
@@ -2383,6 +2529,49 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     font-size: 13px;
     letter-spacing: 0.02em;
     opacity: 0.85;
+}
+
+/* with a mouse the room panel folds to its hint and a menu tab */
+@media (hover: hover) {
+    .look-hint.room-hover {
+        pointer-events: auto;
+        cursor: default;
+    }
+
+    .look-hint.room-hover:not(:hover):not(:focus-within) {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        width: auto;
+        max-height: none;
+        overflow: visible;
+        padding: 7px 7px 7px 14px;
+        border-radius: 999px;
+    }
+
+    .look-hint.room-hover:not(:hover):not(:focus-within) > :not(.look-hint-begin) {
+        display: none;
+    }
+
+    .look-hint.room-hover:not(:hover):not(:focus-within)::after {
+        content: attr(data-label);
+        padding: 5px 11px;
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .look-hint.room-hover:is(:hover, :focus-within) > :not(.look-hint-begin) {
+        animation: look-hint-open 0.18s ease-out;
+    }
+}
+
+@keyframes look-hint-open {
+    from {
+        opacity: 0;
+    }
 }
 
 /* small screens: the panel folds to its menu button and the hint, clear of
