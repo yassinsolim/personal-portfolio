@@ -13,6 +13,9 @@ export type PaintFinish =
 export type Spoiler = 'none' | 'ducktail' | 'wing';
 export type TireCompound = 'street' | 'sport' | 'semi' | 'slick' | 'drift';
 export type BrakeKit = 'stock' | 'street' | 'sport' | 'race';
+export type WeightReduction = 'stock' | 'sport' | 'race';
+// a swap to the layout the car doesn't have, 'stock' keeps its own
+export type Drivetrain = 'stock' | 'rwd' | 'awd';
 
 export type CarLook = {
     // hex like #1f4fa8, null keeps the factory color
@@ -23,6 +26,8 @@ export type CarLook = {
     // 'stock' or the id of the car whose rims these are
     wheels: string;
     spoiler: Spoiler;
+    // the gt wing's angle, -1 low drag to +1 most downforce
+    wingAngle: number;
     // -1 slammed to +1 raised, about 3 cm each way
     ride: number;
 };
@@ -53,6 +58,8 @@ export type CarTune = {
     engine: string;
     induction: Induction;
     exhaust: Exhaust;
+    weight: WeightReduction;
+    drivetrain: Drivetrain;
 };
 
 export const STOCK_LOOK: CarLook = {
@@ -62,6 +69,7 @@ export const STOCK_LOOK: CarLook = {
     calipers: null,
     wheels: 'stock',
     spoiler: 'none',
+    wingAngle: 0,
     ride: 0,
 };
 
@@ -83,6 +91,8 @@ export const STOCK_TUNE: CarTune = {
     engine: 'stock',
     induction: 'stock',
     exhaust: 'stock',
+    weight: 'stock',
+    drivetrain: 'stock',
 };
 
 // what the drift build button sets: drift tires, a locked diff, a stiffer
@@ -107,6 +117,7 @@ export const LIMITS = {
     brakeBias: [0.54, 0.74],
     brakePressure: [0.7, 1.3],
     ride: [-1, 1],
+    wingAngle: [-1, 1],
 } as const;
 
 const TIRES: Record<
@@ -128,6 +139,39 @@ const AERO: Record<Spoiler, { cl: number; cd: number }> = {
     ducktail: { cl: 0.06, cd: 0.01 },
     wing: { cl: 0.22, cd: 0.05 },
 };
+// the wing's angle, all the way either way: half the downforce again on or
+// off, and drag with it
+const WING_CL = 0.11;
+const WING_CD = 0.025;
+const aeroOf = (look: CarLook) => {
+    const aero = AERO[look.spoiler];
+    if (look.spoiler !== 'wing') return aero;
+    return {
+        cl: aero.cl + WING_CL * look.wingAngle,
+        cd: aero.cd + WING_CD * look.wingAngle,
+    };
+};
+
+// lighter panels, glass and seats, then a stripped interior and a cage
+export const WEIGHTS: WeightReduction[] = ['stock', 'sport', 'race'];
+const WEIGHT_MASS: Record<WeightReduction, number> = {
+    stock: 1,
+    sport: 0.95,
+    race: 0.9,
+};
+// an all wheel drive swap sends about a third of the torque forward, and its
+// shafts and front diff weigh about 3.5% more, mostly up front. going to
+// rear drive takes them out
+export const DRIVETRAINS: Drivetrain[] = ['stock', 'rwd', 'awd'];
+const AWD_FRONT_SHARE = 0.35;
+const AWD_MASS = 1.035;
+const RWD_MASS = 0.975;
+
+export const swapOf = (drive: PhysicsSpec['drive'], drivetrain: Drivetrain) =>
+    (drivetrain === 'awd' && drive !== 'AWD') ||
+    (drivetrain === 'rwd' && drive !== 'RWD')
+        ? drivetrain
+        : null;
 
 // brake torque on the same pedal. stock brakes already lock the tires, so
 // like in forza a bigger kit bites harder on part pedal and pays off once
@@ -183,6 +227,8 @@ export const sanitizeLook = (raw: unknown): CarLook => {
         )
             ? (source.spoiler as Spoiler)
             : 'none',
+        // in half steps
+        wingAngle: Math.round(clamp(Number(source.wingAngle ?? 0), -1, 1) * 2) / 2,
         ride: clamp(Number(source.ride ?? 0), -1, 1),
     };
 };
@@ -231,6 +277,12 @@ export const sanitizeTune = (raw: unknown): CarTune => {
         exhaust: EXHAUSTS.includes(source.exhaust as Exhaust)
             ? (source.exhaust as Exhaust)
             : 'stock',
+        weight: WEIGHTS.includes(source.weight as WeightReduction)
+            ? (source.weight as WeightReduction)
+            : 'stock',
+        drivetrain: DRIVETRAINS.includes(source.drivetrain as Drivetrain)
+            ? (source.drivetrain as Drivetrain)
+            : 'stock',
     };
 };
 
@@ -245,12 +297,33 @@ export const applyTune = (
     if (isStockSetup(tune, look)) return stock;
     const spec = applyEngine(stock, carId, tune);
     const tires = TIRES[tune.tires];
-    const aero = AERO[look.spoiler];
+    const aero = aeroOf(look);
     const stiffness = (tune.springsFront + tune.springsRear) / 2;
     const clA = spec.clA + aero.cl;
     const power = tune.power;
+    const swap = swapOf(spec.drive, tune.drivetrain);
+    const mass =
+        WEIGHT_MASS[tune.weight] *
+        (swap === 'awd' ? AWD_MASS : swap === 'rwd' ? RWD_MASS : 1);
     return {
         ...spec,
+        // less mass, and less of it out at the ends to swing
+        massKg: spec.massKg * mass,
+        yawInertia: spec.yawInertia * mass,
+        weightFront: Math.min(
+            0.7,
+            Math.max(
+                0.3,
+                spec.weightFront + (swap === 'awd' ? 0.01 : swap === 'rwd' ? -0.01 : 0)
+            )
+        ),
+        drive: swap === 'awd' ? 'AWD' : swap === 'rwd' ? 'RWD' : spec.drive,
+        frontTorqueShare:
+            swap === 'awd'
+                ? AWD_FRONT_SHARE
+                : swap === 'rwd'
+                  ? 0
+                  : spec.frontTorqueShare,
         // the map scales the whole curve. the top speed follows from the
         // physics: the limiter holds it, or drag, or the revs in top gear
         powerW: spec.powerW * power,
@@ -304,6 +377,8 @@ export const isStockTune = (tune: CarTune) =>
     tune.brakePressure === 1 &&
     tune.speedLimiter &&
     !tune.angleKit &&
+    tune.weight === 'stock' &&
+    tune.drivetrain === 'stock' &&
     isStockEngine(tune);
 
 // what changes the physics: the tune, aero and ride height. paint and wheels
@@ -313,9 +388,12 @@ export const isStockSetup = (tune: CarTune, look: CarLook) =>
 
 // a short code for the tuned board, one base 36 digit per setting. a removed
 // speed limiter adds a digit at the end and an angle kit an 'a', so older
-// codes keep their meaning. the brake pressure rides in the tire digit and
-// the brake kit in the spoiler one, both 0 when stock, which keeps the code
-// inside the board's 16 characters
+// codes keep their meaning. the brake pressure rides in the tire digit, and
+// the brake kit and weight reduction in the spoiler one, all 0 when stock,
+// which keeps the code inside the board's 16 characters. a drivetrain swap or
+// a wing off its middle angle needs more: then a y and two digits hold the
+// limiter, the angle kit, the swap and the wing, and an engine swap is a z
+// and two digits. setups without those still write the old codes
 export const tuneCode = (tune: CarTune, look: CarLook) => {
     const q = (value: number, min: number, max: number) =>
         Math.round(
@@ -324,7 +402,7 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
     // tenths off stock as 0, 1, 2.. for 1, 0.9, 1.1, 0.8, 1.2, 0.7, 1.3
     const step = Math.round((tune.brakePressure - 1) * 10);
     const pressure = step >= 0 ? step * 2 : -step * 2 - 1;
-    return [
+    const base = [
         q(tune.power, ...LIMITS.power),
         (
             ['street', 'sport', 'semi', 'slick', 'drift'].indexOf(tune.tires) +
@@ -339,16 +417,38 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
         q(look.ride, ...LIMITS.ride),
         (
             ['none', 'ducktail', 'wing'].indexOf(look.spoiler) +
-            3 * BRAKE_KITS.indexOf(tune.brakes)
+            3 * BRAKE_KITS.indexOf(tune.brakes) +
+            12 * WEIGHTS.indexOf(tune.weight)
         ).toString(36),
-        tune.speedLimiter ? '' : '1',
-        tune.angleKit ? 'a' : '',
-        // an x and one digit each for the engine, induction and exhaust
+    ].join('');
+    const engine = ENGINE_IDS.indexOf(tune.engine) + 1;
+    const induction = INDUCTIONS.indexOf(tune.induction);
+    const exhaust = EXHAUSTS.indexOf(tune.exhaust);
+    // the wing's angle in half steps, 2 is the middle
+    const wing = look.spoiler === 'wing' ? Math.round(look.wingAngle * 2) + 2 : 2;
+    const drivetrain = DRIVETRAINS.indexOf(tune.drivetrain);
+    if (!drivetrain && wing === 2) {
+        return [
+            base,
+            tune.speedLimiter ? '' : '1',
+            tune.angleKit ? 'a' : '',
+            // an x and one digit each for the engine, induction and exhaust
+            isStockEngine(tune)
+                ? ''
+                : `x${engine.toString(36)}${induction.toString(36)}${exhaust.toString(36)}`,
+        ].join('');
+    }
+    const flags =
+        (tune.speedLimiter ? 0 : 1) +
+        2 * (tune.angleKit ? 1 : 0) +
+        4 * drivetrain +
+        12 * wing;
+    return [
+        base,
+        `y${flags.toString(36).padStart(2, '0')}`,
         isStockEngine(tune)
             ? ''
-            : `x${(ENGINE_IDS.indexOf(tune.engine) + 1).toString(36)}${INDUCTIONS.indexOf(
-                  tune.induction
-              ).toString(36)}${EXHAUSTS.indexOf(tune.exhaust).toString(36)}`,
+            : `z${engine.toString(36)}${(induction + 5 * exhaust).toString(36)}`,
     ].join('');
 };
 
@@ -356,12 +456,13 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
 // sits on its garage slider's step, which takes the code's rounding back out
 export const decodeTune = (
     code: string
-): { tune: CarTune; ride: number; spoiler: Spoiler } | null => {
-    const match = /^([0-9a-z]{10})(1?)(a?)(?:x([0-9a-z]{3}))?$/.exec(
-        String(code || '')
-    );
+): { tune: CarTune; ride: number; spoiler: Spoiler; wingAngle: number } | null => {
+    const match =
+        /^([0-9a-z]{10})(?:(1?)(a?)(?:x([0-9a-z]{3}))?|y([0-9a-z]{2})(?:z([0-9a-z]{2}))?)$/.exec(
+            String(code || '')
+        );
     if (!match) return null;
-    const [, base, limiter, angle, engine] = match;
+    const [, base, limiter, angle, engine, extra, shortEngine] = match;
     const d = [...base].map((digit) => parseInt(digit, 36));
     const at = (
         digit: number,
@@ -374,7 +475,15 @@ export const decodeTune = (
             ).toFixed(2)
         );
     const zigzag = Math.floor(d[1] / 5);
-    const swap = engine ? [...engine].map((digit) => parseInt(digit, 36)) : [];
+    const flags = extra ? parseInt(extra, 36) : -1;
+    const wing = flags >= 0 ? Math.floor(flags / 12) : 2;
+    if (wing > 4) return null;
+    let swap: number[] = [];
+    if (engine) swap = [...engine].map((digit) => parseInt(digit, 36));
+    if (shortEngine) {
+        const [id, rest] = [...shortEngine].map((digit) => parseInt(digit, 36));
+        swap = [id, rest % 5, Math.floor(rest / 5)];
+    }
     const tune = sanitizeTune({
         power: at(d[0], LIMITS.power, 0.01),
         tires: (['street', 'sport', 'semi', 'slick', 'drift'] as const)[d[1] % 5],
@@ -384,19 +493,23 @@ export const decodeTune = (
         diff: at(d[5], LIMITS.diff, 0.1),
         gearing: at(d[6], LIMITS.gearing, 0.1),
         brakeBias: at(d[7], LIMITS.brakeBias, 0.01),
-        brakes: BRAKE_KITS[Math.floor(d[9] / 3)],
+        brakes: BRAKE_KITS[Math.floor(d[9] / 3) % 4],
         brakePressure:
             1 + (zigzag % 2 ? -(zigzag + 1) / 2 : zigzag / 2) / 10,
-        speedLimiter: !limiter,
-        angleKit: Boolean(angle),
+        speedLimiter: flags >= 0 ? flags % 2 === 0 : !limiter,
+        angleKit: flags >= 0 ? Math.floor(flags / 2) % 2 === 1 : Boolean(angle),
         engine: swap.length ? ENGINE_IDS[swap[0] - 1] || 'stock' : 'stock',
         induction: swap.length ? INDUCTIONS[swap[1]] : 'stock',
         exhaust: swap.length ? EXHAUSTS[swap[2]] : 'stock',
+        weight: WEIGHTS[Math.floor(d[9] / 12)],
+        drivetrain: flags >= 0 ? DRIVETRAINS[Math.floor(flags / 4) % 3] : 'stock',
     });
+    const spoiler = (['none', 'ducktail', 'wing'] as const)[d[9] % 3];
     return {
         tune,
         ride: at(d[8], LIMITS.ride, 0.1),
-        spoiler: (['none', 'ducktail', 'wing'] as const)[d[9] % 3],
+        spoiler,
+        wingAngle: spoiler === 'wing' ? (wing - 2) / 2 : 0,
     };
 };
 
@@ -450,9 +563,10 @@ const FINISH_LIST: PaintFinish[] = [
 ];
 const SPOILER_LIST: Spoiler[] = ['none', 'ducktail', 'wing'];
 
-// the look in ~30 characters for telemetry: paint.finish.rims.calipers.wheels.spoiler.ride
-export const encodeLook = (look: CarLook) =>
-    [
+// the look in ~30 characters for telemetry:
+// paint.finish.rims.calipers.wheels.spoiler.ride.wing (older clients stop at ride)
+export const encodeLook = (look: CarLook) => {
+    const fields: Array<string | number> = [
         look.paint ? look.paint.slice(1) : '',
         FINISH_LIST.indexOf(look.finish),
         look.rims ? look.rims.slice(1) : '',
@@ -460,10 +574,13 @@ export const encodeLook = (look: CarLook) =>
         look.wheels === 'stock' ? '' : look.wheels,
         SPOILER_LIST.indexOf(look.spoiler),
         Math.round(look.ride * 10),
-    ].join('.');
+    ];
+    if (look.spoiler === 'wing' && look.wingAngle) fields.push(Math.round(look.wingAngle * 2));
+    return fields.join('.');
+};
 
 export const decodeLook = (code: string): CarLook => {
-    const [paint, finish, rims, calipers, wheels, spoiler, ride] = String(
+    const [paint, finish, rims, calipers, wheels, spoiler, ride, wing] = String(
         code || ''
     )
         .slice(0, 80)
@@ -475,6 +592,7 @@ export const decodeLook = (code: string): CarLook => {
         calipers: calipers ? `#${calipers}` : null,
         wheels: wheels || 'stock',
         spoiler: SPOILER_LIST[Number(spoiler)] || 'none',
+        wingAngle: Number(wing) / 2 || 0,
         ride: Number(ride) / 10 || 0,
     });
 };

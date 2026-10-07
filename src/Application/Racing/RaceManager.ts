@@ -1114,10 +1114,12 @@ export default class RaceManager {
                 ? kitsThatFit(this.vehicle.carModel)
                 : ['ducktail', 'wing'],
             speedLimiter: this.vehicle.currentTuning.speedLimitKph,
+            drive: this.vehicle.currentTuning.drivetrain,
             tuned: !isStockSetup(tune, look),
             stats: {
                 powerKw: Math.round(peak.powerW / 1000),
                 torqueNm: Math.round(peak.torqueNm),
+                massKg: Math.round(spec.massKg),
                 grip: Math.round(spec.tireGrip * 100) / 100,
                 topKph: Math.round(top.speed * 3.6),
                 topLimitedBy: top.limitedBy,
