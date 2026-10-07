@@ -419,6 +419,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Ride height on the homepage car: `copyCarLook` passes the race model's meters per unit
   (`LookOptions.unit`). `localDelta` used the room car's own scale, and the room isn't in meters,
   so the offset came out thousands of times too small and never showed.
+- Contact shadow (`World/CarContactShadow.ts`): polygon offset -8 / -20, past the kerbs and the
+  start line (-6 / -12) and the edge lines (-4 / -8), and render order 3.5 on the race car, after
+  the skid marks (3) and graffiti (2) and before the smoke (4). It used to stop at the kerbs.
+- The drawn heading is the physics heading; only the road's tilt is eased (`updateTransform`).
+  Easing the heading too trailed a tight turn at a crawl by 5 to 7 degrees, so the car looked
+  like it was sliding into the turn.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
