@@ -502,6 +502,19 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   orbits, scroll or the triggers zoom, a slider sets the fov, no speed streaks. Save draws
   the frame again at up to 2x and reads it straight back (the canvas isn't kept between
   frames) into a png download; Esc or B goes back to the menu.
+- Chassis upgrades: weight reduction in the Body tab (sport 5%, race 10% off the mass and
+  the yaw inertia), a drivetrain swap in the Engine tab (only the layout the car lacks: an
+  AWD swap sends 35% forward and weighs 3.5% more, a RWD swap takes 2.5% off), and the GT
+  wing's angle under the spoilers (-1 to +1 in half steps, 2 to 14 degrees on the blade,
+  clA 0.22 plus or minus 0.11 and cdA 0.05 plus or minus 0.025, the blade rebuilt at its
+  angle). The angle is part of the look, so other players see it (an 8th field on the look
+  code, older clients stop at the 7th).
+- Board codes stay inside the 16 characters the database allows: the weight rides in the
+  spoiler digit (spoiler + 3 kit + 12 weight). A swap or a wing off its middle angle writes
+  `y` and two digits (limiter + 2 angle kit + 4 drivetrain + 12 wing step) instead of the
+  `1` and `a` marks, with an engine swap as `z` and two digits (engine, induction + 5
+  exhaust). Everything else writes exactly the old codes, and old codes read as before
+  (`scripts/test/tune-share.test.mjs` pins one of each).
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

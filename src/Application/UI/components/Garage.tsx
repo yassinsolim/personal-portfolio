@@ -16,11 +16,13 @@ import type {
     BrakeKit,
     CarLook,
     CarTune,
+    Drivetrain,
     Exhaust,
     Induction,
     PaintFinish,
     Spoiler,
     TireCompound,
+    WeightReduction,
 } from '../../Racing/Garage/garage';
 import { ENGINE_IDS, ENGINES, STOCK_ENGINE } from '../../Racing/Garage/engines';
 import { formatTime } from './RaceHudGauges';
@@ -40,10 +42,13 @@ export type GarageState = {
     spoilers: Spoiler[];
     // the factory speed limiter in km/h, null when the car has none
     speedLimiter: number | null;
+    // the drivetrain it comes with
+    drive: 'RWD' | 'AWD' | 'FWD';
     tuned: boolean;
     stats: {
         powerKw: number;
         torqueNm: number;
+        massKg: number;
         grip: number;
         topKph: number;
         topLimitedBy: 'limiter' | 'drag' | 'revs';
@@ -190,6 +195,20 @@ const EXHAUSTS: Array<[Exhaust, string]> = [
     ['stock', 'Factory'],
     ['sport', 'Sport'],
     ['straight', 'Straight pipe'],
+];
+const WEIGHTS: Array<[WeightReduction, string, string]> = [
+    ['stock', 'Stock', 'As it left the factory'],
+    ['sport', 'Sport', 'Lighter panels, glass and seats, 5% off'],
+    ['race', 'Race', 'Stripped interior and a cage, 10% off'],
+];
+const LAYOUT: Record<GarageState['drive'], string> = {
+    RWD: 'rear wheel drive',
+    AWD: 'all wheel drive',
+    FWD: 'front wheel drive',
+};
+const SWAPS: Array<[Exclude<Drivetrain, 'stock'>, string, string]> = [
+    ['awd', 'AWD swap', 'About a third of the torque to the front: harder launches and exits, 3.5% heavier'],
+    ['rwd', 'RWD swap', 'Everything to the rear: looser, easier to slide, 2.5% lighter'],
 ];
 
 const Swatches = ({
@@ -580,6 +599,20 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                                     );
                                 })}
                             </div>
+                            {look.spoiler === 'wing' && (
+                                <Slider
+                                    label="Wing angle"
+                                    value={look.wingAngle}
+                                    min={LIMITS.wingAngle[0]}
+                                    max={LIMITS.wingAngle[1]}
+                                    step={0.5}
+                                    left="Low drag"
+                                    right="Downforce"
+                                    stock={0}
+                                    format={(v) => `${Math.round(8 + 6 * v)}°`}
+                                    onChange={(wingAngle) => setL({ wingAngle })}
+                                />
+                            )}
                             <Slider
                                 label="Ride height"
                                 value={look.ride}
@@ -594,6 +627,27 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                                 }
                                 onChange={(ride) => setL({ ride })}
                             />
+                            <h4>
+                                Weight reduction
+                                {stats ? (
+                                    <span className="garage-h4-note">
+                                        {stats.massKg.toLocaleString('en-US')} kg
+                                    </span>
+                                ) : null}
+                            </h4>
+                            <div className="garage-options column">
+                                {WEIGHTS.map(([weight, label, hint]) => (
+                                    <button
+                                        type="button"
+                                        key={weight}
+                                        className={tune.weight === weight ? 'on' : ''}
+                                        onClick={() => setT({ weight })}
+                                    >
+                                        <strong>{label}</strong>
+                                        <small>{hint}</small>
+                                    </button>
+                                ))}
+                            </div>
                         </>
                     )}
                     {tab === 'engine' && (
@@ -657,6 +711,34 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                                     </button>
                                 ))}
                             </div>
+                            {state && (
+                                <>
+                                    <h4>Drivetrain</h4>
+                                    <div className="garage-options column">
+                                        <button
+                                            type="button"
+                                            className={tune.drivetrain === 'stock' ? 'on' : ''}
+                                            onClick={() => setT({ drivetrain: 'stock' })}
+                                        >
+                                            <strong>Factory: {LAYOUT[state.drive]}</strong>
+                                            <small>As the car comes</small>
+                                        </button>
+                                        {SWAPS.filter(
+                                            ([swap]) => swap.toUpperCase() !== state.drive
+                                        ).map(([swap, label, hint]) => (
+                                            <button
+                                                type="button"
+                                                key={swap}
+                                                className={tune.drivetrain === swap ? 'on' : ''}
+                                                onClick={() => setT({ drivetrain: swap })}
+                                            >
+                                                <strong>{label}</strong>
+                                                <small>{hint}</small>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
                         </>
                     )}
                     {(tab === 'engine' || tab === 'tuning') && (
@@ -703,7 +785,8 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                                             const on =
                                                 JSON.stringify(shared.tune) === JSON.stringify(tune) &&
                                                 shared.ride === look.ride &&
-                                                shared.spoiler === look.spoiler;
+                                                shared.spoiler === look.spoiler &&
+                                                shared.wingAngle === (look.spoiler === 'wing' ? look.wingAngle : 0);
                                             return (
                                                 <button
                                                     type="button"
@@ -715,6 +798,7 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                                                                 ...look,
                                                                 ride: shared.ride,
                                                                 spoiler: shared.spoiler,
+                                                                wingAngle: shared.wingAngle,
                                                             },
                                                             shared.tune
                                                         )

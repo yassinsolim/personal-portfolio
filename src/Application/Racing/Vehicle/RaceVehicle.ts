@@ -5786,7 +5786,8 @@ export default class RaceVehicle {
             quaternion: this.carPivot.quaternion.clone(),
             forward: this.forward.clone(),
             carId: this.currentCarId,
-            drivetrain: this.currentTuning.drivetrain,
+            // the garage can swap it
+            drivetrain: physics.spec.drive,
             slipRatio: this.slipRatio,
             driftIntensity: this.getDriftIntensity(),
             wheelContactCount: this.wheelContactCount,

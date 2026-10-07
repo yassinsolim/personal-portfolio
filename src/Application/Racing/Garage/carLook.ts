@@ -466,7 +466,8 @@ const topField = (
 const buildKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler']
+    kind: CarLook['spoiler'],
+    wingAngle = 0
 ) => {
     // mesh boxes blow up under the models' rotations, so width and length
     // come from the measured body size
@@ -480,7 +481,7 @@ const buildKit = (
     const center = bounds.getCenter(new THREE.Vector3());
     const field = topField(model, roots, width, length, center);
     const surface: KitSurface = (x, z) => field(x + center.x, z + center.z);
-    const group = buildKitParts(kind, surface, width, length);
+    const group = buildKitParts(kind, surface, width, length, wingAngle);
     group.traverse((child) => {
         child.userData.garageKit = true;
     });
@@ -517,17 +518,20 @@ export const kitsThatFit = (model: THREE.Object3D) => {
 const setKit = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
-    kind: CarLook['spoiler']
+    kind: CarLook['spoiler'],
+    wingAngle: number
 ) => {
+    // the wing is built again when its angle moves
+    const key = kind === 'wing' ? `wing:${wingAngle}` : kind;
     const old = model.getObjectByName('garage-kit');
-    if (old && old.userData.kind === kind) return;
+    if (old && old.userData.kind === key) return;
     if (old) {
         old.removeFromParent();
         old.traverse((child) => (child as THREE.Mesh).geometry?.dispose());
     }
     if (kind === 'none') return;
-    const kit = buildKit(model, roots, kind);
-    kit.userData.kind = kind;
+    const kit = buildKit(model, roots, kind, wingAngle);
+    kit.userData.kind = key;
     model.add(kit);
 };
 
@@ -1201,7 +1205,7 @@ export const applyCarLook = (
     });
     // the kit is sized on the car at stock height, then moves with the body
     applyRide(model, roots, 0);
-    setKit(model, roots, look.spoiler);
+    setKit(model, roots, look.spoiler, look.wingAngle);
     applyRide(model, roots, rideOffsetMeters(look), options.unit);
 };
 

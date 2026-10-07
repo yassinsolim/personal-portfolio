@@ -265,11 +265,16 @@ const across = (shape: THREE.Shape, depth: number) => {
     return geometry;
 };
 
-const gtWing = (surface: KitSurface, span: number, halfLength: number) => {
+// the blade's angle of attack at the garage's wing angle 0, and how far the
+// angle moves it either way
+const WING_AOA = 8;
+const WING_AOA_RANGE = 6;
+
+const gtWing = (surface: KitSurface, span: number, halfLength: number, angle: number) => {
     const edge = lidEdge(surface, 0, halfLength);
     if (!edge) return null;
     const chord = 0.27;
-    const aoa = THREE.MathUtils.degToRad(8);
+    const aoa = THREE.MathUtils.degToRad(WING_AOA + WING_AOA_RANGE * angle);
     const lead = edge.z + 0.24;
     const height = edge.y + 0.24;
     const carbonParts: THREE.BufferGeometry[] = [];
@@ -357,7 +362,8 @@ export const buildKitParts = (
     kind: Spoiler,
     surface: KitSurface,
     width: number,
-    length: number
+    length: number,
+    wingAngle = 0
 ) => {
     const group = new THREE.Group();
     const halfLength = length / 2;
@@ -369,7 +375,7 @@ export const buildKitParts = (
             group.add(mesh);
         }
     } else if (kind === 'wing') {
-        const wing = gtWing(surface, Math.min(1.6, width * 0.82), halfLength);
+        const wing = gtWing(surface, Math.min(1.6, width * 0.82), halfLength, wingAngle);
         if (wing) {
             const blade = new THREE.Mesh(wing.carbon, carbonMaterial());
             blade.name = 'garage-wing';

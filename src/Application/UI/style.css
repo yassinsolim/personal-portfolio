@@ -2151,6 +2151,14 @@ body.race-mode-touch .race-minimap {
     opacity: 0.75;
 }
 
+.garage-h4-note {
+    margin-left: 8px;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+}
+
 .garage-swatches {
     display: flex;
     flex-wrap: wrap;
