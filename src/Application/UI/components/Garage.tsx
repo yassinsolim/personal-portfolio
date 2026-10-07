@@ -9,6 +9,7 @@ import {
     STOCK_LOOK,
     STOCK_TUNE,
     brakePressureTunable,
+    decodeTune,
     isStockSetup,
 } from '../../Racing/Garage/garage';
 import type {
@@ -22,6 +23,13 @@ import type {
     TireCompound,
 } from '../../Racing/Garage/garage';
 import { ENGINE_IDS, ENGINES, STOCK_ENGINE } from '../../Racing/Garage/engines';
+import { formatTime } from './RaceHudGauges';
+
+// the fastest tuned laps with the car on the stand, one per tune
+export type GarageTunes = {
+    carId: string;
+    entries: Array<{ id: string; name: string; lapTimeMs: number; tune?: string }>;
+};
 
 export type GarageState = {
     carId: string;
@@ -56,6 +64,7 @@ const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
 
 type Props = {
     state: GarageState | null;
+    tunes: GarageTunes['entries'];
     onClose: () => void;
     // back out of race mode to the room, the car dressed as it is now
     onHome: () => void;
@@ -267,7 +276,7 @@ const signed = (value: number) =>
 // the car picker opens over the garage, and its keys are its own
 const picking = () => Boolean(document.querySelector('.car-picker'));
 
-const Garage = ({ state, onClose, onHome, onPickCar, onSelectCar }: Props) => {
+const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props) => {
     const [tab, setTab] = useState<Tab>('paint');
     const [look, setLook] = useState<CarLook>(state?.look || STOCK_LOOK);
     const [tune, setTune] = useState<CarTune>(state?.tune || STOCK_TUNE);
@@ -670,6 +679,47 @@ const Garage = ({ state, onClose, onHome, onPickCar, onSelectCar }: Props) => {
                                     </small>
                                 </button>
                             </div>
+                            {tunes.length > 0 && (
+                                <>
+                                    <h4>Tunes from the leaderboard</h4>
+                                    <div className="garage-options column">
+                                        {tunes.map((entry) => {
+                                            const shared = decodeTune(entry.tune || '');
+                                            if (!shared) return null;
+                                            const on =
+                                                JSON.stringify(shared.tune) === JSON.stringify(tune) &&
+                                                shared.ride === look.ride &&
+                                                shared.spoiler === look.spoiler;
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={entry.id}
+                                                    className={on ? 'on' : ''}
+                                                    onClick={() =>
+                                                        apply(
+                                                            {
+                                                                ...look,
+                                                                ride: shared.ride,
+                                                                spoiler: shared.spoiler,
+                                                            },
+                                                            shared.tune
+                                                        )
+                                                    }
+                                                >
+                                                    <strong>
+                                                        {entry.name}: {formatTime(entry.lapTimeMs)}
+                                                    </strong>
+                                                    <small>
+                                                        {on
+                                                            ? 'Loaded. Your paint and wheels stay'
+                                                            : 'Load this setup, your paint and wheels stay'}
+                                                    </small>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
                             <Slider
                                 label="Engine map"
                                 value={tune.power}

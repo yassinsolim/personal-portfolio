@@ -352,6 +352,54 @@ export const tuneCode = (tune: CarTune, look: CarLook) => {
     ].join('');
 };
 
+// a board code back to its setup, null when it doesn't read. every setting
+// sits on its garage slider's step, which takes the code's rounding back out
+export const decodeTune = (
+    code: string
+): { tune: CarTune; ride: number; spoiler: Spoiler } | null => {
+    const match = /^([0-9a-z]{10})(1?)(a?)(?:x([0-9a-z]{3}))?$/.exec(
+        String(code || '')
+    );
+    if (!match) return null;
+    const [, base, limiter, angle, engine] = match;
+    const d = [...base].map((digit) => parseInt(digit, 36));
+    const at = (
+        digit: number,
+        [min, max]: readonly [number, number],
+        step: number
+    ) =>
+        Number(
+            (
+                Math.round((min + (digit / 35) * (max - min)) / step) * step
+            ).toFixed(2)
+        );
+    const zigzag = Math.floor(d[1] / 5);
+    const swap = engine ? [...engine].map((digit) => parseInt(digit, 36)) : [];
+    const tune = sanitizeTune({
+        power: at(d[0], LIMITS.power, 0.01),
+        tires: (['street', 'sport', 'semi', 'slick', 'drift'] as const)[d[1] % 5],
+        springsFront: at(d[2], LIMITS.springs, 0.1),
+        springsRear: at(d[3], LIMITS.springs, 0.1),
+        damping: at(d[4], LIMITS.damping, 0.1),
+        diff: at(d[5], LIMITS.diff, 0.1),
+        gearing: at(d[6], LIMITS.gearing, 0.1),
+        brakeBias: at(d[7], LIMITS.brakeBias, 0.01),
+        brakes: BRAKE_KITS[Math.floor(d[9] / 3)],
+        brakePressure:
+            1 + (zigzag % 2 ? -(zigzag + 1) / 2 : zigzag / 2) / 10,
+        speedLimiter: !limiter,
+        angleKit: Boolean(angle),
+        engine: swap.length ? ENGINE_IDS[swap[0] - 1] || 'stock' : 'stock',
+        induction: swap.length ? INDUCTIONS[swap[1]] : 'stock',
+        exhaust: swap.length ? EXHAUSTS[swap[2]] : 'stock',
+    });
+    return {
+        tune,
+        ride: at(d[8], LIMITS.ride, 0.1),
+        spoiler: (['none', 'ducktail', 'wing'] as const)[d[9] % 3],
+    };
+};
+
 const LOOK_KEY = 'yassinverse:garageLook:';
 const TUNE_KEY = 'yassinverse:garageTune:';
 

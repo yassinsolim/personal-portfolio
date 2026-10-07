@@ -458,6 +458,12 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   (`GhostReplay.update(dt, lapMs)`), so pauses and a ghost picked mid lap stay in step.
   Local builds have an empty `racing.config.json`, so the board is this device's:
   `/tmp/rivallocal.mjs`-style checks seed it with `local.add` and `cacheGhostReplay`.
+- Tune sharing: the garage's Tuning tab lists the fastest tuned laps with the car on the
+  stand, one per tune (`getTunesForCar`, sent as `race:garageTunes` when the garage opens or
+  the car changes). Loading one takes its setup from the board code (`decodeTune`, every
+  setting snapped back to its slider step, so codes round trip exactly) with its ride height
+  and spoiler, and keeps your paint and wheels. Closing the garage with a new setup restarts
+  the lap as before.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

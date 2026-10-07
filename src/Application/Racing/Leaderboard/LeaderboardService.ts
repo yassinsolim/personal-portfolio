@@ -219,6 +219,40 @@ export default class LeaderboardService {
         }
     }
 
+    // the fastest tuned laps with a car, one per tune, to load in the garage
+    async getTunesForCar(carId: string, limit = 5) {
+        const localEntries = this.local
+            .getTop(64, 'tuned')
+            .filter((entry) => entry.carId === carId);
+        let remoteEntries: LeaderboardEntry[] = [];
+        await this.initialize();
+        if (this.supabase && carOptionsById[carId]) {
+            try {
+                const { data, error } = await this.supabase
+                    .from(this.tableName)
+                    .select('id,name,lap_time_ms,car_id,created_at')
+                    .like('car_id', `${carId}${SEASON_TAG}${TUNE_TAG}%`)
+                    .order('lap_time_ms', { ascending: true })
+                    .limit(limit * 4);
+                if (!error && data) {
+                    remoteEntries = (data as RemoteLeaderboardRow[]).map((row) =>
+                        this.fromLapRow(row)
+                    );
+                }
+            } catch {
+                // this device's tunes only
+            }
+        }
+        const seen = new Set<string>();
+        return this.mergeEntries(remoteEntries, localEntries)
+            .filter((entry) => {
+                if (!entry.tune || seen.has(entry.tune)) return false;
+                seen.add(entry.tune);
+                return true;
+            })
+            .slice(0, limit);
+    }
+
     fromLapRow(row: RemoteLeaderboardRow): LeaderboardEntry {
         return {
             id: String(row.id || '').slice(0, 80),

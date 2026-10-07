@@ -9,7 +9,7 @@ import LobbyChoice from './components/LobbyChoice';
 import RaceHudGauges, { type GhostHud, SectorHud } from './components/RaceHudGauges';
 import DriftHud, { type DriftHudState } from './components/DriftHud';
 import Minimap from './components/Minimap';
-import Garage, { GarageState } from './components/Garage';
+import Garage, { GarageState, type GarageTunes } from './components/Garage';
 import CarPicker, { carThumb } from './components/CarPicker';
 import { isLowPowerDevice } from '../Utils/Device';
 import GraphicsInfo from './components/GraphicsInfo';
@@ -359,6 +359,7 @@ const App = () => {
     });
     const [driftBoard, setDriftBoard] = useState<DriftBoardEntry[]>([]);
     const [garageState, setGarageState] = useState<GarageState | null>(null);
+    const [garageTunes, setGarageTunes] = useState<GarageTunes | null>(null);
     // the lobby card comes back after the garage when it was opened from it
     const [garageFromCard, setGarageFromCard] = useState(false);
     const openGarage = useCallback((fromCard: boolean) => {
@@ -440,6 +441,7 @@ const App = () => {
         });
         eventBus.on('garage:home', () => window.setTimeout(() => setGarageFade(''), 300));
         eventBus.on('race:garageState', (state: GarageState) => setGarageState(state));
+        eventBus.on('race:garageTunes', (tunes: GarageTunes) => setGarageTunes(tunes));
         eventBus.on('race:trackOutline', (state: { points?: number[][] } | undefined) => {
             if (state?.points?.length) setTrackOutline(state.points);
         });
@@ -1366,6 +1368,11 @@ const App = () => {
             {raceModeActive && garageOpen && (
                 <Garage
                     state={garageState}
+                    tunes={
+                        garageTunes && garageTunes.carId === garageState?.carId
+                            ? garageTunes.entries
+                            : []
+                    }
                     onClose={closeGarage}
                     onHome={garageToHome}
                     onPickCar={openPicker}
