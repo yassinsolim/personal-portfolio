@@ -65,6 +65,7 @@ const TARGET_LABELS: Record<RoomTarget, string> = {
 };
 // the overlays, topmost first
 const OVERLAYS = [
+    '.race-name',
     '.car-picker',
     '.garage',
     '.race-photo',

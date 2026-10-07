@@ -28,6 +28,8 @@ import { readLineMode, type LineMode } from '../Racing/Track/lineMode';
 import { STEERING_KEY, readSteering } from '../Racing/Input/steering';
 import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Track/startTrack';
 import PauseMenu from './components/PauseMenu';
+import NameCard from './components/NameCard';
+import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -82,8 +84,8 @@ type HudState = {
     // your best clean lap with this car and setup
     bestLapMs?: number;
     lapDelta?: number | null;
+    // the lap used rewind, so it won't count
     lapDirty?: boolean;
-    lapRewound?: boolean;
     // how much rewind is left while it plays back (0..1), null when it isn't
     rewind?: number | null;
     lastLapDirty?: boolean;
@@ -240,9 +242,18 @@ const getStoredMultiplayerName = () => {
             .replace(/[^a-zA-Z0-9 _-]/g, '')
             .trim()
             .slice(0, 16);
-        return clean || 'Driver';
+        return isDefaultDriverName(clean) ? '' : clean;
     } catch {
-        return 'Driver';
+        return '';
+    }
+};
+
+// nobody has picked a name on this device yet. no storage, no asking every time
+const needsDriverName = () => {
+    try {
+        return isDefaultDriverName(window.localStorage.getItem(MULTIPLAYER_NAME_KEY));
+    } catch {
+        return false;
     }
 };
 
@@ -303,6 +314,9 @@ const App = () => {
     );
     const [racePaused, setRacePaused] = useState(false);
     const [photoMode, setPhotoMode] = useState(false);
+    // the fly in from the room is still going
+    const [transitionLocked, setTransitionLocked] = useState(false);
+    const [askName, setAskName] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
         getStoredQualityMode()
@@ -426,6 +440,9 @@ const App = () => {
         );
 
         eventBus.on('race:lobbyChoice', () => setLobbyChoiceOpen(true));
+        eventBus.on('race:transitionLock', (state?: { locked?: boolean }) =>
+            setTransitionLocked(Boolean(state?.locked))
+        );
         eventBus.on('race:garageFromHome', (state?: { failed?: boolean }) => {
             if (!state?.failed) {
                 setGarageFromCard(false);
@@ -737,10 +754,7 @@ const App = () => {
         setQualityMode(mode);
     };
 
-    const handlePlayerNameChange = (
-        event: React.ChangeEvent<HTMLInputElement>
-    ) => {
-        const nextName = event.target.value.slice(0, 16);
+    const savePlayerName = (nextName: string) => {
         setPlayerName(nextName);
         eventBus.dispatch('race:multiplayerSetName', {
             playerName: nextName,
@@ -750,6 +764,12 @@ const App = () => {
         } catch {
             // no-op
         }
+    };
+
+    const handlePlayerNameChange = (
+        event: React.ChangeEvent<HTMLInputElement>
+    ) => {
+        savePlayerName(event.target.value.slice(0, 16));
     };
 
     const handlePlaySolo = () => {
@@ -883,6 +903,14 @@ const App = () => {
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
     }, [raceModeActive, garageOpen, racePaused, inLobbyRace, openGarageFromRace]);
+
+    // the first drive on a device asks for a name, once the car is on the road
+    useEffect(() => {
+        if (!raceModeActive) setAskName(false);
+        else if (!racePaused && !garageOpen && !transitionLocked && needsDriverName()) {
+            setAskName(true);
+        }
+    }, [raceModeActive, racePaused, garageOpen, transitionLocked]);
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
@@ -1044,7 +1072,7 @@ const App = () => {
                                     value={playerName}
                                     onChange={handlePlayerNameChange}
                                     maxLength={16}
-                                    placeholder="Driver Name"
+                                    placeholder="Your name"
                                 />
                             </div>
                             <div className="multiplayer-actions">
@@ -1207,7 +1235,6 @@ const App = () => {
                     bestLapMs={hud.bestLapMs || 0}
                     delta={hud.lapDelta ?? null}
                     dirty={Boolean(hud.lapDirty)}
-                    rewound={Boolean(hud.lapRewound)}
                     lastDirty={Boolean(hud.lastLapDirty)}
                     ghost={hud.ghost || null}
                     sectors={hud.sectors || null}
@@ -1404,7 +1431,7 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && lobbyChoiceOpen && !garageOpen && (
+            {raceModeActive && lobbyChoiceOpen && !garageOpen && !askName && (
                 <LobbyChoice
                     multiplayer={multiplayer}
                     playerName={playerName}
@@ -1445,7 +1472,7 @@ const App = () => {
             <div className={`garage-fade ${garageFade ? 'on' : ''}`} data-prevent-click={garageFade ? '' : undefined}>
                 <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
             </div>
-            {raceModeActive && racePaused && !lobbyChoiceOpen && !photoMode && (
+            {raceModeActive && racePaused && !lobbyChoiceOpen && !photoMode && !askName && (
                 <PauseMenu
                     track={trackState.track}
                     building={trackState.building}
@@ -1487,9 +1514,19 @@ const App = () => {
                         eventBus.dispatch('race:lineMode', { mode });
                     }}
                     onSteering={setSteering}
+                    playerName={playerName}
+                    onPlayerName={savePlayerName}
                 />
             )}
             {raceModeActive && photoMode && <PhotoMode />}
+            {raceModeActive && askName && (
+                <NameCard
+                    onDone={(name) => {
+                        savePlayerName(name);
+                        setAskName(false);
+                    }}
+                />
+            )}
         </div>
     );
 };

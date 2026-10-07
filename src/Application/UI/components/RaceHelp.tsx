@@ -127,11 +127,11 @@ const RaceHelp = ({
                             ],
                             [
                                 'Off the road',
-                                "All four wheels off the asphalt for more than a moment and the lap won't count: it still shows, but not on the leaderboard, as your best or as a ghost. Finish it or restart with T.",
+                                'Grass and gravel cost you grip and speed, and that is the only price: the lap still counts.',
                             ],
                             [
                                 'Rewind',
-                                "Hold Z (down on the d-pad) to take the car back up to 10 s. It's for practice, so a lap that uses it won't count either. Only when you drive the ring alone.",
+                                "Hold Z (down on the d-pad) to take the car back up to 10 s. It's for practice, so a lap that uses it won't go on the leaderboard, as your best or as a ghost. Only when you drive the ring alone.",
                             ],
                             [
                                 'Ghost',
