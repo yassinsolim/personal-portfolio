@@ -13,16 +13,23 @@ import {
 } from './Vehicle/VehiclePhysics';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
+import LapDelta from './Lap/LapDelta';
 import SectorTimer from './Lap/SectorTimer';
 import DriftScore, { type DriftEvent } from './Lap/DriftScore';
 import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
 import { carHasCalipers, kitsThatFit } from './Garage/carLook';
 import GarageScene, { GARAGE_ORIGIN, TURNTABLE_TOP } from './Garage/GarageScene';
-import LocalLeaderboard, { type LeaderboardEntry } from './Leaderboard/LocalLeaderboard';
+import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import type { RemoteCarAudioState } from './Audio/CarAudio';
 import GhostReplay from './Ghost/GhostReplay';
+import {
+    GHOST_MODES,
+    readGhostMode,
+    writeGhostMode,
+    type GhostMode,
+} from './Ghost/ghostMode';
 import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
     type MultiplayerPlayerState,
@@ -39,6 +46,16 @@ type Laps = { lapTimer: LapTimer; sectors: SectorTimer };
 
 // a drift park lap can't be under this
 const DRIFT_MIN_LAP_MS = 30_000;
+// all four wheels past the road's edge this long and the lap won't count
+const DIRTY_AFTER_S = 0.1;
+
+// who the ghost on the ring is, for the hud
+type GhostLabel = {
+    kind: GhostMode;
+    name?: string;
+    lapTimeMs: number;
+    carId: string;
+};
 
 // a drift run at the line: on its way to the board, saved there (or on this
 // device when offline), or not counted and why
@@ -191,12 +208,19 @@ export default class RaceManager {
     hiddenLobbyObjects: THREE.Object3D[];
     defaultSceneBackground: THREE.Color | THREE.Texture | THREE.CubeTexture | null;
     defaultSceneFog: THREE.Fog | THREE.FogExp2 | null;
-    topLeaderboardGhostLapId: string | null;
-    topLeaderboardGhostRequestSerial: number;
+    ghostLapId: string | null = null;
+    ghostSyncSerial = 0;
     physicsAccumulator: number;
     lastPhysicsStepTimeMs: number;
     debugGameEnabled: boolean;
-    ghostPlaybackEnabled: boolean;
+    ghostMode: GhostMode = readGhostMode();
+    // the board lap the ghost replays, null for your own best
+    ghostLabel: GhostLabel | null = null;
+    lapDelta = new LapDelta();
+    // this lap had all four wheels off the road, the last one did
+    lapDirty = false;
+    lastLapDirty = false;
+    offTrackSeconds = 0;
     lastStartResets: number;
     // the ring, or the drift park: each a world of its own, the park built
     // the first time it's picked. scoring and its board are the park's
@@ -305,16 +329,11 @@ export default class RaceManager {
         this.hiddenLobbyObjects = [];
         this.defaultSceneBackground = this.scene.background;
         this.defaultSceneFog = this.scene.fog;
-        this.topLeaderboardGhostLapId = null;
-        this.topLeaderboardGhostRequestSerial = 0;
         this.physicsAccumulator = 0;
         this.lastPhysicsStepTimeMs = 0;
         this.lastStartResets = 0;
         this.debugGameEnabled = new URLSearchParams(window.location.search).has(
             'debugGame'
-        );
-        this.ghostPlaybackEnabled = new URLSearchParams(window.location.search).has(
-            'ghostReplay'
         );
         this.multiplayer.onStateChange((state) => {
             if (state.mode === 'lobby' && state.connected) {
@@ -519,10 +538,25 @@ export default class RaceManager {
             void this.refreshLeaderboard();
         });
 
+        UIEventBus.on('race:ghostMode', (state: { mode?: string } | undefined) => {
+            const mode = GHOST_MODES.find((option) => option === state?.mode);
+            if (!mode || mode === this.ghostMode) return;
+            this.ghostMode = mode;
+            writeGhostMode(mode);
+            this.ghostReplay.setActive(
+                this.active && this.trackMode === 'ring' && this.ghostPlaybackEnabled
+            );
+            void this.syncGhost();
+        });
+
         UIEventBus.on('race:submitLapName', async (payload: { name?: string }) => {
             const explicitName = (payload?.name || '').trim().slice(0, 16);
             await this.submitPendingLap(explicitName);
         });
+    }
+
+    get ghostPlaybackEnabled() {
+        return this.ghostMode !== 'off';
     }
 
     async submitPendingLap(preferredName?: string) {
@@ -751,6 +785,9 @@ export default class RaceManager {
         this.lapProgress = lapStart.progress;
         this.driftScore.reset();
         if (this.trackMode === 'ring') this.ghostReplay.holdAtStart();
+        this.lapDelta.reset();
+        this.lapDirty = false;
+        this.offTrackSeconds = 0;
         this.lastStartResets = this.vehicle.startResets;
     }
 
@@ -998,49 +1035,66 @@ export default class RaceManager {
             entries,
             board,
         });
-        // the ghost to chase is always the stock record
-        if (board === 'stock') void this.syncTopLeaderboardGhost(entries);
+        void this.syncGhost();
     }
 
-    async syncTopLeaderboardGhost(entries: LeaderboardEntry[]) {
-        const topEntry = entries[0];
-        if (!this.ghostPlaybackEnabled) {
-            this.topLeaderboardGhostLapId = null;
+    // the board your laps go on with the car as it's set up
+    setupBoard(): 'stock' | 'tuned' {
+        return isStockSetup(this.vehicle.tune, this.vehicle.look) ? 'stock' : 'tuned';
+    }
+
+    // the board lap the ghost replays: the record, or a rival just faster
+    // than your best with this car (the slowest of the top ten until you
+    // have one). no ghost on the board to chase: your own best lap
+    async syncGhost() {
+        const serial = ++this.ghostSyncSerial;
+        const mode = this.ghostMode;
+        if (mode === 'off' || mode === 'best') {
+            this.ghostLapId = null;
+            this.ghostLabel = null;
             this.ghostReplay.setExternalReplay(null);
             return;
         }
-        if (!topEntry) {
-            this.topLeaderboardGhostLapId = null;
-            this.ghostReplay.setExternalReplay(null);
+        const board = this.setupBoard();
+        const best = this.lapDelta.bestLapMs;
+        const service = this.leaderboardService;
+        const candidates =
+            mode === 'record'
+                ? await service.getLeaderboard(1, board)
+                : best > 0
+                  ? await service.getLapsFasterThan(best, board)
+                  : (await service.getLeaderboard(10, board)).slice(-1);
+        for (const entry of candidates) {
+            if (serial !== this.ghostSyncSerial) return;
+            if (entry.id === this.ghostLapId) {
+                if (this.ghostLabel) this.ghostLabel.kind = mode;
+                return;
+            }
+            const replay = await service.getGhostReplayForLap(
+                entry.id,
+                entry.carId,
+                entry.lapTimeMs
+            );
+            if (serial !== this.ghostSyncSerial) return;
+            if (!replay || replay.samples.length < 2) continue;
+            this.ghostLapId = entry.id;
+            this.ghostLabel = {
+                kind: mode,
+                name: entry.name,
+                lapTimeMs: entry.lapTimeMs,
+                carId: replay.carId || entry.carId,
+            };
+            this.ghostReplay.setExternalReplay({
+                lapTimeMs: entry.lapTimeMs,
+                carId: replay.carId || entry.carId,
+                samples: replay.samples,
+            });
             return;
         }
-
-        if (this.topLeaderboardGhostLapId === topEntry.id) {
-            return;
-        }
-
-        const requestId = ++this.topLeaderboardGhostRequestSerial;
-        const replay = await this.leaderboardService.getGhostReplayForLap(
-            topEntry.id,
-            topEntry.carId,
-            topEntry.lapTimeMs
-        );
-        if (requestId !== this.topLeaderboardGhostRequestSerial) {
-            return;
-        }
-
-        if (!replay || replay.samples.length < 2) {
-            this.topLeaderboardGhostLapId = null;
-            this.ghostReplay.setExternalReplay(null);
-            return;
-        }
-
-        this.topLeaderboardGhostLapId = topEntry.id;
-        this.ghostReplay.setExternalReplay({
-            lapTimeMs: topEntry.lapTimeMs,
-            carId: replay.carId || topEntry.carId,
-            samples: replay.samples,
-        });
+        if (serial !== this.ghostSyncSerial) return;
+        this.ghostLapId = null;
+        this.ghostLabel = null;
+        this.ghostReplay.setExternalReplay(null);
     }
 
     // the lap as a few hundred x, z points for the minimap
@@ -1080,7 +1134,21 @@ export default class RaceManager {
             lapProgress: this.lapProgress,
             paused: this.paused,
             pendingLapSubmission: this.pendingLapTimeMs > 0,
-            ghostBestLapMs: this.ghostReplay.getBestLapTimeMs(),
+            bestLapMs: this.lapDelta.bestLapMs,
+            lapDelta:
+                this.trackMode === 'ring' && this.lapRunning ? this.lapDelta.gap() : null,
+            lapDirty: this.trackMode === 'ring' && this.lapDirty,
+            lastLapDirty: this.lastLapDirty,
+            ghost:
+                this.ghostReplay.active && this.ghostReplay.root.visible
+                    ? this.ghostReplay.externalReplay && this.ghostLabel
+                        ? this.ghostLabel
+                        : {
+                              kind: 'best',
+                              lapTimeMs: this.ghostReplay.bestLapTimeMs,
+                              carId: this.ghostReplay.carId,
+                          }
+                    : null,
             track: this.trackMode,
             drift:
                 this.trackMode === 'drift'
@@ -1759,9 +1827,16 @@ export default class RaceManager {
 
             this.sectors.setCar(telemetry.carId);
             const ring = this.trackMode === 'ring';
+            // another car or setup has its own best lap, and its own rival
+            if (ring && this.lapDelta.setKey(telemetry.carId, this.setupBoard() === 'tuned')) {
+                void this.syncGhost();
+            }
             if (!lapWasRunning && lapUpdate.lapRunning) {
                 if (ring) this.ghostReplay.startLap(nowMs);
                 this.sectors.reset();
+                this.lapDelta.reset();
+                this.lapDirty = false;
+                this.offTrackSeconds = 0;
             }
             this.sectors.update(this.lapProgress, this.currentLapTimeMs, this.lapRunning);
 
@@ -1771,30 +1846,37 @@ export default class RaceManager {
                     quaternion: telemetry.quaternion,
                     carId: telemetry.carId,
                 });
+                const off = telemetry.wheelSurfaces.every(
+                    (kind) => kind === 'grass' || kind === 'off'
+                );
+                this.offTrackSeconds = off ? this.offTrackSeconds + delta : 0;
+                if (this.offTrackSeconds > DIRTY_AFTER_S) this.lapDirty = true;
             }
             if (lapUpdate.lapRunning && !ring) {
                 this.updateDriftScore(delta, telemetry.speedKph, nowMs);
             }
 
             if (lapUpdate.completedLapTimeMs) {
-                this.sectors.completeLap(
-                    lapUpdate.completedLapTimeMs,
-                    Boolean(lapUpdate.validLap)
-                );
+                const valid = Boolean(lapUpdate.validLap);
+                const clean = valid && !(ring && this.lapDirty);
+                this.sectors.completeLap(lapUpdate.completedLapTimeMs, clean);
                 this.lastLapTimeMs = lapUpdate.completedLapTimeMs;
                 if (ring) {
-                    this.ghostReplay.completeLap(
-                        Boolean(lapUpdate.validLap),
-                        lapUpdate.completedLapTimeMs
-                    );
+                    this.ghostReplay.completeLap(clean, lapUpdate.completedLapTimeMs);
                     // the next lap started on the line: record it, and the
                     // ghost races it from its start too
                     this.ghostReplay.startLap(nowMs);
+                    const best = this.lapDelta.bestLapMs;
+                    this.lapDelta.complete(lapUpdate.completedLapTimeMs, clean);
+                    // a new best moves the rival up the board
+                    if (this.lapDelta.bestLapMs !== best) void this.syncGhost();
+                    this.lastLapDirty = valid && this.lapDirty;
+                    this.lapDirty = false;
+                    this.offTrackSeconds = 0;
                 } else {
                     // a drift run is a lap: what's building counts, then the
                     // next one starts from nothing
                     const score = this.driftScore.finish();
-                    const valid = Boolean(lapUpdate.validLap);
                     this.driftLastRun = valid
                         ? { score, lapTimeMs: lapUpdate.completedLapTimeMs }
                         : null;
@@ -1823,8 +1905,16 @@ export default class RaceManager {
                     this.driftScore.reset();
                 }
             }
+            if (ring && lapUpdate.lapRunning) {
+                this.lapDelta.update(lapUpdate.exact, lapUpdate.lapTimeMs);
+            }
 
-            if (lapUpdate.completedLapTimeMs && lapUpdate.validLap && ring) {
+            if (
+                lapUpdate.completedLapTimeMs &&
+                lapUpdate.validLap &&
+                ring &&
+                !this.lastLapDirty
+            ) {
                 this.pendingLapTimeMs = lapUpdate.completedLapTimeMs;
                 UIEventBus.dispatch('race:lapCompleted', {
                     lapTimeMs: lapUpdate.completedLapTimeMs,
@@ -1866,7 +1956,12 @@ export default class RaceManager {
             }
         }
         this.track.update();
-        this.ghostReplay.update(delta);
+        // the ghost follows the lap clock, so a pause or a ghost picked mid
+        // lap stays in step
+        this.ghostReplay.update(
+            delta,
+            this.trackMode === 'ring' && this.lapRunning ? this.currentLapTimeMs : undefined
+        );
         this.chaseCamera.update(delta);
         this.visuals.update(delta);
         this.updateWorldAudio(delta);

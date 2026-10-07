@@ -8,6 +8,20 @@ export type SectorHud = {
     names: string[];
 };
 
+export type GhostHud = {
+    kind: 'off' | 'best' | 'rival' | 'record';
+    name?: string;
+    lapTimeMs: number;
+    carId: string;
+};
+
+const GHOST_LABEL: Record<GhostHud['kind'], string> = {
+    off: 'Ghost',
+    best: 'Your ghost',
+    rival: 'Rival',
+    record: 'Record',
+};
+
 type Props = {
     speedKph: number;
     gear: string;
@@ -20,6 +34,11 @@ type Props = {
     lapArmed?: boolean;
     lastLapMs: number;
     bestLapMs: number;
+    // ms behind (positive) or ahead of the best lap at this point
+    delta: number | null;
+    dirty: boolean;
+    lastDirty: boolean;
+    ghost: GhostHud | null;
     sectors: SectorHud | null;
 };
 
@@ -177,15 +196,40 @@ const RaceHudGauges = (props: Props) => (
                     : props.lapArmed
                       ? '0:00.000'
                       : '--:--.---'}
+                {props.lapRunning && props.delta !== null && (
+                    <span
+                        className={`race-lap-delta ${props.delta <= 0 ? 'ahead' : 'behind'}`}
+                    >
+                        {props.delta <= 0 ? '-' : '+'}
+                        {(Math.abs(props.delta) / 1000).toFixed(3)}
+                    </span>
+                )}
             </div>
+            {props.lapRunning && props.dirty && (
+                <div className="race-lap-dirty">
+                    Track limits: this lap won't count
+                </div>
+            )}
             <div className="race-lap-row">
                 <span>Last</span>
-                <strong>{formatTime(props.lastLapMs)}</strong>
+                <strong>
+                    {formatTime(props.lastLapMs)}
+                    {props.lastDirty && <em>dirty</em>}
+                </strong>
             </div>
             <div className="race-lap-row">
                 <span>Best</span>
                 <strong>{formatTime(props.bestLapMs)}</strong>
             </div>
+            {props.ghost && (
+                <div className="race-lap-row">
+                    <span>
+                        {GHOST_LABEL[props.ghost.kind]}
+                        {props.ghost.name ? `: ${props.ghost.name}` : ''}
+                    </span>
+                    <strong>{formatTime(props.ghost.lapTimeMs)}</strong>
+                </div>
+            )}
             {props.sectors && <SectorChips sectors={props.sectors} />}
         </div>
     </div>
