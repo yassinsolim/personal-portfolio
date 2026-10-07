@@ -425,6 +425,26 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - The drawn heading is the physics heading; only the road's tilt is eased (`updateTransform`).
   Easing the heading too trailed a tight turn at a crawl by 5 to 7 degrees, so the car looked
   like it was sliding into the turn.
+- Braking while turning (`VehiclePhysics`, `scripts/test/brake-turn.test.mjs`): the auto box
+  backs up only after the car has stopped (under 0.3 m/s) with the brake held 0.5 s. It used
+  to engage under 0.8 m/s after 0.25 s, so braking through a hairpin rolled into reverse and
+  the held lock swung the nose the wrong way. A manual box never reverses off the brake: one
+  down (Q, left bumper) in first at a stop is reverse and one up leaves it. Traction control
+  works backing up (the wheels spin up backwards, it used to miss it). Without abs the rear
+  brakes are load sensing (`REAR_VALVE`, 0.9 of what the rear tires hold, more as the bias
+  moves rearward of 64%), so the fronts lock first and the car plows on; all four locking
+  spun it against the steering. A tire braked past twice its peak slip (not the rears on the
+  handbrake) pushes against the way its contact patch slides. Stock laps with abs are as
+  before.
+- Brake kits (garage Tuning tab): stock, street, sport and race, 1, 1.15, 1.3 and 1.5 times the
+  brake torque, and sport and race add a pressure slider (70 to 130%). Stock brakes already
+  lock the tires on most cars, so like in Forza the kits pay off with grippier tires,
+  downforce and big speed (Valkyrie 200-0: 96 m stock, 89 m race), and bite harder on part
+  pedal. The abs steps by the stock torque (`spec.brakeKit`) and drops a bigger kit straight
+  back to it on the first slip, or the deeper first lock made a kit stop longer. The garage
+  shows 100-0 and 200-0 km/h from `predictStop`, the model braking on the flat with abs.
+  Board codes keep their length: the pressure rides in the tire digit and the kit in the
+  spoiler digit, both 0 when stock.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

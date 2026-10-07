@@ -1568,13 +1568,15 @@ const App = () => {
                         </div>
 
                         <p className="race-menu-controls">
-                            W / S or arrows: throttle, brake (hold S to reverse).
-                            A / D: steer. Space: handbrake. R: back on track. T:
-                            restart lap. G: garage. C: camera.
+                            W / S or arrows: throttle, brake (stopped, hold S to
+                            reverse; manual gears: Q in first). A / D: steer.
+                            Space: handbrake. R: back on track. T: restart lap.
+                            G: garage. C: camera.
                         </p>
                         <p className="race-menu-controls">
                             Controller: right trigger gas, left trigger brake
-                            (hold to reverse), left stick steer, A handbrake, B
+                            (stopped, hold to reverse; manual gears: left bumper
+                            in first), left stick steer, A handbrake, B
                             look back, X camera, Y back on track, bumpers shift,
                             right stick look around, View restart lap, Menu
                             pause. In menus the d-pad or left stick moves, A

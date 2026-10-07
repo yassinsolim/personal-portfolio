@@ -8,9 +8,11 @@ import {
     STOCK_BRAKE_BIAS,
     STOCK_LOOK,
     STOCK_TUNE,
+    brakePressureTunable,
     isStockSetup,
 } from '../../Racing/Garage/garage';
 import type {
+    BrakeKit,
     CarLook,
     CarTune,
     Exhaust,
@@ -39,6 +41,9 @@ export type GarageState = {
         topLimitedBy: 'limiter' | 'drag' | 'revs';
         downforce: number;
         brakeFront: number;
+        // stopping distances in m, flat out on the brake with abs
+        stop100: number;
+        stop200: number;
         rpmAt100: number;
     };
 };
@@ -111,6 +116,20 @@ const TIRES: Array<[TireCompound, string]> = [
     ['semi', 'Semi slick'],
     ['slick', 'Race slick'],
     ['drift', 'Drift'],
+];
+const BRAKES: Array<[BrakeKit, string, string]> = [
+    ['stock', 'Stock', 'Factory calipers, rotors and pads'],
+    ['street', 'Street', 'Performance pads and braided lines, 15% more bite'],
+    [
+        'sport',
+        'Sport',
+        'Bigger rotors and 4 piston calipers, 30% more bite, adjustable pressure',
+    ],
+    [
+        'race',
+        'Race',
+        'Carbon ceramics and 6 piston calipers, 50% more bite, adjustable pressure',
+    ],
 ];
 // rims that come from the other cars
 const WHEELS = [
@@ -740,6 +759,46 @@ const Garage = ({ state, onClose, onHome, onPickCar, onSelectCar }: Props) => {
                                 format={signed}
                                 onChange={(gearing) => setT({ gearing })}
                             />
+                            <h4>Brakes</h4>
+                            <div className="garage-options column">
+                                {BRAKES.map(([brakes, label, hint]) => (
+                                    <button
+                                        type="button"
+                                        key={brakes}
+                                        className={
+                                            tune.brakes === brakes ? 'on' : ''
+                                        }
+                                        onClick={() =>
+                                            setT({
+                                                brakes,
+                                                brakePressure:
+                                                    brakePressureTunable(brakes)
+                                                        ? tune.brakePressure
+                                                        : 1,
+                                            })
+                                        }
+                                    >
+                                        <strong>{label}</strong>
+                                        <small>{hint}</small>
+                                    </button>
+                                ))}
+                            </div>
+                            {brakePressureTunable(tune.brakes) && (
+                                <Slider
+                                    label="Brake pressure"
+                                    value={tune.brakePressure}
+                                    min={LIMITS.brakePressure[0]}
+                                    max={LIMITS.brakePressure[1]}
+                                    step={0.1}
+                                    left="Gentler"
+                                    right="Harder"
+                                    stock={1}
+                                    format={(v) => `${Math.round(v * 100)}%`}
+                                    onChange={(brakePressure) =>
+                                        setT({ brakePressure })
+                                    }
+                                />
+                            )}
                             <Slider
                                 label="Brake bias"
                                 value={tune.brakeBias}
@@ -822,6 +881,14 @@ const Garage = ({ state, onClose, onHome, onPickCar, onSelectCar }: Props) => {
                         <div>
                             <span>Downforce</span>
                             <strong>{stats.downforce.toFixed(2)}</strong>
+                        </div>
+                        <div>
+                            <span>100-0 km/h</span>
+                            <strong>{stats.stop100} m</strong>
+                        </div>
+                        <div>
+                            <span>200-0 km/h</span>
+                            <strong>{stats.stop200} m</strong>
                         </div>
                         <div>
                             <span>100 km/h in top</span>

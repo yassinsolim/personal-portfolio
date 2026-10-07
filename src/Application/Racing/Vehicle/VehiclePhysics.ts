@@ -65,6 +65,9 @@ export type PhysicsSpec = {
     converterRatio: number;
     drivelineEfficiency: number;
     brakeTorque: number;
+    // the garage brake kit and pressure over the stock torque (already in
+    // brakeTorque), unset when stock
+    brakeKit?: number;
     brakeBias: number;
     handbrakeTorque: number;
     maxSteer: number;
@@ -200,6 +203,14 @@ const RELAXATION_LENGTH = 0.3;
 const SHIFT_COOLDOWN = 0.3;
 const REVERSE_ENGAGE_SPEED = 0.8;
 const REVERSE_ENGAGE_DELAY = 0.25;
+// the brake only backs the car up once it has stopped and stays held a moment,
+// braking to a stop through a hairpin used to roll straight into reverse
+const REVERSE_STOP_SPEED = 0.3;
+const REVERSE_HOLD = 0.5;
+// rear brake limit without abs, as a share of what the rear tires hold, at
+// the stock bias and forward of it
+const REAR_VALVE = 0.9;
+const VALVE_BIAS = 0.64;
 const RAD_PER_S_TO_RPM = 60 / (Math.PI * 2);
 // tires grip a bit harder braking and accelerating than cornering
 const LONGITUDINAL_GRIP = 1.1;
@@ -559,15 +570,17 @@ export default class VehiclePhysics {
         }
 
         const forwardSpeed = this.vx;
-        // stopped with the brake held: back up. the pedals swap in reverse
+        // stopped with the brake held: back up, with the auto box. the pedals
+        // swap in reverse. a manual box gets it from first, one down at a stop
         if (this.gear > 0) {
             if (
-                forwardSpeed < REVERSE_ENGAGE_SPEED &&
+                this.assists.autoGears &&
+                Math.abs(forwardSpeed) < REVERSE_STOP_SPEED &&
                 controls.brake > 0.2 &&
                 controls.throttle < 0.05
             ) {
                 this.reverseTimer += dt;
-                if (this.reverseTimer > REVERSE_ENGAGE_DELAY) {
+                if (this.reverseTimer > REVERSE_HOLD) {
                     this.reverseTimer = 0;
                     this.startShift(-1);
                     return;
@@ -576,6 +589,12 @@ export default class VehiclePhysics {
                 this.reverseTimer = 0;
             }
         } else if (this.gear < 0) {
+            if (this.manualShiftRequest > 0) {
+                this.manualShiftRequest = 0;
+                this.startShift(1);
+                return;
+            }
+            this.manualShiftRequest = 0;
             if (
                 forwardSpeed > -REVERSE_ENGAGE_SPEED &&
                 controls.throttle > 0.1
@@ -593,8 +612,17 @@ export default class VehiclePhysics {
 
         const gears = spec.gearRatios.length;
         if (this.manualShiftRequest !== 0) {
-            const next = clamp(this.gear + this.manualShiftRequest, 1, gears);
+            const request = this.manualShiftRequest;
             this.manualShiftRequest = 0;
+            if (
+                request < 0 &&
+                this.gear === 1 &&
+                Math.abs(forwardSpeed) < REVERSE_STOP_SPEED
+            ) {
+                this.startShift(-1);
+                return;
+            }
+            const next = clamp(this.gear + request, 1, gears);
             if (next !== this.gear) {
                 // don't let a manual downshift over-rev the engine
                 const rpm =
@@ -1125,13 +1153,19 @@ export default class VehiclePhysics {
             }
         }
         if (this.assists.tractionControl && !this.driftWindow) {
+            // in reverse the wheels spin up backwards
+            const spin = reverse ? -1 : 1;
+            const frontSpin = Math.max(
+                spin * this.slipRatio[0],
+                spin * this.slipRatio[1]
+            );
+            const rearSpin = Math.max(
+                spin * this.slipRatio[2],
+                spin * this.slipRatio[3]
+            );
             const drivenSlip = Math.max(
-                driveFront > 0
-                    ? Math.max(this.slipRatio[0], this.slipRatio[1])
-                    : 0,
-                driveRear > 0
-                    ? Math.max(this.slipRatio[2], this.slipRatio[3])
-                    : 0
+                driveFront > 0 ? frontSpin : 0,
+                driveRear > 0 ? rearSpin : 0
             );
             // holds the driven wheels near their peak slip, cutting harder
             // the further past it they spin
@@ -1204,6 +1238,9 @@ export default class VehiclePhysics {
         const B = this.shapeB;
         const tanPeak = Math.tan(spec.slipAnglePeak);
         const nominalLoad = (spec.massKg * GRAVITY) / 4;
+        // the abs steps by the stock brakes' torque, so a bigger kit bites
+        // sooner but doesn't overshoot further on every cycle
+        const absStep = 1 / (spec.brakeKit ?? 1);
 
         for (let i = 0; i < 4; i++) {
             const front = i < 2;
@@ -1245,8 +1282,23 @@ export default class VehiclePhysics {
             if (load > 0 && s > 1e-6) {
                 const shape = Math.sin(C * Math.atan(B * s));
                 const force = grip * load * shape;
-                fl = ((force * sx) / s) * LONGITUDINAL_GRIP;
-                ft = (-force * sy) / s;
+                let alongL = sx / s;
+                let alongT = -sy / s;
+                // a tire braked far past its peak (locked) pushes against the
+                // way its contact patch slides, not along where it points
+                const locked =
+                    front || handbrake < 0.1 ? clamp((-sx - 2) / 2, 0, 1) : 0;
+                const slideL = omega * radius - vl;
+                const slide = Math.hypot(slideL, vt);
+                if (locked > 0 && slide > 1e-6) {
+                    alongL = lerp(alongL, slideL / slide, locked);
+                    alongT = lerp(alongT, -vt / slide, locked);
+                    const n = Math.hypot(alongL, alongT) || 1;
+                    alongL /= n;
+                    alongT /= n;
+                }
+                fl = force * alongL * LONGITUDINAL_GRIP;
+                ft = force * alongT;
                 // slope of the force curve, for the implicit wheel update
                 const bs = B * s;
                 const dShape =
@@ -1274,6 +1326,19 @@ export default class VehiclePhysics {
                 spec.brakeTorque *
                 (front ? spec.brakeBias : 1 - spec.brakeBias) *
                 0.5;
+            // without abs the rear brakes sense the load like a road car's
+            // valve: they ease off as weight comes off the rear, so the fronts
+            // lock first and the car plows on instead of swapping ends. a
+            // rearward bias still locks them
+            if (!front && !this.assists.abs) {
+                const valve =
+                    REAR_VALVE +
+                    Math.max(0, VALVE_BIAS - spec.brakeBias) * 6;
+                brakeTorque = Math.min(
+                    brakeTorque,
+                    grip * load * radius * valve
+                );
+            }
             if (!front) brakeTorque += handbrake * handbrakeTorque;
             if (
                 this.assists.abs &&
@@ -1281,12 +1346,17 @@ export default class VehiclePhysics {
                 (front || handbrake < 0.1)
             ) {
                 if (kappa < -spec.slipRatioPeak * 1.2 && Math.abs(vl) > 2) {
+                    // a kit past the stock torque drops straight back to it
+                    const held = Math.min(this.absScale[i], absStep);
                     this.absScale[i] = Math.max(
-                        0.2,
-                        this.absScale[i] - dt * 30
+                        0.2 * absStep,
+                        held - dt * 30 * absStep
                     );
                 } else {
-                    this.absScale[i] = Math.min(1, this.absScale[i] + dt * 12);
+                    this.absScale[i] = Math.min(
+                        1,
+                        this.absScale[i] + dt * 12 * absStep
+                    );
                 }
                 if (this.absScale[i] < 0.95) this.absActive = true;
                 brakeTorque *= this.absScale[i];
@@ -1457,3 +1527,27 @@ export default class VehiclePhysics {
         return Math.max(slide, lockup);
     }
 }
+
+const FLAT_GROUND: PhysicsSurface = {
+    grounded: true,
+    slopeForward: 0,
+    slopeLeft: 0,
+    normalScale: 1,
+    grip: [1, 1, 1, 1],
+    drag: [0, 0, 0, 0],
+};
+const STOP_STEP = 1 / 60;
+
+// how far the car takes to stop from a speed (m/s) on the flat, flat out on
+// the brake with abs from the first moment, worked out by driving the model
+export const predictStop = (spec: PhysicsSpec, speed: number) => {
+    const car = new VehiclePhysics(spec);
+    car.reset(0, speed);
+    const controls = { throttle: 0, brake: 1, handbrake: 0, steer: 0 };
+    let distance = 0;
+    for (let t = 0; t < 30 && car.vx > 0.3; t += STOP_STEP) {
+        car.step(STOP_STEP, controls, FLAT_GROUND, 0);
+        distance += car.vx * STOP_STEP;
+    }
+    return distance;
+};
