@@ -486,6 +486,22 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   collider sits a little under the asphalt and hid it), green, yellow over the line's speed by
   1.5 m/s, red over by 5. The line's speeds are the point mass's with 95% grip and 85% brakes.
   `/tmp/autopilot.mjs`-style checks drive it by steering at a point ahead.
+- Hood cam (C cycles chase, far, bumper, hood): the spot comes from the body itself
+  (`Camera/hoodProbe.ts`, once per model, under 10 ms). Three planes cut the body down the
+  middle (12 cm apart, the middle height of the three, so a wiper doesn't count), the glass
+  starts where the top first passes 80% of the roof's height from the ground, and the camera
+  sits 18 cm ahead of that, 10 cm over the hood. Vertex heights left gaps on big flat
+  panels and raycasting took up to 3 s on the Crown; a fixed share of the length put it
+  inside the Jesko's and the Valkyrie's glass. Check every car on one sheet with
+  `/tmp/hoodsheet.mjs`-style shots after touching it.
+- Horn: H or the left stick click (`Audio/Horn.ts`, two square waves about a third apart
+  through a 2 kHz ring, pitched per car). Lobby players hear it through that car's panner:
+  a `horn` broadcast on change, again every 0.4 s while held, and a horn not refreshed for
+  0.8 s stops, so a lost release can't leave it on.
+- Photo mode (pause menu): the race stays paused, the hud hides, drag or the right stick
+  orbits, scroll or the triggers zoom, a slider sets the fov, no speed streaks. Save draws
+  the frame again at up to 2x and reads it straight back (the canvas isn't kept between
+  frames) into a png download; Esc or B goes back to the menu.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

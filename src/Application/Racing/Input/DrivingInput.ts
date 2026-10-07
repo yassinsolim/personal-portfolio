@@ -13,6 +13,7 @@ const RESET_KEYS = ['KeyR'];
 const RESTART_KEYS = ['KeyT', 'Backspace'];
 const SHIFT_UP_KEYS = ['KeyE'];
 const SHIFT_DOWN_KEYS = ['KeyQ'];
+const HORN_KEYS = ['KeyH'];
 const PREVENT_DEFAULT_KEYS = new Set([
     'Space',
     'ArrowUp',
@@ -43,6 +44,7 @@ const PAD_VIEW = BUTTON.VIEW;
 const PAD_MENU = BUTTON.MENU;
 const PAD_LEFT = BUTTON.LEFT;
 const PAD_RIGHT = BUTTON.RIGHT;
+const PAD_HORN = BUTTON.L3;
 const STICK_DEADZONE = 0.08;
 const LOOK_DEADZONE = 0.2;
 const TRIGGER_DEADZONE = 0.04;
@@ -91,6 +93,9 @@ export default class DrivingInput {
     // the right stick looks around the car and B looks back, read by the
     // chase camera
     look = { x: 0, y: 0, back: false };
+    // held: h or the left stick click
+    horn = false;
+    padHorn = false;
     source: InputSource;
     padButtons: boolean[];
     pendingShift: number;
@@ -260,6 +265,8 @@ export default class DrivingInput {
         this.look.x = 0;
         this.look.y = 0;
         this.look.back = false;
+        this.horn = false;
+        this.padHorn = false;
     }
 
     anyKey(codes: string[]) {
@@ -294,6 +301,7 @@ export default class DrivingInput {
             this.look.x = 0;
             this.look.y = 0;
             this.look.back = false;
+            this.padHorn = false;
             return null;
         }
         const steerAxis = pad.axes[0] ?? 0;
@@ -337,6 +345,7 @@ export default class DrivingInput {
         this.look.x = lookX;
         this.look.y = lookY;
         this.look.back = Boolean(pad.buttons[PAD_B]?.pressed);
+        this.padHorn = Boolean(pad.buttons[PAD_HORN]?.pressed);
 
         const active =
             state.throttle > 0 ||
@@ -354,6 +363,7 @@ export default class DrivingInput {
         const dt = Math.min(0.1, Math.max(0, deltaSeconds));
         const pad = this.enabled ? this.readGamepad() : null;
         const smooth = this.smoothState;
+        this.horn = this.enabled && (this.anyKey(HORN_KEYS) || (pad !== null && this.padHorn));
 
         if (pad && this.source === 'gamepad') {
             this.intent.throttle = pad.throttle;

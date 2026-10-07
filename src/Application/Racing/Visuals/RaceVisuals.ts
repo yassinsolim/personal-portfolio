@@ -147,6 +147,8 @@ export default class RaceVisuals {
     // barrier sparks: fractional sparks owed, and the last frame's contact
     private sparkDebt = 0;
     private scraping = false;
+    // photo mode: no speed streaks on a still
+    photo = false;
     private lastImpact = 0;
     private lastHitAt = 0;
     private hitPoint = new THREE.Vector3();
@@ -896,7 +898,7 @@ export default class RaceVisuals {
 
         const speedKph =
             Math.hypot(vehicle.speedMps, vehicle.lateralSpeed) * 3.6;
-        const streak = Math.min(1, Math.max(0, (speedKph - 120) / 200));
+        const streak = this.photo ? 0 : Math.min(1, Math.max(0, (speedKph - 120) / 200));
         this.post?.setSpeed(Math.pow(streak, 1.25));
 
         // sparks where the body grinds a barrier: a stream by the second while

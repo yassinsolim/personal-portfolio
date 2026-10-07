@@ -67,12 +67,14 @@ const TARGET_LABELS: Record<RoomTarget, string> = {
 const OVERLAYS = [
     '.car-picker',
     '.garage',
+    '.race-photo',
     '.race-menu-overlay',
     '.race-lobby-choice',
 ];
 // where a menu's focus starts
 const DEFAULTS = [
     '.race-menu-primary',
+    '.race-photo-save',
     '.look-hint-primary',
     '.garage-tabs .on',
     '.car-card[aria-pressed="true"]',
@@ -104,6 +106,8 @@ const OS_SCROLL = 1600;
 // garage turntable, in the drag's pixels a second at full stick
 const GARAGE_TURN = 300;
 const GARAGE_TILT = 120;
+// photo mode zoom, in wheel delta a second on a held trigger
+const PHOTO_ZOOM = 500;
 const FLIPPER_KEYS: [number, FlipperButton][] = [
     [BUTTON.A, 'ok'],
     [BUTTON.B, 'back'],
@@ -382,6 +386,16 @@ export default class GamepadController {
                 });
             }
             this.setRev(Boolean(frame.down[BUTTON.RT]));
+        } else if (scope.matches('.race-photo')) {
+            if (frame.rx || frame.ry) {
+                UIEventBus.dispatch('race:photoOrbit', {
+                    dx: frame.rx * GARAGE_TURN * frame.dt,
+                    dy: frame.ry * GARAGE_TILT * frame.dt,
+                });
+            }
+            // the triggers zoom, out on the left one
+            const zoom = (frame.down[BUTTON.LT] ? 1 : 0) - (frame.down[BUTTON.RT] ? 1 : 0);
+            if (zoom) UIEventBus.dispatch('race:photoZoom', { delta: zoom * PHOTO_ZOOM * frame.dt });
         } else if (frame.ry) {
             this.scroll(scope, frame.ry * SCROLL_SPEED * frame.dt);
         }

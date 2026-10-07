@@ -97,4 +97,12 @@ export default class RaceEngineAudio {
         }
         this.carAudio.updateRemotes(this.raceActive ? remotes : [], deltaSeconds);
     }
+
+    setHorn(on: boolean) {
+        this.carAudio.setHorn(on);
+    }
+
+    setRemoteHorn(id: string, on: boolean) {
+        this.carAudio.setRemoteHorn(id, on);
+    }
 }

@@ -13,6 +13,7 @@ import Garage, { GarageState, type GarageTunes } from './components/Garage';
 import CarPicker, { carThumb } from './components/CarPicker';
 import { isLowPowerDevice } from '../Utils/Device';
 import GraphicsInfo from './components/GraphicsInfo';
+import PhotoMode from './components/PhotoMode';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -320,6 +321,7 @@ const App = () => {
         () => Boolean(window.matchMedia?.('(pointer: coarse)').matches)
     );
     const [racePaused, setRacePaused] = useState(false);
+    const [photoMode, setPhotoMode] = useState(false);
     const [pointerLocked, setPointerLocked] = useState(false);
     const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
         getStoredQualityMode()
@@ -468,6 +470,10 @@ const App = () => {
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
             setRacePaused(Boolean(state?.paused));
+        });
+
+        eventBus.on('race:photoState', (state: { on?: boolean } | undefined) => {
+            setPhotoMode(Boolean(state?.on));
         });
 
         eventBus.on(
@@ -895,7 +901,7 @@ const App = () => {
                     onClose={closePicker}
                 />
             )}
-            {showHint && (
+            {showHint && !photoMode && (
                 <div
                     className={[
                         'look-hint',
@@ -1164,7 +1170,7 @@ const App = () => {
                     )}
                 </div>
             )}
-            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && (
+            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && !photoMode && (
                 <div className="lobby-code-banner" data-prevent-click>
                     <span>Lobby Code: {multiplayer.lobbyCode}</span>
                     <button type="button" onClick={handleCopyLobbyCode}>
@@ -1172,7 +1178,7 @@ const App = () => {
                     </button>
                 </div>
             )}
-            {raceModeActive && !garageOpen && (
+            {raceModeActive && !garageOpen && !photoMode && (
                 <RaceHudGauges
                     speedKph={hud.speedKph}
                     gear={displayedGear}
@@ -1191,7 +1197,7 @@ const App = () => {
                     sectors={hud.sectors || null}
                 />
             )}
-            {raceModeActive && hud.map && !garageOpen && (
+            {raceModeActive && hud.map && !garageOpen && !photoMode && (
                 <Minimap
                     outline={trackOutline}
                     bounds={hud.sectors?.bounds || []}
@@ -1201,7 +1207,7 @@ const App = () => {
                     remotes={hud.map.remotes}
                 />
             )}
-            {raceModeActive && !garageOpen && hud.track === 'drift' && hud.drift && (
+            {raceModeActive && !garageOpen && !photoMode && hud.track === 'drift' && hud.drift && (
                 <DriftHud drift={hud.drift} best={driftBoard[0]?.score || 0} />
             )}
             {raceModeActive && trackState.building && (
@@ -1209,7 +1215,7 @@ const App = () => {
                     Building the drift park
                 </div>
             )}
-            {raceModeActive && trackState.track === 'drift' && (
+            {raceModeActive && trackState.track === 'drift' && !photoMode && (
                 <div className="race-hud" data-prevent-click>
                     <div className="race-hud-board">
                         <h4 className="race-board-head">Drift park</h4>
@@ -1228,7 +1234,7 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && trackState.track === 'ring' && (
+            {raceModeActive && trackState.track === 'ring' && !photoMode && (
                 <div className="race-hud" data-prevent-click>
 
                     <div className="race-hud-board">
@@ -1406,7 +1412,7 @@ const App = () => {
             <div className={`garage-fade ${garageFade ? 'on' : ''}`} data-prevent-click={garageFade ? '' : undefined}>
                 <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
             </div>
-            {raceModeActive && racePaused && !lobbyChoiceOpen && (
+            {raceModeActive && racePaused && !lobbyChoiceOpen && !photoMode && (
                 <div className="race-menu-overlay" data-prevent-click>
                     <div className="race-menu-panel" data-prevent-click>
                         <h3>{trackState.track === 'drift' ? 'Drift Park' : 'Nordschleife'} Pause</h3>
@@ -1649,16 +1655,18 @@ const App = () => {
                             W / S or arrows: throttle, brake (stopped, hold S to
                             reverse; manual gears: Q in first). A / D: steer.
                             Space: handbrake. R: back on track. T: restart lap.
-                            G: garage. C: camera.
+                            G: garage. C: camera (chase, far, bumper, hood).
+                            H: horn.
                         </p>
                         <p className="race-menu-controls">
                             Controller: right trigger gas, left trigger brake
                             (stopped, hold to reverse; manual gears: left bumper
                             in first), left stick steer, A handbrake, B
                             look back, X camera, Y back on track, bumpers shift,
-                            right stick look around, View restart lap, Menu
-                            pause. In menus the d-pad or left stick moves, A
-                            picks, B goes back and the bumpers switch tabs.
+                            right stick look around, left stick click horn,
+                            View restart lap, Menu pause. In menus the d-pad or
+                            left stick moves, A picks, B goes back and the
+                            bumpers switch tabs.
                         </p>
                         <p className="race-menu-controls">
                             Drifting: turn in and tap Space, then feather W to
@@ -1716,6 +1724,12 @@ const App = () => {
                             >
                                 Garage
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => eventBus.dispatch('race:photoMode', { on: true })}
+                            >
+                                Photo mode
+                            </button>
                             <button type="button" onClick={handleRaceToggle}>
                                 Exit Race Mode
                             </button>
@@ -1723,6 +1737,7 @@ const App = () => {
                     </div>
                 </div>
             )}
+            {raceModeActive && photoMode && <PhotoMode />}
         </div>
     );
 };

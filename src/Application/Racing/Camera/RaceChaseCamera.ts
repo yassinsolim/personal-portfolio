@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import Application from '../../Application';
 import UIEventBus from '../../UI/EventBus';
 import RaceVehicle from '../Vehicle/RaceVehicle';
+import { probeHood, type HoodSpot } from './hoodProbe';
 
 const MOUSE_SENSITIVITY_X = 0.0022;
 const MOUSE_SENSITIVITY_Y = 0.0016;
@@ -27,6 +28,9 @@ type CameraView = {
     // how far the view swings toward the direction of travel in a slide
     slideFollow: number;
     mounted: boolean;
+    // hood cam: back from the nose as a share of the length, up as a share
+    // of the height, so it lands on the hood of any car
+    hood?: { back: number; up: number };
 };
 
 // chase is low and close so the road streams past, far shows more of the
@@ -62,8 +66,39 @@ const VIEWS: CameraView[] = [
         slideFollow: 0,
         mounted: true,
     },
+    {
+        name: 'hood',
+        distance: 0,
+        height: 0,
+        lookHeight: 0,
+        lookAhead: 22,
+        fov: 66,
+        slideFollow: 0,
+        mounted: true,
+        hood: { back: 0.27, up: 0.78 },
+    },
 ];
 const VIEW_STORAGE_KEY = 'yassinverse:nordschleife:cameraView:v1';
+
+// where a mounted view sits on the car, from its anchor: along is forward, up
+// is up. the hood cam uses the spot probed on the body when it has one
+const mountOf = (
+    view: CameraView,
+    body: THREE.Vector3,
+    rideHeight: number,
+    spot: HoodSpot | null
+) => {
+    if (!view.hood) {
+        return {
+            along: body.z * 0.5 + view.distance,
+            up: view.height - rideHeight,
+            lookUp: view.lookHeight - rideHeight,
+        };
+    }
+    if (spot) return { along: spot.along, up: spot.up, lookUp: spot.up - 0.1 };
+    const up = body.y * view.hood.up - rideHeight;
+    return { along: body.z * (0.5 - view.hood.back), up, lookUp: up - 0.1 };
+};
 
 // critically damped spring toward a target, frame rate independent
 const spring = (
@@ -111,6 +146,17 @@ export default class RaceChaseCamera {
     garageDragIdle = 10;
     // the screen area the garage panel leaves free, in css pixels
     garageFrame: { x: number; y: number; width: number; height: number } | null = null;
+    // photo mode: a free orbit around the paused car
+    photo = false;
+    photoAngle = 0;
+    photoPitch = 0.12;
+    photoZoom = 1;
+    photoFov = 50;
+    // the hood cam's spot, probed once per car model
+    hoodCache: { model: THREE.Object3D | null; spot: HoodSpot | null } = {
+        model: null,
+        spot: null,
+    };
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
@@ -198,6 +244,17 @@ export default class RaceChaseCamera {
         });
         UIEventBus.on('race:garageFrame', (frame: RaceChaseCamera['garageFrame']) => {
             this.garageFrame = frame && frame.width > 0 && frame.height > 0 ? frame : null;
+        });
+        UIEventBus.on('race:photoOrbit', (state: { dx?: number; dy?: number } | undefined) => {
+            this.photoAngle -= (state?.dx || 0) * 0.008;
+            this.photoPitch = Math.min(1.3, Math.max(-0.2, this.photoPitch + (state?.dy || 0) * 0.005));
+        });
+        UIEventBus.on('race:photoZoom', (state: { delta?: number } | undefined) => {
+            const zoom = this.photoZoom * Math.exp((state?.delta || 0) * 0.0015);
+            this.photoZoom = Math.min(4, Math.max(0.4, zoom));
+        });
+        UIEventBus.on('race:photoFov', (state: { fov?: number } | undefined) => {
+            this.photoFov = Math.min(90, Math.max(15, Number(state?.fov) || 50));
         });
         // the graphics preset's draw distance
         UIEventBus.on(
@@ -521,6 +578,11 @@ export default class RaceChaseCamera {
         this.tmpUp.set(0, 1, 0);
         const anchor = this.tmpAnchor.copy(vehicle.position);
 
+        if (this.photo) {
+            this.updatePhoto(camera, anchor, carYaw);
+            return;
+        }
+
         // garage: a slow orbit around the parked car, draggable
         if (this.garage) {
             this.garageAngle += dt * (this.garageDragIdle > 1.5 ? 0.22 : 0);
@@ -660,17 +722,18 @@ export default class RaceChaseCamera {
         const telemetry = vehicle.getTelemetry();
         const anchor = vehicle.position;
         if (view.mounted) {
+            const mount = this.mount(view);
             up.set(0, 1, 0).applyQuaternion(vehicle.carPivot.quaternion);
             const forward = new THREE.Vector3(0, 0, 1)
                 .applyQuaternion(vehicle.carPivot.quaternion)
                 .normalize();
             position
                 .copy(anchor)
-                .addScaledVector(forward, vehicle.bodySize.z * 0.5 + view.distance)
-                .addScaledVector(up, view.height - vehicle.rideHeight);
+                .addScaledVector(forward, mount.along)
+                .addScaledVector(up, mount.up);
             look.copy(position)
                 .addScaledVector(forward, view.lookAhead)
-                .addScaledVector(up, view.lookHeight - view.height);
+                .addScaledVector(up, mount.lookUp - mount.up);
             return view.fov;
         }
         const speed = Math.hypot(vehicle.speedMps, vehicle.lateralSpeed);
@@ -699,7 +762,71 @@ export default class RaceChaseCamera {
         return view.fov + Math.max(0, telemetry.longitudinalG) * 3.5;
     }
 
-    // bumper cam: fixed to the nose, only the shake and fov move
+    // photo mode: drag orbits, scroll zooms, the fov comes from the slider
+    updatePhoto(
+        camera: THREE.PerspectiveCamera,
+        anchor: THREE.Vector3,
+        carYaw: number
+    ) {
+        const vehicle = this.vehicle;
+        if (camera.view?.enabled) camera.clearViewOffset();
+        // zoomed all the way in it stops just off the bumpers
+        const radius = Math.max(
+            vehicle.bodySize.z * 0.5 + 0.5,
+            (vehicle.bodySize.z * 0.8 + 1.8) * this.photoZoom
+        );
+        const angle = carYaw + Math.PI * 0.8 + this.photoAngle;
+        const center = this.tmpLook.copy(anchor);
+        center.y += 0.4;
+        const position = this.tmpPosition.set(
+            center.x + Math.sin(angle) * Math.cos(this.photoPitch) * radius,
+            center.y + Math.sin(this.photoPitch) * radius,
+            center.z + Math.cos(angle) * Math.cos(this.photoPitch) * radius
+        );
+        const ground = vehicle.track.sampleGround(position.x, position.z);
+        if (ground !== null && position.y < ground + 0.12) {
+            position.y = ground + 0.12;
+        }
+        camera.fov = this.photoFov;
+        camera.updateProjectionMatrix();
+        camera.position.copy(position);
+        camera.up.set(0, 1, 0);
+        camera.lookAt(center);
+        this.initialized = false;
+    }
+
+    setPhoto(on: boolean) {
+        this.photo = on;
+        this.initialized = false;
+        if (!on) return;
+        this.photoAngle = 0;
+        this.photoPitch = 0.12;
+        this.photoZoom = 1;
+        this.photoFov = 50;
+    }
+
+    mount(view: CameraView) {
+        const vehicle = this.vehicle;
+        let spot: HoodSpot | null = null;
+        const model = vehicle.carModel;
+        if (view.hood && model) {
+            if (this.hoodCache.model !== model) {
+                this.hoodCache = {
+                    model,
+                    spot: probeHood(
+                        vehicle.carPivot,
+                        model,
+                        vehicle.bodySize.z,
+                        vehicle.rideHeight
+                    ),
+                };
+            }
+            spot = this.hoodCache.spot;
+        }
+        return mountOf(view, vehicle.bodySize, vehicle.rideHeight, spot);
+    }
+
+    // bumper and hood cams: fixed to the car, only the shake and fov move
     updateMounted(
         view: CameraView,
         carYaw: number,
@@ -718,15 +845,15 @@ export default class RaceChaseCamera {
             .set(0, 0, 1)
             .applyQuaternion(vehicle.carPivot.quaternion)
             .normalize();
-        const nose = vehicle.bodySize.z * 0.5 + view.distance;
+        const mount = this.mount(view);
         const position = this.tmpPosition
             .copy(anchor)
-            .addScaledVector(forward, nose)
-            .addScaledVector(up, view.height - vehicle.rideHeight);
+            .addScaledVector(forward, mount.along)
+            .addScaledVector(up, mount.up);
         const look = this.tmpLook
             .copy(position)
             .addScaledVector(forward, view.lookAhead)
-            .addScaledVector(up, view.lookHeight - view.height);
+            .addScaledVector(up, mount.lookUp - mount.up);
         if (!this.initialized) this.fov = view.fov;
         this.applyShake(position, look, telemetry, speed, dt, 0.35);
         this.applyFov(view, telemetry, speed, dt);
