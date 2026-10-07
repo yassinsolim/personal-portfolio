@@ -14,6 +14,7 @@ import CarPicker, { carThumb } from './components/CarPicker';
 import { isLowPowerDevice } from '../Utils/Device';
 import GraphicsInfo from './components/GraphicsInfo';
 import PhotoMode from './components/PhotoMode';
+import LobbyRaceHud, { RaceStandings, type RaceHud } from './components/LobbyRaceHud';
 import eventBus from './EventBus';
 import { carOptions, getStoredCarId, storeCarId } from '../carOptions';
 import type { MultiplayerState } from '../Racing/Multiplayer/MultiplayerService';
@@ -118,6 +119,7 @@ type HudState = {
     map?: { x: number; z: number; heading: number; remotes: Array<{ x: number; z: number }> };
     track?: 'ring' | 'drift';
     drift?: DriftHudState | null;
+    race?: RaceHud | null;
 };
 
 type DriftBoardEntry = {
@@ -477,6 +479,15 @@ const App = () => {
 
         eventBus.on('race:photoState', (state: { on?: boolean } | undefined) => {
             setPhotoMode(Boolean(state?.on));
+        });
+
+        // lining up for a lobby race closes whatever is open over the race
+        eventBus.on('race:lobbyRaceState', (state: { phase?: string } | undefined) => {
+            if (state?.phase !== 'countdown') return;
+            setGarageOpen(false);
+            setGarageFromCard(false);
+            setLobbyChoiceOpen(false);
+            setPickerOpen(false);
         });
 
         eventBus.on(
@@ -859,6 +870,8 @@ const App = () => {
     };
 
     const displayedGear = hud.gear < 0 ? 'R' : String(hud.gear);
+    // lined up or racing in a lobby race: no garage until it's over
+    const inLobbyRace = Boolean(hud.race?.entered && hud.race.phase !== 'finished');
     const multiplayerBusy = multiplayer.connecting;
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
     const panelMenu = compactPanel && !raceModeActive && !deskView;
@@ -877,7 +890,7 @@ const App = () => {
     }, []);
 
     useEffect(() => {
-        if (!raceModeActive || garageOpen || racePaused) return undefined;
+        if (!raceModeActive || garageOpen || racePaused || inLobbyRace) return undefined;
         const onKey = (event: KeyboardEvent) => {
             if (event.code !== 'KeyG' || event.repeat) return;
             if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -890,7 +903,7 @@ const App = () => {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [raceModeActive, garageOpen, racePaused, openGarageFromRace]);
+    }, [raceModeActive, garageOpen, racePaused, inLobbyRace, openGarageFromRace]);
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
@@ -1134,6 +1147,7 @@ const App = () => {
                                 type="button"
                                 className="race-garage"
                                 onClick={openGarageFromRace}
+                                disabled={inLobbyRace}
                             >
                                 <svg viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="M21.7 7.1a6 6 0 0 1-7.9 6.7l-7.4 7.4a2.1 2.1 0 0 1-3-3l7.4-7.4a6 6 0 0 1 6.7-7.9l-3.6 3.6 1 2.9 2.9 1z" />
@@ -1173,7 +1187,7 @@ const App = () => {
                     )}
                 </div>
             )}
-            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && !photoMode && (
+            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && !photoMode && !hud.race?.entered && (
                 <div className="lobby-code-banner" data-prevent-click>
                     <span>Lobby Code: {multiplayer.lobbyCode}</span>
                     <button type="button" onClick={handleCopyLobbyCode}>
@@ -1200,6 +1214,9 @@ const App = () => {
                     ghost={hud.ghost || null}
                     sectors={hud.sectors || null}
                 />
+            )}
+            {raceModeActive && hud.race && !garageOpen && !photoMode && (
+                <LobbyRaceHud race={hud.race} />
             )}
             {raceModeActive && typeof hud.rewind === 'number' && !photoMode && (
                 <div className="race-rewind" data-prevent-click>
@@ -1251,6 +1268,9 @@ const App = () => {
             )}
             {raceModeActive && trackState.track === 'ring' && !photoMode && (
                 <div className="race-hud" data-prevent-click>
+                    {hud.race && !(hud.race.entered && hud.race.phase === 'finished') && (
+                        <RaceStandings race={hud.race} />
+                    )}
 
                     <div className="race-hud-board">
                         <h4 className="race-board-head">
@@ -1648,6 +1668,58 @@ const App = () => {
                             </div>
                         )}
 
+                        {trackState.track === 'ring' &&
+                            multiplayer.mode === 'lobby' &&
+                            multiplayer.connected && (
+                                <div className="race-menu-row">
+                                    <span>Lobby race</span>
+                                    {!multiplayer.isHost ? (
+                                        hud.race?.entered && hud.race.phase === 'finished' ? (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    eventBus.dispatch('race:lobbyRaceLeave', {})
+                                                }
+                                            >
+                                                Back to free drive
+                                            </button>
+                                        ) : (
+                                            <em className="race-menu-note">
+                                                {inLobbyRace
+                                                    ? 'Racing'
+                                                    : 'The host starts races'}
+                                            </em>
+                                        )
+                                    ) : inLobbyRace ? (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                eventBus.dispatch('race:lobbyRaceEnd', {})
+                                            }
+                                        >
+                                            End race
+                                        </button>
+                                    ) : (
+                                        <div className="race-quality-buttons">
+                                            {[1, 2, 3].map((laps) => (
+                                                <button
+                                                    type="button"
+                                                    key={laps}
+                                                    disabled={multiplayer.players.length < 2}
+                                                    onClick={() =>
+                                                        eventBus.dispatch('race:lobbyRaceStart', {
+                                                            laps,
+                                                        })
+                                                    }
+                                                >
+                                                    {laps === 1 ? '1 lap' : `${laps} laps`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
                         <div className="race-menu-row">
                             <label htmlFor="race-steering-range">Steering</label>
                             <input
@@ -1710,6 +1782,13 @@ const App = () => {
                             to 10 s (driving alone on the ring); a lap that uses
                             it won't count either.
                         </p>
+                        <p className="race-menu-controls">
+                            Lobby races: the host picks the laps here. Everyone
+                            lines up on the grid in the order they joined, counts
+                            down to the same green light and races; places go by
+                            who is furthest round, and the result shows at the
+                            flag.
+                        </p>
 
                         <p className="race-menu-credits">
                             Track: © OpenStreetMap contributors (ODbL).
@@ -1734,6 +1813,7 @@ const App = () => {
                             </button>
                             <button
                                 type="button"
+                                disabled={inLobbyRace}
                                 onClick={() => {
                                     eventBus.dispatch('race:setPaused', { paused: false });
                                     openGarage(false);

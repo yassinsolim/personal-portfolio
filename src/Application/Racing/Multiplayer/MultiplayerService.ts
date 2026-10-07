@@ -41,7 +41,17 @@ export type MultiplayerPlayerState = {
     sampleAtMs?: number;
     look?: CarLook;
     tuned?: boolean;
+    // a lobby race: which one, and how far in it (laps)
+    raceId?: string;
+    raceDistance?: number;
 };
+
+// the host starts a race, everyone says when they're over the line, the host
+// can call it off. times are the sender's clock (epoch ms) or race times
+export type LobbyRaceMessage =
+    | { kind: 'start'; from: string; raceId: string; laps: number; startAt: number; grid: string[] }
+    | { kind: 'finish'; from: string; raceId: string; timeMs: number }
+    | { kind: 'end'; from: string; raceId: string };
 
 export type MultiplayerBump = {
     target: string;
@@ -99,6 +109,8 @@ type MultiplayerTelemetryPayload = {
     velocity?: [number, number];
     yaw_rate?: number;
     ghost?: boolean;
+    race_id?: string;
+    race_distance?: number;
     sent_at: string;
 };
 
@@ -217,6 +229,7 @@ export default class MultiplayerService {
     listeners: Set<(state: MultiplayerState) => void>;
     bumpListeners: Set<(bump: MultiplayerBump) => void>;
     hornListeners = new Set<(from: string, on: boolean) => void>();
+    raceListeners = new Set<(message: LobbyRaceMessage) => void>();
     lastTelemetrySentAt: number;
     lastTelemetryStateEmitAt: number;
     lastTelemetrySignature: string;
@@ -532,6 +545,8 @@ export default class MultiplayerService {
         velocity?: { x: number; z: number };
         yawRate?: number;
         ghost?: boolean;
+        raceId?: string;
+        raceDistance?: number;
     }) {
         if (!this.connected || !this.channel) return;
         // nobody to send to
@@ -595,6 +610,15 @@ export default class MultiplayerService {
             ],
             yaw_rate: this.roundTo(this.clampNumber(payload.yawRate ?? 0, -12, 12), 3),
             ghost: Boolean(payload.ghost),
+            ...(payload.raceId
+                ? {
+                      race_id: payload.raceId,
+                      race_distance: this.roundTo(
+                          this.clampNumber(payload.raceDistance ?? 0, -1, 20),
+                          4
+                      ),
+                  }
+                : {}),
             sent_at: new Date(now).toISOString(),
             look: encodeLook(this.localLook),
             tuned: this.localTuned,
@@ -722,6 +746,10 @@ export default class MultiplayerService {
         channel.on('broadcast', { event: 'horn' }, ({ payload }) => {
             this.handleRemoteHorn(payload);
         });
+
+        channel.on('broadcast', { event: 'race' }, ({ payload }) => {
+            this.handleRemoteRace(payload);
+        });
     }
 
     // car to car contact: the client that resolved it sends the other car its
@@ -783,6 +811,72 @@ export default class MultiplayerService {
         if (!from || from === this.localSessionId) return;
         const on = parsed.on === true;
         this.hornListeners.forEach((listener) => listener(from, on));
+    }
+
+    onRace(listener: (message: LobbyRaceMessage) => void) {
+        this.raceListeners.add(listener);
+        return () => this.raceListeners.delete(listener);
+    }
+
+    sendRace(message: LobbyRaceMessage) {
+        if (!this.connected || !this.channel) return;
+        if (!this.hasRemotePlayers()) return;
+        this.channel.send({
+            type: 'broadcast',
+            event: 'race',
+            payload: { ...message, from: this.localSessionId },
+        });
+    }
+
+    handleRemoteRace(payload: unknown) {
+        if (!payload || typeof payload !== 'object') return;
+        const parsed = payload as Record<string, unknown>;
+        const from = this.sanitizeSessionId(String(parsed.from || ''));
+        const raceId = String(parsed.raceId || '').replace(/[^a-z0-9]/gi, '').slice(0, 16);
+        if (!from || from === this.localSessionId || !raceId) return;
+        let message: LobbyRaceMessage | null = null;
+        if (parsed.kind === 'start' || parsed.kind === 'end') {
+            // only the host starts or ends one
+            if (!this.players.get(from)?.isHost) return;
+        }
+        if (parsed.kind === 'start') {
+            const grid = Array.isArray(parsed.grid)
+                ? parsed.grid
+                      .map((id) => this.sanitizeSessionId(String(id || '')))
+                      .filter(Boolean)
+                      .slice(0, 16)
+                : [];
+            message = {
+                kind: 'start',
+                from,
+                raceId,
+                laps: Math.round(this.clampNumber(parsed.laps, 1, 5)),
+                startAt: this.toLocalTime(from, Number(parsed.startAt)),
+                grid,
+            };
+        } else if (parsed.kind === 'finish') {
+            message = {
+                kind: 'finish',
+                from,
+                raceId,
+                timeMs: this.clampNumber(parsed.timeMs, 1, 7200000),
+            };
+        } else if (parsed.kind === 'end') {
+            message = { kind: 'end', from, raceId };
+        }
+        if (message) {
+            const known = message;
+            this.raceListeners.forEach((listener) => listener(known));
+        }
+    }
+
+    // another player's clock (epoch ms) on ours: the skew estimateSampleTime
+    // finds from the lowest delay seen on their telemetry
+    toLocalTime(sessionId: string, remoteMs: number) {
+        if (!Number.isFinite(remoteMs)) return Date.now();
+        const seen = this.peerDelays.get(sessionId);
+        const skew = seen && (seen.floor < -20 || seen.floor > 400) ? seen.floor - 60 : 0;
+        return remoteMs + skew;
     }
 
     subscribeChannel(channel: RealtimeChannel, timeoutMs: number) {
@@ -1168,6 +1262,13 @@ export default class MultiplayerService {
         player.ghost = Boolean(parsed.ghost);
         if (typeof parsed.look === 'string') player.look = decodeLook(parsed.look);
         player.tuned = parsed.tuned === true;
+        if (typeof parsed.race_id === 'string' && parsed.race_id) {
+            player.raceId = parsed.race_id.replace(/[^a-z0-9]/gi, '').slice(0, 16);
+            player.raceDistance = this.clampNumber(parsed.race_distance, -1, 20);
+        } else {
+            player.raceId = undefined;
+            player.raceDistance = undefined;
+        }
         player.lastSeenAt = nowIso;
         player.sampleAtMs = this.estimateSampleTime(sessionId, parsed.sent_at);
 

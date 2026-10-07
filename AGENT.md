@@ -526,6 +526,20 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   won't count. Ring only, alone (not with other players connected), and the buffer clears
   at the line, on a restart, a reset, a car change and the garage, so it never reaches
   back over a lap or a setup.
+- Lobby races (`Multiplayer/LobbyRace.ts`, the pause menu's Lobby race row, host only, 2+
+  players): one `race` broadcast starts it with the laps, the grid (the lobby by join
+  order, the same order as the spawn slots) and the green light on the host's clock 6 s
+  out, moved onto each player's clock with the skew `estimateSampleTime` already finds.
+  Everyone on the grid goes to their slot and is held there (no physics steps, the throttle
+  revs it like on the garage stand) until green. Laps count off the lap timer's
+  completions, from the green light (cars behind the line start their first lap at it).
+  Telemetry carries `race_id` and `race_distance` (laps done plus the lap's share, just
+  under 0 behind the line), places go by that, finished cars by their race time, and on
+  the grid by grid order (side by side cars swapped on centimetres). A `finish` broadcast
+  per car, an `end` from the host; leaving the lobby ends it locally. No restart or garage
+  while lined up or racing, and someone who joined after the start only sees the places.
+  Two mock windows check it (`/tmp/lobbyrace.mjs`-style: the guest's flag is forced with
+  `countRaceLap()`, a ring lap is 7 minutes).
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

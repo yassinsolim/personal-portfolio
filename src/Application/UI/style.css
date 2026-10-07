@@ -684,6 +684,17 @@ br {
     fill: #ff9a3c;
 }
 
+/* no garage in the middle of a lobby race */
+.look-hint .race-actions .race-garage:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.race-menu-actions button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
 .look-hint .race-actions .race-toggle {
     grid-column: 1 / -1;
     justify-content: center;
@@ -1174,6 +1185,170 @@ body.race-mode-touch #ui-app {
     gap: 10px;
     font-size: 11px;
     color: rgba(255, 255, 255, 0.84);
+}
+
+/* a lobby race: the places, you in orange */
+.race-standings h4 {
+    display: flex;
+    justify-content: space-between;
+}
+
+.race-standings h4 span {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.race-standings ol {
+    padding-left: 0;
+}
+
+.race-standings li.you {
+    color: #ffae5c;
+    font-weight: 700;
+}
+
+.race-countdown {
+    position: fixed;
+    top: 28%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    text-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
+    pointer-events: none;
+}
+
+.race-countdown strong {
+    font-size: 120px;
+    font-weight: 800;
+    line-height: 1;
+    animation: race-count 1s ease-out;
+}
+
+.race-countdown strong.race-countdown-ready {
+    font-size: 44px;
+    animation: none;
+}
+
+.race-countdown small {
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.85;
+}
+
+.race-countdown.go strong {
+    color: #5dff8a;
+}
+
+@keyframes race-count {
+    from {
+        transform: scale(1.35);
+        opacity: 0.4;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.race-pill {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 23;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    padding: 6px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(12, 13, 16, 0.72);
+    backdrop-filter: blur(6px);
+    color: rgba(255, 255, 255, 0.85);
+    font-family: monospace;
+    font-size: 13px;
+    pointer-events: none;
+}
+
+.race-pill strong {
+    color: #ffae5c;
+    font-size: 20px;
+}
+
+.race-pill strong small {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.race-result {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 38;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    width: min(340px, calc(100vw - 32px));
+    padding: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(27, 28, 33, 0.95), rgba(14, 15, 18, 0.95));
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
+}
+
+.race-result h3 {
+    margin: 0;
+    font-family: inherit;
+    font-size: 22px;
+}
+
+.race-result h3 small {
+    font-size: 14px;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.race-result p {
+    margin: 0;
+    font-family: monospace;
+    font-size: 16px;
+    color: #ffae5c;
+}
+
+.race-result .race-standings {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.race-result button {
+    height: 34px;
+    padding: 0 16px;
+    border: 1px solid rgba(255, 176, 100, 0.9);
+    border-radius: 9px;
+    background: linear-gradient(180deg, #ff9d33, #ff7b00);
+    color: #1c1105;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.race-menu-note {
+    font-style: normal;
+    opacity: 0.6;
 }
 
 .race-touch-controls {
