@@ -468,16 +468,19 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   model on the flat (flat out from rest for the drive at each m/s, flat out on the brakes from
   its top speed), grip from its tires (times 0.93) plus downforce. A point mass then laps the
   ring's racing line (forward and backward passes, the friction circle shared between cornering
-  and the pedals, slopes from the track). The lap gives the index: 999 at 6:12 and quicker,
+  and the pedals, slopes from the track). The lap gives the index: 999 at 5:46 and quicker,
   2.6 points a second slower (`REFERENCE_LAP`, `POINTS_PER_SECOND`), classes D to X at Forza's
-  cut offs. Stock cars land Crown C 524, Supra C 590, E92 B 649, M4 B 696, M5 A 704, Huracan
-  A 763, Aventador S1 802, AMG One S1 858, Valkyrie S2 912, Jesko S2 988. The garage shows the
+  cut offs. Stock cars (simulated lap) land Crown C 519 (8:51), Supra C 597, E92 B 650 (8:00),
+  M4 B 695, M5 A 715, Huracan A 771, Aventador S1 806, AMG One S1 863, Valkyrie S2 914 (6:19),
+  Jesko S2 988 (5:50). The garage shows the
   badge and five bars (top speed, grip at 150 km/h, 0 to 200, 0 to 100, 200 to 0), worked out
   150 ms after the setup settles (`schedulePerformance`) and cached per setup; about 15 ms.
 - Racing line (`Track/racingLine.ts`): minimum curvature within the asphalt less 1.4 m, coarse
   to fine over the track's 8192 frames, each pass moving a point to (4 (b + c) - (a + d)) / 6
   of its neighbours (the minimum of the squared second differences; plain neighbour averaging
-  is the shortest path and hugs the insides). About 25 ms, built the first time it's needed.
+  is the shortest path and hugs the insides). About 25 ms, built the first time it's needed,
+  from the page's own track frames: frames dumped to json lost enough in their tangents to
+  make a line 26 s slower for the E92, so calibrate against a line built in the page.
   The driving line (`Visuals/RacingLineView.ts`, pause menu: off by default, Braking, Full)
   draws 140 points (350 m) ahead on the road ribbon's own banked frame (`getRibbonFrame`, the
   collider sits a little under the asphalt and hid it), green, yellow over the line's speed by

@@ -165,7 +165,7 @@ export type PerformanceClass = 'D' | 'C' | 'B' | 'A' | 'S1' | 'S2' | 'X';
 // the index from the simulated lap: 999 at REFERENCE_LAP and quicker, a few
 // points a second slower than that. puts the stock cars about where Forza
 // has them, the Crown in C up to the Jesko at the top of S2
-const REFERENCE_LAP = 372;
+const REFERENCE_LAP = 346;
 const POINTS_PER_SECOND = 2.6;
 
 export const performanceIndex = (lapSeconds: number) =>
