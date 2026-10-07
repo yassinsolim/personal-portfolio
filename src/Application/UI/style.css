@@ -1177,6 +1177,39 @@ body.race-mode-touch #ui-app {
     text-align: left;
 }
 
+/* each track's lap as a line on its card, white on the picked one */
+.track-map {
+    display: block;
+    flex: none;
+    width: 100%;
+    height: 46px;
+    margin-bottom: 6px;
+    color: rgba(255, 255, 255, 0.4);
+    transition: color 0.15s ease;
+}
+
+.track-map path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5px;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.track-map circle {
+    fill: currentColor;
+}
+
+.on > .track-map,
+button:hover:not(:disabled) > .track-map {
+    color: #fff;
+}
+
+.look-hint .track-pick .track-map {
+    height: 34px;
+    margin-bottom: 4px;
+}
+
 .pm-track strong {
     color: #fff;
     font-size: 13.5px;
