@@ -14,6 +14,7 @@ const RESTART_KEYS = ['KeyT', 'Backspace'];
 const SHIFT_UP_KEYS = ['KeyE'];
 const SHIFT_DOWN_KEYS = ['KeyQ'];
 const HORN_KEYS = ['KeyH'];
+const REWIND_KEYS = ['KeyZ'];
 const PREVENT_DEFAULT_KEYS = new Set([
     'Space',
     'ArrowUp',
@@ -45,6 +46,7 @@ const PAD_MENU = BUTTON.MENU;
 const PAD_LEFT = BUTTON.LEFT;
 const PAD_RIGHT = BUTTON.RIGHT;
 const PAD_HORN = BUTTON.L3;
+const PAD_REWIND = BUTTON.DOWN;
 const STICK_DEADZONE = 0.08;
 const LOOK_DEADZONE = 0.2;
 const TRIGGER_DEADZONE = 0.04;
@@ -96,6 +98,9 @@ export default class DrivingInput {
     // held: h or the left stick click
     horn = false;
     padHorn = false;
+    // held: z or down on the d-pad
+    rewind = false;
+    padRewind = false;
     source: InputSource;
     padButtons: boolean[];
     pendingShift: number;
@@ -267,6 +272,8 @@ export default class DrivingInput {
         this.look.back = false;
         this.horn = false;
         this.padHorn = false;
+        this.rewind = false;
+        this.padRewind = false;
     }
 
     anyKey(codes: string[]) {
@@ -302,6 +309,7 @@ export default class DrivingInput {
             this.look.y = 0;
             this.look.back = false;
             this.padHorn = false;
+            this.padRewind = false;
             return null;
         }
         const steerAxis = pad.axes[0] ?? 0;
@@ -346,6 +354,7 @@ export default class DrivingInput {
         this.look.y = lookY;
         this.look.back = Boolean(pad.buttons[PAD_B]?.pressed);
         this.padHorn = Boolean(pad.buttons[PAD_HORN]?.pressed);
+        this.padRewind = Boolean(pad.buttons[PAD_REWIND]?.pressed);
 
         const active =
             state.throttle > 0 ||
@@ -364,6 +373,8 @@ export default class DrivingInput {
         const pad = this.enabled ? this.readGamepad() : null;
         const smooth = this.smoothState;
         this.horn = this.enabled && (this.anyKey(HORN_KEYS) || (pad !== null && this.padHorn));
+        this.rewind =
+            this.enabled && (this.anyKey(REWIND_KEYS) || (pad !== null && this.padRewind));
 
         if (pad && this.source === 'gamepad') {
             this.intent.throttle = pad.throttle;

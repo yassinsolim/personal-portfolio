@@ -37,6 +37,8 @@ type Props = {
     // ms behind (positive) or ahead of the best lap at this point
     delta: number | null;
     dirty: boolean;
+    // the lap used rewind
+    rewound: boolean;
     lastDirty: boolean;
     ghost: GhostHud | null;
     sectors: SectorHud | null;
@@ -207,7 +209,9 @@ const RaceHudGauges = (props: Props) => (
             </div>
             {props.lapRunning && props.dirty && (
                 <div className="race-lap-dirty">
-                    Track limits: this lap won't count
+                    {props.rewound
+                        ? "Rewind used: this lap won't count"
+                        : "Track limits: this lap won't count"}
                 </div>
             )}
             <div className="race-lap-row">

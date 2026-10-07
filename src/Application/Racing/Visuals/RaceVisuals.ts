@@ -149,6 +149,8 @@ export default class RaceVisuals {
     private scraping = false;
     // photo mode: no speed streaks on a still
     photo = false;
+    // a rewind playing back: no new skid marks or sparks along the way
+    rewinding = false;
     private lastImpact = 0;
     private lastHitAt = 0;
     private hitPoint = new THREE.Vector3();
@@ -903,7 +905,7 @@ export default class RaceVisuals {
 
         // sparks where the body grinds a barrier: a stream by the second while
         // it scrapes, and a burst with a flash when it hits
-        if (vehicle.barrierContact !== 0 && speedKph > 20) {
+        if (vehicle.barrierContact !== 0 && speedKph > 20 && !this.rewinding) {
             const frame = vehicle.trackFrame;
             this.away
                 .set(frame.leftX, 0, frame.leftZ)
@@ -955,7 +957,7 @@ export default class RaceVisuals {
             const surface = vehicle.wheelSurfaces[index];
             const onRoad = surface === 'asphalt' || surface === 'kerb';
             const slide =
-                vehicle.grounded && onRoad ? this.wheelSlide(index) : 0;
+                vehicle.grounded && onRoad && !this.rewinding ? this.wheelSlide(index) : 0;
             this.wheelContact.copy(point);
             this.skids.track(index, this.wheelContact, up, slide);
         });
