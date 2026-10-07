@@ -216,6 +216,7 @@ export default class MultiplayerService {
     laps: MultiplayerLapState[];
     listeners: Set<(state: MultiplayerState) => void>;
     bumpListeners: Set<(bump: MultiplayerBump) => void>;
+    hornListeners = new Set<(from: string, on: boolean) => void>();
     lastTelemetrySentAt: number;
     lastTelemetryStateEmitAt: number;
     lastTelemetrySignature: string;
@@ -717,6 +718,10 @@ export default class MultiplayerService {
         channel.on('broadcast', { event: 'bump' }, ({ payload }) => {
             this.handleRemoteBump(payload);
         });
+
+        channel.on('broadcast', { event: 'horn' }, ({ payload }) => {
+            this.handleRemoteHorn(payload);
+        });
     }
 
     // car to car contact: the client that resolved it sends the other car its
@@ -752,6 +757,32 @@ export default class MultiplayerService {
             pz: this.clampNumber(parsed.pz, -500000, 500000),
         };
         this.bumpListeners.forEach((listener) => listener(bump));
+    }
+
+    // a held horn is sent again every so often, so a lost "off" can't leave
+    // it stuck on for the others
+    onHorn(listener: (from: string, on: boolean) => void) {
+        this.hornListeners.add(listener);
+        return () => this.hornListeners.delete(listener);
+    }
+
+    sendHorn(on: boolean) {
+        if (!this.connected || !this.channel) return;
+        if (!this.hasRemotePlayers()) return;
+        this.channel.send({
+            type: 'broadcast',
+            event: 'horn',
+            payload: { from: this.localSessionId, on },
+        });
+    }
+
+    handleRemoteHorn(payload: unknown) {
+        if (!payload || typeof payload !== 'object') return;
+        const parsed = payload as { from?: string; on?: boolean };
+        const from = this.sanitizeSessionId(parsed.from || '');
+        if (!from || from === this.localSessionId) return;
+        const on = parsed.on === true;
+        this.hornListeners.forEach((listener) => listener(from, on));
     }
 
     subscribeChannel(channel: RealtimeChannel, timeoutMs: number) {

@@ -59,6 +59,10 @@ type Laps = { lapTimer: LapTimer; sectors: SectorTimer };
 const DRIFT_MIN_LAP_MS = 30_000;
 // all four wheels past the road's edge this long and the lap won't count
 const DIRTY_AFTER_S = 0.1;
+// a held horn is sent again this often, the others drop it after 0.8 s
+const HORN_RESEND_MS = 400;
+// photos are saved at up to this times the css size
+const PHOTO_MAX_RATIO = 2;
 
 // who the ghost on the ring is, for the hud
 type GhostLabel = {
@@ -169,6 +173,10 @@ export default class RaceManager {
     lapTimer: LapTimer;
     sectors: SectorTimer;
     garageOpen = false;
+    photoMode = false;
+    // the horn as last sent and when, a held one is sent again now and then
+    hornOn = false;
+    hornSentAt = 0;
     garageScene: GarageScene | null = null;
     // what the garage hid or swapped, put back when it closes
     garageStash: {
@@ -329,6 +337,9 @@ export default class RaceManager {
         this.multiplayer.onBump((bump) => {
             if (this.active) this.collisions.applyBump(bump);
         });
+        this.multiplayer.onHorn((from, on) => {
+            if (this.active) this.engineAudio.setRemoteHorn(from, on);
+        });
         this.remoteVehicles = new Map();
         this.remoteSmokeCooldownBySession = new Map();
         this.pendingRemoteCarLoads = new Set();
@@ -422,6 +433,14 @@ export default class RaceManager {
                 this.setPaused(Boolean(state?.paused));
             }
         );
+
+        UIEventBus.on('race:photoMode', (state: { on?: boolean } | undefined) => {
+            this.setPhotoMode(Boolean(state?.on));
+        });
+
+        UIEventBus.on('race:photoSave', () => {
+            if (this.photoMode) this.savePhoto();
+        });
 
         UIEventBus.on('race:requestLeaderboard', () => {
             this.refreshLeaderboard();
@@ -833,6 +852,7 @@ export default class RaceManager {
 
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
+        this.setPhotoMode(false);
         if (this.garageOpen) {
             this.garageOpen = false;
             this.chaseCamera.garage = false;
@@ -842,6 +862,7 @@ export default class RaceManager {
         void this.multiplayer.suspend();
 
         this.active = false;
+        this.updateHorn(0);
         // race mode always opens on the ring
         if (this.trackMode !== 'ring') this.applyTrackMode('ring');
         this.paused = false;
@@ -919,6 +940,7 @@ export default class RaceManager {
     }
 
     setPaused(paused: boolean) {
+        if (!paused) this.setPhotoMode(false);
         this.paused = paused;
         this.vehicle.setActive(!paused);
         this.chaseCamera.setPaused(paused);
@@ -931,6 +953,44 @@ export default class RaceManager {
         }
         UIEventBus.dispatch('race:pauseState', { paused });
         this.dispatchState();
+    }
+
+    // the race stays paused under it, the menus hide and the camera orbits
+    setPhotoMode(on: boolean) {
+        if (on && (!this.active || this.garageOpen)) return;
+        if (on === this.photoMode) return;
+        this.photoMode = on;
+        if (on && !this.paused) this.setPaused(true);
+        this.chaseCamera.setPhoto(on);
+        this.visuals.photo = on;
+        UIEventBus.dispatch('race:photoState', { on });
+    }
+
+    // the canvas isn't kept between frames, so the photo is drawn again and
+    // read straight back, sharper than the screen when it can be
+    savePhoto() {
+        const renderer = this.application.renderer;
+        const gl = renderer.instance;
+        const before = gl.getPixelRatio();
+        const ratio = Math.max(before, Math.min(PHOTO_MAX_RATIO, window.devicePixelRatio || 1));
+        if (ratio !== before) {
+            gl.setPixelRatio(ratio);
+            renderer.sceneResize?.();
+        }
+        if (renderer.sceneRender) renderer.sceneRender(0);
+        else gl.render(renderer.scene, this.application.camera.instance);
+        const url = gl.domElement.toDataURL('image/png');
+        if (ratio !== before) {
+            gl.setPixelRatio(before);
+            renderer.sceneResize?.();
+        }
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `yassin-app-${this.vehicle.currentCarId || 'car'}-${stamp}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
     }
 
     publishGarage() {
@@ -1845,6 +1905,21 @@ export default class RaceManager {
         this.remoteSmoke.update(deltaSeconds);
     }
 
+    // h or the left stick click. the others hear it from where the car is
+    updateHorn(nowMs: number) {
+        const on =
+            this.active && !this.paused && !this.garageOpen && this.vehicle.input.horn;
+        if (on !== this.hornOn) {
+            this.hornOn = on;
+            this.engineAudio.setHorn(on);
+            this.multiplayer.sendHorn(on);
+            this.hornSentAt = nowMs;
+        } else if (on && nowMs - this.hornSentAt > HORN_RESEND_MS) {
+            this.multiplayer.sendHorn(true);
+            this.hornSentAt = nowMs;
+        }
+    }
+
     // the camera is the listener; ghost and multiplayer cars are placed in 3d
     updateWorldAudio(deltaSeconds: number) {
         const camera = this.application.camera.instance;
@@ -2107,11 +2182,16 @@ export default class RaceManager {
         );
         this.chaseCamera.update(delta);
         if (this.lineView) {
-            const position = this.vehicle.position;
-            this.lineView.update(position.x, position.z, this.vehicle.velocity.length());
+            if (this.photoMode) {
+                this.lineView.mesh.visible = false;
+            } else {
+                const position = this.vehicle.position;
+                this.lineView.update(position.x, position.z, this.vehicle.velocity.length());
+            }
         }
         this.visuals.update(delta);
         this.updateWorldAudio(delta);
+        this.updateHorn(nowMs);
 
         if (nowMs - this.lastHudDispatchMs > 75) {
             this.lastHudDispatchMs = nowMs;

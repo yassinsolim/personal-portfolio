@@ -2,6 +2,7 @@ import AudioBank, { type AudioBankData, RACE_AUDIO_BASE } from './AudioBank';
 import EngineVoice from './EngineVoice';
 import DriveSounds from './DriveSounds';
 import DerivedDrivetrain from './derivedDrivetrain';
+import Horn, { hornPitch } from './Horn';
 import { bankOf, engineProfile, getCarAudioProfile } from './carAudioProfiles';
 import { carOptionsById } from '../../carOptions';
 import type { EngineSound } from '../Garage/engines';
@@ -72,6 +73,9 @@ type RemoteVoice = {
     lastPosition: Vec3 | null;
     speedMps: number;
     missing: number;
+    horn: Horn | null;
+    // a held horn is refreshed over the network, it stops if that does
+    hornUntil: number;
 };
 
 const MAX_REMOTE_VOICES = 6;
@@ -131,6 +135,7 @@ export default class CarAudio {
     lastImpact: number;
     time: number;
     remotes: Map<string, RemoteVoice>;
+    horn: Horn | null;
     listenerPosition: Vec3;
     unlockHandler: () => void;
     visibilityHandler: () => void;
@@ -169,6 +174,7 @@ export default class CarAudio {
         this.lastImpact = 0;
         this.time = 0;
         this.remotes = new Map();
+        this.horn = null;
         this.listenerPosition = { x: 0, y: 0, z: 0 };
         this.suspendTimer = null;
         this.startupUntil = 0;
@@ -580,10 +586,39 @@ export default class CarAudio {
             }
         });
         this.remotes.forEach((remote) => {
+            if (remote.horn && remote.hornUntil && now > remote.hornUntil) {
+                remote.horn.set(false);
+                remote.hornUntil = 0;
+            }
             if (seen.has(remote.id)) return;
             remote.missing += dt;
             if (remote.missing > 0.5) this.dropRemote(remote);
         });
+    }
+
+    // the local car's horn, on the fx bus so it pauses with everything else
+    setHorn(on: boolean) {
+        const context = this.context;
+        if (!context || !this.fxBus) return;
+        if (!this.horn) {
+            if (!on) return;
+            this.horn = new Horn(context, this.fxBus);
+        }
+        if (on) this.horn.setPitch(hornPitch(this.wantedCarId || this.voiceCarId));
+        this.horn.set(on);
+    }
+
+    // another player's horn, from where their car is
+    setRemoteHorn(id: string, on: boolean) {
+        const context = this.context;
+        const remote = this.remotes.get(id);
+        if (!context || !remote) return;
+        if (!remote.horn) {
+            if (!on) return;
+            remote.horn = new Horn(context, remote.filter, hornPitch(remote.carId), 0.2);
+        }
+        remote.horn.set(on);
+        remote.hornUntil = on ? context.currentTime + 0.8 : 0;
     }
 
     addRemote(car: RemoteCarAudioState): RemoteVoice {
@@ -617,6 +652,8 @@ export default class CarAudio {
             lastPosition: null,
             speedMps: 0,
             missing: 0,
+            horn: null,
+            hornUntil: 0,
         };
         this.remotes.set(car.id, remote);
         void this.banks.load(context, bankOf(car.carId)).then((bank) => {
@@ -634,6 +671,7 @@ export default class CarAudio {
 
     dropRemote(remote: RemoteVoice) {
         remote.voice?.dispose(0.3);
+        remote.horn?.dispose();
         const { gain, filter, panner } = remote;
         if (typeof window !== 'undefined') {
             window.setTimeout(() => {
