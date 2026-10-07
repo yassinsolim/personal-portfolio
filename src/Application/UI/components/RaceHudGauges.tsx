@@ -42,7 +42,7 @@ type Props = {
     sectors: SectorHud | null;
 };
 
-const formatTime = (ms: number) => {
+export const formatTime = (ms: number) => {
     if (!(ms > 0)) return '--:--.---';
     const minutes = Math.floor(ms / 60000);
     const seconds = Math.floor((ms % 60000) / 1000);

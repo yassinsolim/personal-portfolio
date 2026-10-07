@@ -210,6 +210,7 @@ export default class RaceManager {
     defaultSceneFog: THREE.Fog | THREE.FogExp2 | null;
     ghostLapId: string | null = null;
     ghostSyncSerial = 0;
+    garageTunesSerial = 0;
     physicsAccumulator: number;
     lastPhysicsStepTimeMs: number;
     debugGameEnabled: boolean;
@@ -491,7 +492,10 @@ export default class RaceManager {
             // the vehicle loads that car's garage setup on the same event
             window.setTimeout(() => {
                 this.publishGarage();
-                if (this.garageOpen) this.dispatchGarage();
+                if (this.garageOpen) {
+                    this.dispatchGarage();
+                    void this.dispatchGarageTunes();
+                }
             }, 0);
         });
 
@@ -509,6 +513,7 @@ export default class RaceManager {
             if (open) {
                 this.garageSetupAtOpen = JSON.stringify([this.vehicle.look, this.vehicle.tune]);
                 this.dispatchGarage();
+                void this.dispatchGarageTunes();
             } else if (this.garageSetupAtOpen !== JSON.stringify([this.vehicle.look, this.vehicle.tune])) {
                 // a lap can't start stock and end tuned
                 this.startLapTimer();
@@ -1026,6 +1031,15 @@ export default class RaceManager {
                 ),
             },
         });
+    }
+
+    // the board's tunes for the car on the stand, for the garage to load
+    async dispatchGarageTunes() {
+        const carId = this.vehicle.currentCarId;
+        const serial = ++this.garageTunesSerial;
+        const entries = await this.leaderboardService.getTunesForCar(carId);
+        if (serial !== this.garageTunesSerial) return;
+        UIEventBus.dispatch('race:garageTunes', { carId, entries });
     }
 
     async refreshLeaderboard() {
