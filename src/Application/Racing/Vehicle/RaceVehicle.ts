@@ -117,6 +117,10 @@ const LOW_SPEED_UPRIGHT_BLEND_FADE_MPS = 14;
 const LOW_SPEED_UPRIGHT_BLEND_MAX = 0;
 const MIN_SURFACE_NORMAL_Y = 0.72;
 const MIN_ORIENTATION_NORMAL_Y = 0.72;
+const PIVOT_UP = new THREE.Vector3();
+const PIVOT_FORWARD = new THREE.Vector3();
+const PIVOT_HEADING = new THREE.Vector3();
+const PIVOT_TURN = new THREE.Quaternion();
 const SAFE_CHECKPOINT_MIN_INTERVAL_S = 0.08;
 const FALL_RECOVERY_DELAY_S = 1.35;
 const FALL_RECOVERY_LOOKBACK_S = 2.2;
@@ -828,12 +832,14 @@ export default class RaceVehicle {
 
         // soft darkening right under the car, the sun shadow alone reads as
         // floating at the contact patches
-        addContactShadow(
+        const contactShadow = addContactShadow(
             this.application.renderer.instance,
             model,
             -rideHeight + (option?.race.groundOffsetMeters || 0),
             0.025
         );
+        // over the road's skid marks and decals, under the smoke
+        contactShadow.renderOrder = 3.5;
 
         model.userData.raceWheelRig = wheelRig;
         model.userData.raceWheelMeta = this.buildWheelVisualMetadata(wheelRig);
@@ -5392,6 +5398,20 @@ export default class RaceVehicle {
             1
         );
         this.carPivot.quaternion.slerp(this.orientationTarget, rotLerp);
+        // only the road's tilt is eased: an eased heading trailed a tight turn at
+        // a crawl by several degrees, so the car looked to slide into the turn
+        const pivot = this.carPivot.quaternion;
+        PIVOT_UP.set(0, 1, 0).applyQuaternion(pivot);
+        PIVOT_FORWARD.set(0, 0, 1).applyQuaternion(pivot);
+        PIVOT_HEADING.set(Math.sin(this.yaw), 0, Math.cos(this.yaw)).projectOnPlane(PIVOT_UP);
+        if (PIVOT_HEADING.lengthSq() > 1e-8) {
+            const turn = this.getSignedAngleAroundNormal(
+                PIVOT_FORWARD,
+                PIVOT_HEADING.normalize(),
+                PIVOT_UP
+            );
+            if (Math.abs(turn) > 1e-6) pivot.premultiply(PIVOT_TURN.setFromAxisAngle(PIVOT_UP, turn));
+        }
         this.carPivot.position.copy(this.position);
     }
 

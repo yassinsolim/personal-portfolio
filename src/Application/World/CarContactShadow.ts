@@ -193,9 +193,10 @@ export const addContactShadow = (
         transparent: true,
         opacity: OPACITY,
         depthWrite: false,
+        // pulled harder than the kerbs, lines and decals on the race's road
         polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -4,
+        polygonOffsetFactor: -8,
+        polygonOffsetUnits: -20,
     });
     const shadow = new THREE.Mesh(geometry, material);
     shadow.name = 'car_contact_shadow';
