@@ -377,13 +377,16 @@ export default class GhostReplay {
         return this.playbackDurationMs || lastSample?.t || 0;
     }
 
-    update(deltaSeconds: number) {
+    // with a lap time the ghost is where its lap was at that time
+    update(deltaSeconds: number, lapTimeMs?: number) {
         const samples = this.getActivePlaybackSamples();
         const durationMs = this.getActivePlaybackDurationMs();
         if (!this.active || samples.length < 2) return;
         if (!durationMs) return;
 
-        if (!this.held) {
+        if (lapTimeMs !== undefined) {
+            this.playbackTimeMs = lapTimeMs % durationMs;
+        } else if (!this.held) {
             this.playbackTimeMs =
                 (this.playbackTimeMs + deltaSeconds * 1000) % durationMs;
         }
@@ -567,10 +570,5 @@ export default class GhostReplay {
             qz: q.z,
             qw: q.w,
         };
-    }
-
-
-    getBestLapTimeMs() {
-        return this.externalReplay?.lapTimeMs || this.bestLapTimeMs;
     }
 }

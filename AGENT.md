@@ -445,6 +445,19 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   shows 100-0 and 200-0 km/h from `predictStop`, the model braking on the flat with abs.
   Board codes keep their length: the pressure rides in the tire digit and the kit in the
   spoiler digit, both 0 when stock.
+- Hot lap tools (ring only). `Lap/LapDelta.ts` keeps your best clean lap per car and per
+  stock or tuned setup (`yassinverse:raceDelta@v6:<car>:<stock|tuned>`) as the clock at
+  1000 points along the lap; the hud's number next to the clock is this lap against it at
+  the same spot (`LapTimer` reports an `exact` lap fraction between its samples), and Best
+  is that lap. All four wheels on grass or off for over 0.1 s makes the lap dirty
+  (`DIRTY_AFTER_S`): the hud says so, and the lap doesn't go on the board, the sector bests,
+  the ghost or the delta. The pause menu's Ghost row (`Ghost/ghostMode.ts`, off by default,
+  `?ghostReplay` still means the record) picks your best lap, a rival (the lap on your
+  setup's board just faster than your best, from `getLapsFasterThan`; the slowest of the
+  top ten before you have one) or the record. The ghost follows the lap clock
+  (`GhostReplay.update(dt, lapMs)`), so pauses and a ghost picked mid lap stay in step.
+  Local builds have an empty `racing.config.json`, so the board is this device's:
+  `/tmp/rivallocal.mjs`-style checks seed it with `local.add` and `cacheGhostReplay`.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

@@ -17,6 +17,8 @@ export const ARM_CREEP_METERS = 1.5;
 
 type LapUpdate = {
     progress: number;
+    // the lap fraction between samples, for the live gap to the best lap
+    exact: number;
     lapRunning: boolean;
     lapTimeMs: number;
     armed?: boolean;
@@ -150,6 +152,27 @@ export default class LapTimer {
         return bestIndex;
     }
 
+    // the closest sample nudged along the segment the car is on, 2d
+    exactProgress(position: THREE.Vector3, index: number) {
+        const points = this.samplePoints;
+        const last = points.length - 1;
+        const along = (i: number) => {
+            const a = points[i];
+            const b = points[i + 1];
+            const dx = b.x - a.x;
+            const dz = b.z - a.z;
+            const length = dx * dx + dz * dz;
+            return length > 0
+                ? ((position.x - a.x) * dx + (position.z - a.z) * dz) / length
+                : 0;
+        };
+        let exact = index;
+        const ahead = index < last ? along(index) : 0;
+        if (ahead > 0) exact = index + Math.min(1, ahead);
+        else if (index > 0) exact = index - 1 + Math.min(1, Math.max(0, along(index - 1)));
+        return exact / Math.max(1, last);
+    }
+
     // moving: throttle or reverse input this step. speed and creep are
     // checked here
     update(
@@ -161,6 +184,7 @@ export default class LapTimer {
     ): LapUpdate {
         const closestIndex = this.getClosestSampleIndex(position);
         const progress = closestIndex / Math.max(1, this.samplePoints.length - 1);
+        const exact = this.exactProgress(position, closestIndex);
 
         if (this.armed) {
             const creep = Math.hypot(
@@ -181,7 +205,7 @@ export default class LapTimer {
                     .clone()
                     .sub(this.startPoint)
                     .dot(this.startNormal);
-                return { progress, lapRunning: false, lapTimeMs: 0, armed: true };
+                return { progress, exact, lapRunning: false, lapTimeMs: 0, armed: true };
             }
         }
 
@@ -214,6 +238,7 @@ export default class LapTimer {
                 this.maxProgress = progress;
                 return {
                     progress,
+                    exact,
                     lapRunning: true,
                     lapTimeMs: 0,
                 };
@@ -229,6 +254,7 @@ export default class LapTimer {
 
             return {
                 progress,
+                exact,
                 lapRunning: true,
                 lapTimeMs: 0,
                 completedLapTimeMs: lapTimeMs,
@@ -238,6 +264,7 @@ export default class LapTimer {
 
         return {
             progress,
+            exact,
             lapRunning: this.lapRunning,
             lapTimeMs: this.lapRunning ? nowMs - this.lapStartMs : 0,
         };

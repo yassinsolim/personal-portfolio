@@ -1717,9 +1717,38 @@ body.race-mode-touch #ui-app {
 }
 
 .race-lap-now {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     font-size: 22px;
     font-weight: bold;
     margin-bottom: 4px;
+}
+
+/* the live gap to your best lap: green ahead, red behind */
+.race-lap-delta {
+    font-size: 14px;
+}
+
+.race-lap-delta.ahead {
+    color: rgb(90, 225, 130);
+}
+
+.race-lap-delta.behind {
+    color: rgb(255, 115, 115);
+}
+
+.race-lap-dirty {
+    font-size: 11px;
+    color: rgb(255, 150, 150);
+    margin-bottom: 4px;
+}
+
+.race-lap-row em {
+    font-style: normal;
+    font-size: 10px;
+    color: rgb(255, 150, 150);
+    margin-left: 6px;
 }
 
 .race-lap-row {

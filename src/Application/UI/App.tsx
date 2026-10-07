@@ -6,7 +6,7 @@ import { loaderVariant } from './loaders/variant';
 import { isWebGLAvailable } from '../Utils/webgl';
 import InterfaceUI from './components/InterfaceUI';
 import LobbyChoice from './components/LobbyChoice';
-import RaceHudGauges, { SectorHud } from './components/RaceHudGauges';
+import RaceHudGauges, { type GhostHud, SectorHud } from './components/RaceHudGauges';
 import DriftHud, { type DriftHudState } from './components/DriftHud';
 import Minimap from './components/Minimap';
 import Garage, { GarageState } from './components/Garage';
@@ -24,6 +24,11 @@ import './style.css';
 import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import { padShared } from '../Gamepad/pad';
+import {
+    GHOST_MODES,
+    readGhostMode,
+    type GhostMode,
+} from '../Racing/Ghost/ghostMode';
 import {
     STEERING_KEY,
     STEERING_MAX,
@@ -52,6 +57,13 @@ const ASSIST_OPTIONS: { preset: AssistPreset; label: string }[] = [
     { preset: 'sport', label: 'Sport (drift)' },
     { preset: 'off', label: 'Off' },
 ];
+
+const GHOST_MODE_LABEL: Record<GhostMode, string> = {
+    off: 'Off',
+    best: 'Your best',
+    rival: 'Rival',
+    record: 'Record',
+};
 
 const RenderModeButtons = ({
     mode,
@@ -82,7 +94,12 @@ type HudState = {
     lapRunning: boolean;
     lapArmed?: boolean;
     lapProgress: number;
-    ghostBestLapMs?: number;
+    // your best clean lap with this car and setup
+    bestLapMs?: number;
+    lapDelta?: number | null;
+    lapDirty?: boolean;
+    lastLapDirty?: boolean;
+    ghost?: GhostHud | null;
     redlineRpm?: number;
     tachMaxRpm?: number;
     lastLapMs?: number;
@@ -310,7 +327,7 @@ const App = () => {
         lapTimeMs: 0,
         lapRunning: false,
         lapProgress: 0,
-        ghostBestLapMs: 0,
+        bestLapMs: 0,
     });
     const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [playerName, setPlayerName] = useState(() => getStoredMultiplayerName());
@@ -330,6 +347,7 @@ const App = () => {
     const [graphicsContextLost, setGraphicsContextLost] = useState(false);
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
+    const [ghostMode, setGhostMode] = useState<GhostMode>(() => readGhostMode());
     const [steering, setSteering] = useState(() => readSteering());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
     const [trackOutline, setTrackOutline] = useState<number[][]>([]);
@@ -1155,7 +1173,11 @@ const App = () => {
                     lapRunning={hud.lapRunning}
                     lapArmed={hud.lapArmed}
                     lastLapMs={hud.lastLapMs || 0}
-                    bestLapMs={hud.ghostBestLapMs || 0}
+                    bestLapMs={hud.bestLapMs || 0}
+                    delta={hud.lapDelta ?? null}
+                    dirty={Boolean(hud.lapDirty)}
+                    lastDirty={Boolean(hud.lastLapDirty)}
+                    ghost={hud.ghost || null}
                     sectors={hud.sectors || null}
                 />
             )}
@@ -1549,6 +1571,27 @@ const App = () => {
                             </div>
                         </div>
 
+                        {trackState.track === 'ring' && (
+                            <div className="race-menu-row">
+                                <span>Ghost</span>
+                                <div className="race-quality-buttons">
+                                    {GHOST_MODES.map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            className={ghostMode === mode ? 'active' : ''}
+                                            onClick={() => {
+                                                setGhostMode(mode);
+                                                eventBus.dispatch('race:ghostMode', { mode });
+                                            }}
+                                        >
+                                            {GHOST_MODE_LABEL[mode]}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         <div className="race-menu-row">
                             <label htmlFor="race-steering-range">Steering</label>
                             <input
@@ -1597,6 +1640,13 @@ const App = () => {
                             it the bigger the multiplier. Straighten up to bank
                             it; a wall, the grass or a spin loses it. Each lap
                             is a run on the scoreboard.
+                        </p>
+                        <p className="race-menu-controls">
+                            Hot laps: the number next to the clock is the gap
+                            to your best lap with this car. All four wheels off
+                            the road makes a lap dirty, and dirty laps don't go
+                            on the leaderboard. The rival ghost is the lap just
+                            faster than your best.
                         </p>
 
                         <p className="race-menu-credits">

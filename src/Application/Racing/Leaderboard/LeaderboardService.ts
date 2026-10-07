@@ -4,6 +4,7 @@ import LocalDriftBoard, { byScore, type DriftEntry } from './LocalDriftBoard';
 import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
+import { SEASON_TAG } from './season';
 
 type SupabaseConfig = {
     supabaseUrl: string;
@@ -24,10 +25,6 @@ const DRIFT_MAX_RATE = 1.3;
 const CONFIG_URL = '/config/racing.config.json';
 const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:v3';
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
-// the season tag on car_id. bumped whenever lap times stop being comparable
-// (last: the clock waiting for the car to move, before that the lidar road
-// profile). the board only reads the current tag and old rows stay
-const SEASON_TAG = '@v6';
 const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
 
@@ -179,20 +176,59 @@ export default class LeaderboardService {
                 return localEntries;
             }
 
-            const remoteEntries = (data as RemoteLeaderboardRow[]).map((entry) => ({
-                id: String(entry.id || '').slice(0, 80),
-                name: this.sanitizeName(entry.name),
-                lapTimeMs: this.sanitizeLapTime(entry.lap_time_ms),
-                carId: this.sanitizeCarId(entry.car_id),
-                createdAt: entry.created_at || new Date().toISOString(),
-                source: 'remote' as const,
-                tune: this.readTune(entry.car_id),
-            }));
+            const remoteEntries = (data as RemoteLeaderboardRow[]).map((entry) =>
+                this.fromLapRow(entry)
+            );
 
             return this.mergeEntries(remoteEntries, localEntries).slice(0, limit);
         } catch (error) {
             return localEntries;
         }
+    }
+
+    // the laps on a board just faster than a time, the nearest first
+    async getLapsFasterThan(
+        lapTimeMs: number,
+        board: 'stock' | 'tuned' = 'stock',
+        limit = 5
+    ) {
+        const localEntries = this.local
+            .getTop(64, board)
+            .filter((entry) => entry.lapTimeMs < lapTimeMs)
+            .reverse()
+            .slice(0, limit);
+        await this.initialize();
+        if (!this.supabase) return localEntries;
+        try {
+            const { data, error } = await this.supabase
+                .from(this.tableName)
+                .select('id,name,lap_time_ms,car_id,created_at')
+                .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
+                .lt('lap_time_ms', Math.floor(lapTimeMs))
+                .order('lap_time_ms', { ascending: false })
+                .limit(limit);
+            if (error || !data) return localEntries;
+            const remoteEntries = (data as RemoteLeaderboardRow[]).map((row) =>
+                this.fromLapRow(row)
+            );
+            return this.mergeEntries(remoteEntries, localEntries)
+                .reverse()
+                .slice(0, limit);
+        } catch {
+            return localEntries;
+        }
+    }
+
+    fromLapRow(row: RemoteLeaderboardRow): LeaderboardEntry {
+        return {
+            id: String(row.id || '').slice(0, 80),
+            name: this.sanitizeName(row.name),
+            lapTimeMs: this.sanitizeLapTime(row.lap_time_ms),
+            carId: this.sanitizeCarId(row.car_id),
+            createdAt: row.created_at || new Date().toISOString(),
+            source: 'remote',
+            tune: this.readTune(row.car_id),
+        };
     }
 
     async submitLap(
