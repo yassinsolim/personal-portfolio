@@ -2210,6 +2210,82 @@ body.race-mode-touch .race-minimap {
     opacity: 0.65;
 }
 
+/* the performance index in its class colour, and Forza's five bars */
+.garage-rating {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 10px;
+}
+
+.garage-rating p {
+    margin: 0;
+    opacity: 0.6;
+}
+
+.garage-pi {
+    display: flex;
+    flex: none;
+    border-radius: 4px;
+    overflow: hidden;
+    font-size: 13px;
+    font-weight: bold;
+    color: #111;
+}
+
+.garage-pi strong {
+    padding: 4px 7px;
+    background: var(--pi);
+}
+
+.garage-pi span {
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.pi-d { --pi: #5bc8f0; }
+.pi-c { --pi: #f5c518; }
+.pi-b { --pi: #f68b1f; }
+.pi-a { --pi: #e8384f; }
+.pi-s1 { --pi: #a35ddb; }
+.pi-s2 { --pi: #3d7ef0; }
+.pi-x { --pi: #2fbf71; }
+
+.garage-bars {
+    flex: 1;
+    display: grid;
+    gap: 3px;
+}
+
+.garage-bars div {
+    display: grid;
+    grid-template-columns: 76px 1fr 24px;
+    align-items: center;
+    gap: 6px;
+}
+
+.garage-bars span {
+    opacity: 0.65;
+}
+
+.garage-bars i {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+}
+
+.garage-bars b {
+    display: block;
+    height: 100%;
+    background: #f2f2f2;
+}
+
+.garage-bars em {
+    font-style: normal;
+    text-align: right;
+}
+
 .garage-board {
     font-size: 11px;
     margin: 0;
@@ -2293,8 +2369,11 @@ body.race-mode-touch .race-minimap {
     }
 
     .garage-stats div:nth-child(2),
-    .garage-stats div:nth-child(5),
-    .garage-stats div:nth-child(6) {
+    .garage-stats div:nth-child(n + 5) {
+        display: none;
+    }
+
+    .garage-bars {
         display: none;
     }
 
