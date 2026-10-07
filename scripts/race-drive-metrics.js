@@ -205,8 +205,10 @@
                     let spun = false;
                     let slipMax = 0;
                     const steps = 60 * 6;
+                    // skidpadMaxSteer over 1 sweeps past full lock, to see if the tires have more
+                    const sweep = options.skidpadMaxSteer || 1;
                     for (let i = 0; i < steps; i++) {
-                        const steer = Math.min(1, i / (60 * 4));
+                        const steer = Math.min(sweep, (i / (60 * 4)) * sweep);
                         controls.steer = steer;
                         const err = target - speed();
                         controls.throttle = Math.max(
@@ -442,6 +444,9 @@
 
         const only = options.only || Object.keys(tests);
         const results = {};
+        // options.assists, e.g. { countersteer: false }, for every test
+        const savedAssists = v.physics ? { ...v.physics.assists } : null;
+        if (options.assists && v.physics) Object.assign(v.physics.assists, options.assists);
         try {
             for (const id of ids) {
                 await v.ensurePreparedModel(id);
@@ -456,6 +461,7 @@
                 }
             }
         } finally {
+            if (savedAssists) Object.assign(v.physics.assists, savedAssists);
             v.colliderMesh = origCollider;
             v.trackBound = origTrackBound;
             v.input.getState = origGetState;

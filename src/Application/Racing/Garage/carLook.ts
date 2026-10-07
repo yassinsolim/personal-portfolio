@@ -46,6 +46,10 @@ const PAINT_EXACT: Record<string, string[]> = {
 };
 const CALIPER = /callipergloss|calliperanodised|_caliper|tire_brake|^brakes$/;
 const BRAKE = /disc|disk|brake|calip|rotor/;
+// rims named and finished like nothing in particular (the valkyrie's merged spokes)
+const RIM_EXACT: Record<string, string[]> = {
+    'aston-martin-valkyrie': ['material'],
+};
 // rim or tire goes by shape, whatever the materials are called (some exports
 // name the tire 'wheel' and the rim 'tire_hub'). as shares of the wheel's
 // radius: a tire reaches the tread and sits mostly out past where a sidewall
@@ -1153,7 +1157,11 @@ export const applyCarLook = (
         if (wheel && mesh.userData.garagePart === 'rim' && !BRAKE.test(lower)) {
             const m = mesh.material as THREE.MeshStandardMaterial;
             const metal = m.metalness ?? m.userData.garageMetalness ?? 0;
-            const rimLike = /wheel|rim|hub/.test(lower) || metal >= 0.3;
+            const rimCar = mesh.userData.garageRim ? wheel.userData.garageDonor : carId;
+            const rimLike =
+                /wheel|rim|hub/.test(lower) ||
+                metal >= 0.3 ||
+                Boolean(RIM_EXACT[rimCar]?.includes(lower));
             if (!rimLike) return;
             // swapped rims can arrive in the donor car's own colors
             const owner = m.userData.garageOwner;

@@ -109,6 +109,8 @@ export default class RaceChaseCamera {
     garageAngle = 0;
     garagePitch = 0;
     garageDragIdle = 10;
+    // the screen area the garage panel leaves free, in css pixels
+    garageFrame: { x: number; y: number; width: number; height: number } | null = null;
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
@@ -193,6 +195,9 @@ export default class RaceChaseCamera {
             this.garageAngle -= (state?.dx || 0) * 0.008;
             this.garagePitch = Math.min(0.6, Math.max(-0.25, this.garagePitch + (state?.dy || 0) * 0.004));
             this.garageDragIdle = 0;
+        });
+        UIEventBus.on('race:garageFrame', (frame: RaceChaseCamera['garageFrame']) => {
+            this.garageFrame = frame && frame.width > 0 && frame.height > 0 ? frame : null;
         });
         // the graphics preset's draw distance
         UIEventBus.on(
@@ -452,6 +457,7 @@ export default class RaceChaseCamera {
         this.clearPointerLockPendingTimeout();
         this.yawOffset = 0;
         this.pitchOffset = 0;
+        camera.clearViewOffset();
         camera.near = this.defaultNear;
         camera.far = this.defaultFar;
         camera.fov = this.defaultFov;
@@ -519,7 +525,29 @@ export default class RaceChaseCamera {
         if (this.garage) {
             this.garageAngle += dt * (this.garageDragIdle > 1.5 ? 0.22 : 0);
             this.garageDragIdle += dt;
-            const radius = vehicle.bodySize.z * 0.95 + 2.2;
+            let radius = vehicle.bodySize.z * 0.95 + 2.2;
+            // centered in what the panel leaves free, further back when that's small
+            const frame = this.garageFrame;
+            if (frame) {
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                camera.setViewOffset(
+                    width,
+                    height,
+                    width / 2 - (frame.x + frame.width / 2),
+                    height / 2 - (frame.y + frame.height / 2),
+                    width,
+                    height
+                );
+                const focal = height / 2 / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+                radius = Math.max(
+                    radius,
+                    (focal * vehicle.bodySize.z * 0.9) / (frame.width * 0.8),
+                    (focal * 2) / (frame.height * 0.8)
+                );
+            } else if (camera.view?.enabled) {
+                camera.clearViewOffset();
+            }
             // on the garage's stand the car faces +z
             const center = this.garageAnchor || anchor;
             const angle =
@@ -534,6 +562,7 @@ export default class RaceChaseCamera {
             this.initialized = false;
             return;
         }
+        if (camera.view?.enabled) camera.clearViewOffset();
 
         if (view.mounted) {
             this.updateMounted(view, carYaw, anchor, size, speed, dt);

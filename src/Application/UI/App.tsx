@@ -24,6 +24,13 @@ import './style.css';
 import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import { padShared } from '../Gamepad/pad';
+import {
+    STEERING_KEY,
+    STEERING_MAX,
+    STEERING_MIN,
+    clampSteering,
+    readSteering,
+} from '../Racing/Input/steering';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -274,6 +281,7 @@ const App = () => {
     const [pickerOpen, setPickerOpen] = useState(false);
     const [pickLive] = useState(() => !isLowPowerDevice());
     const closePicker = useCallback(() => setPickerOpen(false), []);
+    const openPicker = useCallback(() => setPickerOpen(true), []);
     const [freeCamActive, setFreeCamActive] = useState(false);
     const [freeCamPending, setFreeCamPending] = useState(false);
     const [raceModeActive, setRaceModeActive] = useState(false);
@@ -322,6 +330,7 @@ const App = () => {
     const [graphicsContextLost, setGraphicsContextLost] = useState(false);
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
+    const [steering, setSteering] = useState(() => readSteering());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
     const [trackOutline, setTrackOutline] = useState<number[][]>([]);
     const [garageOpen, setGarageOpen] = useState(false);
@@ -584,6 +593,15 @@ const App = () => {
     }, [muted]);
 
     useEffect(() => {
+        eventBus.dispatch('race:steering', { sensitivity: steering });
+        try {
+            window.localStorage.setItem(STEERING_KEY, String(steering));
+        } catch {
+            // still applies, just not saved
+        }
+    }, [steering]);
+
+    useEffect(() => {
         if (!multiplayer.lobbyCode) return;
         try {
             window.localStorage.setItem(
@@ -808,6 +826,18 @@ const App = () => {
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
     const panelMenu = compactPanel && !raceModeActive && !deskView;
     const panelFolded = panelMenu && !panelOpen;
+    // the room view on a desktop: folded until hovered, like the desk view's tab
+    const panelHover = !raceModeActive && !panelMenu && !deskView;
+    // a clicked button keeps the focus, which would hold a hover panel open
+    const releasePanel = useCallback((event: React.MouseEvent<HTMLElement>) => {
+        const active = document.activeElement;
+        if (
+            active instanceof HTMLElement &&
+            event.currentTarget.contains(active) &&
+            !active.matches(':focus-visible')
+        )
+            active.blur();
+    }, []);
 
     useEffect(() => {
         if (!raceModeActive || garageOpen || racePaused) return undefined;
@@ -832,6 +862,7 @@ const App = () => {
                 <CarPicker
                     selected={selectedCar}
                     live={pickLive}
+                    right={raceModeActive && garageOpen}
                     onSelect={selectCar}
                     onClose={closePicker}
                 />
@@ -843,6 +874,7 @@ const App = () => {
                         raceModeActive && 'racing',
                         roomFocus && 'room-focused',
                         deskView && !roomFocus && 'room-desk',
+                        panelHover && !roomFocus && 'room-hover',
                         panelMenu && 'compact',
                         panelFolded && 'folded',
                     ]
@@ -850,7 +882,8 @@ const App = () => {
                         .join(' ')}
                     data-label="Menu"
                     data-prevent-click
-                    tabIndex={deskView ? 0 : -1}
+                    tabIndex={deskView || panelHover ? 0 : -1}
+                    onMouseLeave={deskView || panelHover ? releasePanel : undefined}
                 >
                     {panelMenu && (
                         <button
@@ -1309,7 +1342,13 @@ const App = () => {
                 />
             )}
             {raceModeActive && garageOpen && (
-                <Garage state={garageState} onClose={closeGarage} onHome={garageToHome} />
+                <Garage
+                    state={garageState}
+                    onClose={closeGarage}
+                    onHome={garageToHome}
+                    onPickCar={openPicker}
+                    onSelectCar={selectCar}
+                />
             )}
             {showHint && !raceModeActive && !roomFocus && !deskView && !freeCamActive && !garageFade && (
                 <button
@@ -1508,6 +1547,24 @@ const App = () => {
                                     </button>
                                 ))}
                             </div>
+                        </div>
+
+                        <div className="race-menu-row">
+                            <label htmlFor="race-steering-range">Steering</label>
+                            <input
+                                id="race-steering-range"
+                                type="range"
+                                min={STEERING_MIN}
+                                max={STEERING_MAX}
+                                step="0.1"
+                                value={steering}
+                                onChange={(event) =>
+                                    setSteering(
+                                        clampSteering(Number(event.target.value))
+                                    )
+                                }
+                            />
+                            <span>{Math.round(steering * 100)}%</span>
                         </div>
 
                         <p className="race-menu-controls">

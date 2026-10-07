@@ -279,7 +279,7 @@ export function createTerminalDisplay(
 
     const motd = () => {
         const node = block(
-            line("Hi, I'm Yassin. This is the terminal on my right monitor."),
+            line("Hi, I'm Yassin! Here's a terminal I made."),
             line('Type help, or ls and then cd into a project.', 'dim')
         );
         node.classList.add('rd-motd');

@@ -177,9 +177,10 @@ const initialBytes = await page.evaluate(() =>
         .reduce((sum, e) => sum + (e.transferSize || e.encodedBodySize || 0), 0)
 );
 
-// small screens fold the room panel to its menu button
+// the room panel folds: small screens to its menu button, others until hovered
 await page.locator('.look-hint').waitFor({ timeout: 60000 });
 if (await page.locator('.look-hint.folded').count()) await page.locator('.look-hint-menu').click();
+else await page.locator('.look-hint').hover();
 
 if (carId) {
     await page.waitForSelector('#car-switcher');

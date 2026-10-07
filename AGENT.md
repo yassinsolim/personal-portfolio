@@ -387,6 +387,36 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   for `gamepad.prev[i]` to see a press, a long frame can swallow a short one. `npm test` has
   the pure parts (`scripts/test/gamepad.test.mjs`).
 
+## Polish Notes (2026-10-06)
+- Steering: a Steering slider in the pause menu (60 to 160%, `yassinverse:nordschleife:steering:v1`,
+  `Racing/Input/steering.ts`). It sets how fast keys and touch ramp the steering and the pad
+  stick's curve (`steerRates`, `stickCurve`), not the physics, so lap times stay comparable. The
+  default is quicker than the old fixed ramps. Full lock already reaches the tires' limit
+  (skidpad g doesn't rise with more lock), so turning tighter would need more grip, a physics
+  change with new leaderboard tags. `race-drive-metrics.js` takes `skidpadMaxSteer` and `assists`.
+- Remote cars (`RaceManager.updateRemoteVehicleVisual`): the guess past a sample follows the
+  bend at the sample's yaw rate (no tighter than 2 g), a sample further on than the car could
+  have driven is a respawn and snaps (they used to slide through the scenery), and
+  `keepRemoteOnTrack` keeps the drawn car between the armco (the box `applyBarriers` uses) at its
+  sample's height over this client's road (`track.sampleGround`). The y used to stay put while
+  the guess ran up or down a hill: half a meter to 2 m under the road on climbs. Paused players
+  and ones in the garage send a stopped sample, or their last one was guessed on 15 m.
+  `node scripts/race-mp-remote.mjs --url <served build>` measures all of it in the mock lobby.
+- Room panel: with a mouse it folds to the begin hint and a Menu tab (`room-hover`) and opens on
+  hover or keyboard focus; leaving it blurs a clicked button so it folds again. Scripts hover
+  `.look-hint` before using its controls. `RaceTransition` ignores clicks over
+  `[data-prevent-click]` (a click on the panel over the room car started a race).
+- Garage: a car switcher under the title (previous, next, and the picker, which docks right over
+  the garage, `CarPicker` `right`). `RaceManager` sends the garage the new car's setup on
+  `carChange` and again once its model is on the stand. The stage reports its box
+  (`race:garageFrame`) and `RaceChaseCamera` centers the car in it with a view offset, backing
+  off when it's small. Phones get a 330 px panel on their side and a half height sheet upright,
+  with three stats and no leaderboard line.
+- Rims: `RIM_EXACT` in `carLook.ts` lists rim materials named and finished like nothing in
+  particular (the Valkyrie's merged spokes took no color, only its hub did). A report of the
+  Huayra's rim color covering the tire didn't reproduce: the garage (full and lite models),
+  remote clones, its rims on other cars and theirs on it, and the room car all kept the tire black.
+
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).
 - `npm run build` passes (with existing large asset warnings).

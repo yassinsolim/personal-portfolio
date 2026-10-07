@@ -7,6 +7,8 @@ type Props = {
     // capable devices swap the room's car on every pick and stay open, so the
     // cars can be browsed in 3D; weak ones pick from the pictures and close
     live: boolean;
+    // over the garage it docks right, clear of the car on its stand
+    right?: boolean;
     onSelect: (carId: string) => void;
     onClose: () => void;
 };
@@ -33,7 +35,7 @@ const FILTERS = [
 ];
 export const carThumb = (carId: string) => `images/cars/${carId}.webp`;
 
-const CarPicker = ({ selected, live, onSelect, onClose }: Props) => {
+const CarPicker = ({ selected, live, right = false, onSelect, onClose }: Props) => {
     const [filter, setFilter] = useState('all');
     const grid = useRef<HTMLDivElement>(null);
     const cars = BY_PACE.filter((car) => filter === 'all' || classOf(car).id === filter);
@@ -55,7 +57,7 @@ const CarPicker = ({ selected, live, onSelect, onClose }: Props) => {
 
     return (
         <div
-            className={`car-picker${live ? ' live' : ''}`}
+            className={`car-picker${live ? ' live' : ''}${right ? ' right' : ''}`}
             role="dialog"
             aria-modal={!live}
             aria-label="Choose your car"

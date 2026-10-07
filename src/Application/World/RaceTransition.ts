@@ -69,6 +69,10 @@ const mark = (phase: string) => {
 
 const wrapAngle = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
 
+// the room panel and the like sit over the scene, the car can be behind them
+const overUi = (event: MouseEvent) =>
+    Boolean((event.target as Element | null)?.closest?.('#prevent-click, [data-prevent-click]'));
+
 export default class RaceTransition {
     application: Application;
     busy: boolean;
@@ -162,7 +166,7 @@ export default class RaceTransition {
         document.addEventListener(
             'mousedown',
             (event) => {
-                if (event.button !== 0 || !this.canStart()) return;
+                if (event.button !== 0 || !this.canStart() || overUi(event)) return;
                 if (!this.hitsCar(event.clientX, event.clientY)) return;
                 event.stopImmediatePropagation();
                 event.preventDefault();
@@ -175,7 +179,9 @@ export default class RaceTransition {
             if (now - this.lastHover < 90) return;
             this.lastHover = now;
             const over =
-                this.canStart() && this.hitsCar(event.clientX, event.clientY);
+                this.canStart() &&
+                !overUi(event) &&
+                this.hitsCar(event.clientX, event.clientY);
             if (over === this.hovering) return;
             this.hovering = over;
             document.body.style.cursor = over ? 'pointer' : '';

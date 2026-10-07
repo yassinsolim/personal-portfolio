@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import eventBus from '../EventBus';
 import { carOptions } from '../../carOptions';
+import { carThumb } from './CarPicker';
 import {
     DRIFT_BUILD,
     LIMITS,
@@ -53,6 +54,8 @@ type Props = {
     onClose: () => void;
     // back out of race mode to the room, the car dressed as it is now
     onHome: () => void;
+    onPickCar: () => void;
+    onSelectCar: (carId: string) => void;
 };
 
 type Tab = 'paint' | 'wheels' | 'body' | 'engine' | 'tuning';
@@ -242,12 +245,46 @@ const Slider = ({
 const signed = (value: number) =>
     `${value > 0 ? '+' : ''}${Math.round(value * 100)}`;
 
-const Garage = ({ state, onClose, onHome }: Props) => {
+// the car picker opens over the garage, and its keys are its own
+const picking = () => Boolean(document.querySelector('.car-picker'));
+
+const Garage = ({ state, onClose, onHome, onPickCar, onSelectCar }: Props) => {
     const [tab, setTab] = useState<Tab>('paint');
     const [look, setLook] = useState<CarLook>(state?.look || STOCK_LOOK);
     const [tune, setTune] = useState<CarTune>(state?.tune || STOCK_TUNE);
     const carId = state?.carId || '';
     const drag = useRef<{ x: number; y: number } | null>(null);
+    const stage = useRef<HTMLDivElement>(null);
+
+    // the camera frames the car in the stage, the part the panel leaves free
+    useEffect(() => {
+        const element = stage.current;
+        if (!element) return undefined;
+        const send = () => {
+            const rect = element.getBoundingClientRect();
+            eventBus.dispatch('race:garageFrame', {
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height,
+            });
+        };
+        send();
+        const observer = new ResizeObserver(send);
+        observer.observe(element);
+        window.addEventListener('resize', send);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', send);
+            eventBus.dispatch('race:garageFrame', null);
+        };
+    }, []);
+
+    const stepCar = (direction: number) => {
+        const index = carOptions.findIndex((car) => car.id === carId);
+        const count = carOptions.length;
+        onSelectCar(carOptions[(index + direction + count) % count].id);
+    };
 
     // a car switch loads that car's own setup
     useEffect(() => {
@@ -272,7 +309,7 @@ const Garage = ({ state, onClose, onHome }: Props) => {
 
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
-            if (event.code !== 'Escape') return;
+            if (event.code !== 'Escape' || picking()) return;
             event.preventDefault();
             event.stopPropagation();
             onClose();
@@ -291,7 +328,10 @@ const Garage = ({ state, onClose, onHome }: Props) => {
         const keys = ['KeyW', 'ArrowUp'];
         const typing = () => {
             const el = document.activeElement as HTMLElement | null;
-            return Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'SELECT'));
+            return (
+                Boolean(el && (el.tagName === 'INPUT' || el.tagName === 'SELECT')) ||
+                picking()
+            );
         };
         const down = (event: KeyboardEvent) => {
             if (!keys.includes(event.code) || event.repeat || typing()) return;
@@ -323,6 +363,7 @@ const Garage = ({ state, onClose, onHome }: Props) => {
         <div className="garage" data-prevent-click>
             <div
                 className="garage-stage"
+                ref={stage}
                 onPointerDown={(e) => {
                     drag.current = { x: e.clientX, y: e.clientY };
                     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -341,7 +382,34 @@ const Garage = ({ state, onClose, onHome }: Props) => {
             >
                 <div className="garage-title">
                     <h2>Garage</h2>
-                    <p>{carName(carId)}</p>
+                    <div className="garage-car" onPointerDown={(e) => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            className="garage-car-step"
+                            aria-label="Previous car"
+                            onClick={() => stepCar(-1)}
+                        >
+                            ‹
+                        </button>
+                        <button
+                            type="button"
+                            className="garage-car-pick"
+                            aria-haspopup="dialog"
+                            onClick={onPickCar}
+                        >
+                            {carId && <img src={carThumb(carId)} alt="" width={64} height={36} />}
+                            <span>{carName(carId)}</span>
+                            <em>Change car</em>
+                        </button>
+                        <button
+                            type="button"
+                            className="garage-car-step"
+                            aria-label="Next car"
+                            onClick={() => stepCar(1)}
+                        >
+                            ›
+                        </button>
+                    </div>
                     <small>Drag to turn the car</small>
                 </div>
             </div>

@@ -81,6 +81,8 @@ await page.addInitScript(() => {
 const report = { phases: {}, logs, cars: [firstCar, secondCar] };
 await page.goto(`http://127.0.0.1:${port}/?raceDebug=1`, { waitUntil: 'domcontentloaded', timeout: 180000 });
 await page.waitForFunction(() => window.__loadingDone, null, { timeout: 240000 });
+// the room panel stays folded until it's hovered
+await page.locator('.look-hint').hover();
 await page.waitForSelector('#car-switcher');
 await page.selectOption('#car-switcher', firstCar);
 await sleep(800);

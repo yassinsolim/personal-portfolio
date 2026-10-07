@@ -1,5 +1,6 @@
 import UIEventBus from '../../UI/EventBus';
 import { BUTTON, currentPad, padShared, stick } from '../../Gamepad/pad';
+import { clampSteering, readSteering, steerRates, stickCurve } from './steering';
 
 // steer is positive to the left (toward positive yaw): A and the left arrow
 // give +1, D and the right arrow give -1
@@ -21,11 +22,7 @@ const PREVENT_DEFAULT_KEYS = new Set([
     'Backspace',
 ]);
 
-// keyboard ramps per second. steering comes in quickly, lets go faster, and
-// snaps across when you change direction
-const STEER_RISE = 5.5;
-const STEER_RELEASE = 9;
-const STEER_REVERSE = 13;
+// keyboard ramps per second (the steering's are in ./steering.ts)
 const THROTTLE_RISE = 7;
 const THROTTLE_RELEASE = 11;
 const BRAKE_RISE = 9;
@@ -49,8 +46,6 @@ const PAD_RIGHT = BUTTON.RIGHT;
 const STICK_DEADZONE = 0.08;
 const LOOK_DEADZONE = 0.2;
 const TRIGGER_DEADZONE = 0.04;
-// a little curve so small stick moves stay small at speed
-const STICK_CURVE = 1.35;
 const RUMBLE_INTERVAL_MS = 90;
 
 export type InputSource = 'keyboard' | 'gamepad' | 'touch';
@@ -99,6 +94,8 @@ export default class DrivingInput {
     source: InputSource;
     padButtons: boolean[];
     pendingShift: number;
+    // the pause menu's steering slider
+    sensitivity = readSteering();
     rumbleEnabled: boolean;
     lastRumbleAt: number;
     keyDownHandler: (event: KeyboardEvent) => void;
@@ -207,6 +204,13 @@ export default class DrivingInput {
                 this.rumbleEnabled = payload?.enabled !== false;
             }
         );
+
+        UIEventBus.on(
+            'race:steering',
+            (payload: { sensitivity?: number } | undefined) => {
+                this.sensitivity = clampSteering(Number(payload?.sensitivity));
+            }
+        );
     }
 
     handleActionKey(code: string) {
@@ -298,7 +302,8 @@ export default class DrivingInput {
             (Math.abs(steerAxis) - STICK_DEADZONE) / (1 - STICK_DEADZONE)
         );
         let steer =
-            -Math.sign(steerAxis) * Math.pow(Math.min(1, magnitude), STICK_CURVE);
+            -Math.sign(steerAxis) *
+            Math.pow(Math.min(1, magnitude), stickCurve(this.sensitivity));
         if (steer === 0) {
             if (pad.buttons[PAD_LEFT]?.pressed) steer = 1;
             if (pad.buttons[PAD_RIGHT]?.pressed) steer = -1;
@@ -394,13 +399,14 @@ export default class DrivingInput {
             brakeTarget,
             dt * (brakeTarget > smooth.brake ? BRAKE_RISE : BRAKE_RELEASE)
         );
-        let steerRate = STEER_RISE;
-        if (steerTarget === 0) steerRate = STEER_RELEASE;
+        const rates = steerRates(this.sensitivity);
+        let steerRate = rates.rise;
+        if (steerTarget === 0) steerRate = rates.release;
         else if (
             Math.sign(steerTarget) !== Math.sign(smooth.steer) &&
             smooth.steer !== 0
         ) {
-            steerRate = STEER_REVERSE;
+            steerRate = rates.reverse;
         }
         smooth.steer = moveToward(smooth.steer, steerTarget, dt * steerRate);
         smooth.handbrake = moveToward(
