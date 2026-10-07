@@ -53,8 +53,22 @@ export type GarageState = {
         stop100: number;
         stop200: number;
         rpmAt100: number;
+        // the performance index from an ideal ring lap, null until worked out
+        rating: {
+            pi: number;
+            class: string;
+            bars: Record<(typeof BARS)[number][0], number>;
+        } | null;
     };
 };
+
+const BARS = [
+    ['speed', 'Speed'],
+    ['handling', 'Handling'],
+    ['acceleration', 'Acceleration'],
+    ['launch', 'Launch'],
+    ['braking', 'Braking'],
+] as const;
 
 const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
     limiter: 'limited',
@@ -910,6 +924,38 @@ const Garage = ({ state, tunes, onClose, onHome, onPickCar, onSelectCar }: Props
                         </>
                     )}
                 </div>
+                {stats && (
+                    <div className="garage-rating">
+                        {stats.rating ? (
+                            <>
+                                <div
+                                    className={`garage-pi pi-${stats.rating.class.toLowerCase()}`}
+                                    title="Performance index, from an ideal lap of the ring"
+                                >
+                                    <strong>{stats.rating.class}</strong>
+                                    <span>{stats.rating.pi}</span>
+                                </div>
+                                <div className="garage-bars">
+                                    {BARS.map(([key, label]) => (
+                                        <div key={key}>
+                                            <span>{label}</span>
+                                            <i>
+                                                <b
+                                                    style={{
+                                                        width: `${stats.rating!.bars[key] * 10}%`,
+                                                    }}
+                                                />
+                                            </i>
+                                            <em>{stats.rating!.bars[key].toFixed(1)}</em>
+                                        </div>
+                                    ))}
+                                </div>
+                            </>
+                        ) : (
+                            <p>Working out the performance index</p>
+                        )}
+                    </div>
+                )}
                 {stats && (
                     <div className="garage-stats">
                         <div>

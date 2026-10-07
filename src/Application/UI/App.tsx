@@ -29,6 +29,7 @@ import {
     readGhostMode,
     type GhostMode,
 } from '../Racing/Ghost/ghostMode';
+import { LINE_MODES, readLineMode, type LineMode } from '../Racing/Track/lineMode';
 import {
     STEERING_KEY,
     STEERING_MAX,
@@ -63,6 +64,12 @@ const GHOST_MODE_LABEL: Record<GhostMode, string> = {
     best: 'Your best',
     rival: 'Rival',
     record: 'Record',
+};
+
+const LINE_MODE_LABEL: Record<LineMode, string> = {
+    off: 'Off',
+    braking: 'Braking',
+    full: 'Full',
 };
 
 const RenderModeButtons = ({
@@ -348,6 +355,7 @@ const App = () => {
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
     const [ghostMode, setGhostMode] = useState<GhostMode>(() => readGhostMode());
+    const [lineMode, setLineMode] = useState<LineMode>(() => readLineMode());
     const [steering, setSteering] = useState(() => readSteering());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
     const [trackOutline, setTrackOutline] = useState<number[][]>([]);
@@ -1598,6 +1606,26 @@ const App = () => {
                                 </div>
                             </div>
                         )}
+                        {trackState.track === 'ring' && (
+                            <div className="race-menu-row">
+                                <span>Driving line</span>
+                                <div className="race-quality-buttons">
+                                    {LINE_MODES.map((mode) => (
+                                        <button
+                                            key={mode}
+                                            type="button"
+                                            className={lineMode === mode ? 'active' : ''}
+                                            onClick={() => {
+                                                setLineMode(mode);
+                                                eventBus.dispatch('race:lineMode', { mode });
+                                            }}
+                                        >
+                                            {LINE_MODE_LABEL[mode]}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="race-menu-row">
                             <label htmlFor="race-steering-range">Steering</label>
@@ -1653,7 +1681,9 @@ const App = () => {
                             to your best lap with this car. All four wheels off
                             the road makes a lap dirty, and dirty laps don't go
                             on the leaderboard. The rival ghost is the lap just
-                            faster than your best.
+                            faster than your best. The driving line turns
+                            yellow where your speed says ease off and red where
+                            it says brake.
                         </p>
 
                         <p className="race-menu-credits">

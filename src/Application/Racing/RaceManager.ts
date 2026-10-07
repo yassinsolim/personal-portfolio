@@ -11,6 +11,17 @@ import {
     rpmAtSpeed,
     torqueAt,
 } from './Vehicle/VehiclePhysics';
+import {
+    measureEnvelope,
+    performanceBars,
+    performanceClass,
+    performanceIndex,
+    simulateLap,
+    type Envelope,
+} from './Vehicle/performance';
+import { buildRacingLine, type RacingLine } from './Track/racingLine';
+import { LINE_MODES, readLineMode, writeLineMode, type LineMode } from './Track/lineMode';
+import RacingLineView from './Visuals/RacingLineView';
 import RaceChaseCamera from './Camera/RaceChaseCamera';
 import LapTimer from './Lap/LapTimer';
 import LapDelta from './Lap/LapDelta';
@@ -55,6 +66,13 @@ type GhostLabel = {
     name?: string;
     lapTimeMs: number;
     carId: string;
+};
+
+// a setup's envelope, its ideal ring lap and the driving line's speeds
+type SetupPerformance = {
+    env: Envelope;
+    lapSeconds: number;
+    targets: Float32Array;
 };
 
 // a drift run at the line: on its way to the board, saved there (or on this
@@ -211,6 +229,11 @@ export default class RaceManager {
     ghostLapId: string | null = null;
     ghostSyncSerial = 0;
     garageTunesSerial = 0;
+    racingLine: RacingLine | null = null;
+    lineView: RacingLineView | null = null;
+    lineMode: LineMode = readLineMode();
+    performance = new Map<string, SetupPerformance>();
+    performanceTimer = 0;
     physicsAccumulator: number;
     lastPhysicsStepTimeMs: number;
     debugGameEnabled: boolean;
@@ -492,6 +515,7 @@ export default class RaceManager {
             // the vehicle loads that car's garage setup on the same event
             window.setTimeout(() => {
                 this.publishGarage();
+                this.applyLine();
                 if (this.garageOpen) {
                     this.dispatchGarage();
                     void this.dispatchGarageTunes();
@@ -535,8 +559,17 @@ export default class RaceManager {
                 );
                 this.publishGarage();
                 this.dispatchGarage();
+                this.applyLine();
             }
         );
+
+        UIEventBus.on('race:lineMode', (state: { mode?: string } | undefined) => {
+            const mode = LINE_MODES.find((option) => option === state?.mode);
+            if (!mode || mode === this.lineMode) return;
+            this.lineMode = mode;
+            writeLineMode(mode);
+            this.applyLine();
+        });
 
         UIEventBus.on('race:leaderboardBoard', (state: { board?: string } | undefined) => {
             this.leaderboardBoard = state?.board === 'tuned' ? 'tuned' : 'stock';
@@ -623,6 +656,7 @@ export default class RaceManager {
         this.ghostReplay.setActive(this.ghostPlaybackEnabled);
         this.startLapTimer();
         this.remoteSmoke.setActive(true);
+        this.applyLine();
 
         UIEventBus.dispatch('freeCamToggle', false);
         this.setLayerInteraction(true);
@@ -704,6 +738,7 @@ export default class RaceManager {
             this.ghostReplay.setActive(this.ghostPlaybackEnabled);
         }
         this.startLapTimer();
+        this.applyLine();
         UIEventBus.dispatch('race:trackOutline', { points: this.getTrackOutline() });
         UIEventBus.dispatch('race:trackState', { track: mode, building: false });
         if (mode === 'drift') void this.refreshDriftBoard();
@@ -824,6 +859,7 @@ export default class RaceManager {
         this.lapSubmitInFlight = false;
         this.ghostReplay.cancelLap();
         this.ghostReplay.setActive(false);
+        this.applyLine();
         this.remoteSmoke.setActive(false);
         this.clearRemoteVehicles();
 
@@ -1006,6 +1042,9 @@ export default class RaceManager {
         const spec = this.vehicle.physics.spec;
         const peak = peakOutput(spec);
         const top = predictTopSpeed(spec);
+        const performance = this.performance.get(this.setupKey());
+        if (!performance) this.schedulePerformance();
+        const pi = performance ? performanceIndex(performance.lapSeconds) : 0;
         UIEventBus.dispatch('race:garageState', {
             carId: this.vehicle.currentCarId,
             look,
@@ -1029,8 +1068,98 @@ export default class RaceManager {
                 rpmAt100: Math.round(
                     rpmAtSpeed(spec, 100 / 3.6, spec.gearRatios.length)
                 ),
+                rating: performance
+                    ? {
+                          pi,
+                          class: performanceClass(pi),
+                          bars: performanceBars(performance.env),
+                      }
+                    : null,
             },
         });
+    }
+
+    setupKey() {
+        return `${this.vehicle.currentCarId}:${tuneCode(this.vehicle.tune, this.vehicle.look)}`;
+    }
+
+    // the ring's racing line, worked out the first time something needs it
+    getRacingLine() {
+        if (!this.racingLine && this.ringWorld) {
+            this.racingLine = buildRacingLine(this.ringWorld.track);
+        }
+        return this.racingLine;
+    }
+
+    // the setup on the car now: how it does round the ring as a point mass,
+    // and the speeds the driving line asks for, with room for a driver
+    getPerformance() {
+        const key = this.setupKey();
+        const known = this.performance.get(key);
+        const line = this.getRacingLine();
+        if (known || !line) return known || null;
+        const env = measureEnvelope(this.vehicle.physics.spec);
+        const careful = {
+            ...env,
+            grip: env.grip * 0.95,
+            aero: env.aero * 0.95,
+            brake: env.brake.map((b) => b * 0.85),
+        };
+        const entry = {
+            env,
+            lapSeconds: simulateLap(env, line).time,
+            targets: simulateLap(careful, line).speed,
+        };
+        this.performance.set(key, entry);
+        if (this.performance.size > 40) {
+            this.performance.delete(this.performance.keys().next().value as string);
+        }
+        return entry;
+    }
+
+    // worked out once the setup settles, so a dragged slider stays smooth
+    schedulePerformance() {
+        window.clearTimeout(this.performanceTimer);
+        this.performanceTimer = window.setTimeout(() => {
+            if (!this.getPerformance()) return;
+            if (this.garageOpen) this.dispatchGarage();
+            this.applyLine();
+        }, 150);
+    }
+
+    // the driving line on the ring, with this setup's speeds
+    applyLine() {
+        const view = this.lineView;
+        if (this.lineMode === 'off' || this.trackMode !== 'ring' || !this.active) {
+            if (view) view.mode = 'off';
+            return;
+        }
+        const line = this.getRacingLine();
+        const ring = this.ringWorld?.track;
+        if (!line || !ring) return;
+        if (!view) {
+            const point = new THREE.Vector3();
+            const tangent = new THREE.Vector3();
+            const side = new THREE.Vector3();
+            const previous = new THREE.Vector3(1, 0, 0);
+            // the road ribbon's own banked frame, so the line lies on it
+            this.lineView = new RacingLineView(this.raceRoot, line, (index, offset, normal) => {
+                ring.getRibbonFrame(
+                    ring.visualCurve,
+                    index / line.count,
+                    point,
+                    tangent,
+                    normal,
+                    side,
+                    previous
+                );
+                return point.y + side.y * offset;
+            });
+        }
+        const performance = this.performance.get(this.setupKey());
+        this.lineView!.mode = this.lineMode;
+        this.lineView!.targets = performance ? performance.targets : null;
+        if (!performance) this.schedulePerformance();
     }
 
     // the board's tunes for the car on the stand, for the garage to load
@@ -1977,6 +2106,10 @@ export default class RaceManager {
             this.trackMode === 'ring' && this.lapRunning ? this.currentLapTimeMs : undefined
         );
         this.chaseCamera.update(delta);
+        if (this.lineView) {
+            const position = this.vehicle.position;
+            this.lineView.update(position.x, position.z, this.vehicle.velocity.length());
+        }
         this.visuals.update(delta);
         this.updateWorldAudio(delta);
 
