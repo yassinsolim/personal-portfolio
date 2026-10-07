@@ -36,9 +36,8 @@ type Props = {
     bestLapMs: number;
     // ms behind (positive) or ahead of the best lap at this point
     delta: number | null;
+    // the lap used rewind, so it won't count
     dirty: boolean;
-    // the lap used rewind
-    rewound: boolean;
     lastDirty: boolean;
     ghost: GhostHud | null;
     sectors: SectorHud | null;
@@ -208,17 +207,13 @@ const RaceHudGauges = (props: Props) => (
                 )}
             </div>
             {props.lapRunning && props.dirty && (
-                <div className="race-lap-dirty">
-                    {props.rewound
-                        ? "Rewind used: this lap won't count"
-                        : "Off the road: this lap won't count"}
-                </div>
+                <div className="race-lap-dirty">Rewind used: this lap won't count</div>
             )}
             <div className="race-lap-row">
                 <span>Last</span>
                 <strong>
                     {formatTime(props.lastLapMs)}
-                    {props.lastDirty && <em>dirty</em>}
+                    {props.lastDirty && <em>rewound</em>}
                 </strong>
             </div>
             <div className="race-lap-row">

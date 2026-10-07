@@ -11,6 +11,7 @@ import type { AssistPreset } from '../../Racing/Vehicle/assists';
 import { GHOST_MODES, type GhostMode } from '../../Racing/Ghost/ghostMode';
 import { LINE_MODES, type LineMode } from '../../Racing/Track/lineMode';
 import { STEERING_MAX, STEERING_MIN, clampSteering } from '../../Racing/Input/steering';
+import { MAX_DRIVER_NAME } from '../../Racing/Multiplayer/driverName';
 import {
     readGraphicsOff,
     writeGraphicsOff,
@@ -114,6 +115,8 @@ type Props = {
     onGhost: (mode: GhostMode) => void;
     onLine: (mode: LineMode) => void;
     onSteering: (steering: number) => void;
+    playerName: string;
+    onPlayerName: (name: string) => void;
 };
 
 // a row of buttons where one is picked
@@ -302,6 +305,19 @@ const PauseMenu = (props: Props) => {
                             <em>Change</em>
                         </button>
                         <h4>Online</h4>
+                        <Row label="Name">
+                            <input
+                                className="pm-input"
+                                value={props.playerName}
+                                maxLength={MAX_DRIVER_NAME}
+                                placeholder="Your name"
+                                aria-label="Driver name"
+                                spellCheck={false}
+                                onChange={(event) =>
+                                    props.onPlayerName(event.target.value.slice(0, MAX_DRIVER_NAME))
+                                }
+                            />
+                        </Row>
                         {inLobby ? (
                             <>
                                 <Row label={`Lobby ${multiplayer.lobbyCode}`}>

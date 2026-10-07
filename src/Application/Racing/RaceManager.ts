@@ -70,8 +70,6 @@ type Laps = { lapTimer: LapTimer; sectors: SectorTimer };
 
 // a drift park lap can't be under this
 const DRIFT_MIN_LAP_MS = 30_000;
-// all four wheels past the road's edge this long and the lap won't count
-const DIRTY_AFTER_S = 0.1;
 // a held horn is sent again this often, the others drop it after 0.8 s
 const HORN_RESEND_MS = 400;
 // photos are saved at up to this times the css size
@@ -191,8 +189,6 @@ export default class RaceManager {
     // a track to switch to as soon as the fly in from the room is done
     startTrack: TrackMode | null = null;
     rewind = new RewindBuffer();
-    // a lap that used rewind won't count, the hud says why
-    lapRewound = false;
     lobbyRace = new LobbyRace();
     // the horn as last sent and when, a held one is sent again now and then
     hornOn = false;
@@ -269,10 +265,9 @@ export default class RaceManager {
     // the board lap the ghost replays, null for your own best
     ghostLabel: GhostLabel | null = null;
     lapDelta = new LapDelta();
-    // this lap had all four wheels off the road, the last one did
+    // this lap used rewind and won't count, the last one did
     lapDirty = false;
     lastLapDirty = false;
-    offTrackSeconds = 0;
     lastStartResets: number;
     // the ring, or the drift park: each a world of its own, the park built
     // the first time it's picked. scoring and its board are the park's
@@ -904,8 +899,6 @@ export default class RaceManager {
         if (this.trackMode === 'ring') this.ghostReplay.holdAtStart();
         this.lapDelta.reset();
         this.lapDirty = false;
-        this.lapRewound = false;
-        this.offTrackSeconds = 0;
         this.lastStartResets = this.vehicle.startResets;
         this.rewind.clear();
     }
@@ -1414,7 +1407,6 @@ export default class RaceManager {
             lapDelta:
                 this.trackMode === 'ring' && this.lapRunning ? this.lapDelta.gap() : null,
             lapDirty: this.trackMode === 'ring' && this.lapDirty,
-            lapRewound: this.trackMode === 'ring' && this.lapRewound,
             race: this.raceHud(),
             rewind: this.rewind.playhead !== null ? this.rewind.left() : null,
             lastLapDirty: this.lastLapDirty,
@@ -2171,11 +2163,7 @@ export default class RaceManager {
         this.lapProgress = clock.progress as number;
         this.lapRunning = clock.running as boolean;
         this.lapArmed = clock.armed as boolean;
-        this.offTrackSeconds = 0;
-        if (this.lapRunning) {
-            this.lapDirty = true;
-            this.lapRewound = true;
-        }
+        if (this.lapRunning) this.lapDirty = true;
         this.physicsAccumulator = 0;
         this.engineAudio.carAudio.resetMotion();
     }
@@ -2347,8 +2335,6 @@ export default class RaceManager {
                 this.sectors.reset();
                 this.lapDelta.reset();
                 this.lapDirty = false;
-                this.lapRewound = false;
-                this.offTrackSeconds = 0;
             }
             this.sectors.update(this.lapProgress, this.currentLapTimeMs, this.lapRunning);
 
@@ -2358,11 +2344,6 @@ export default class RaceManager {
                     quaternion: telemetry.quaternion,
                     carId: telemetry.carId,
                 });
-                const off = telemetry.wheelSurfaces.every(
-                    (kind) => kind === 'grass' || kind === 'off'
-                );
-                this.offTrackSeconds = off ? this.offTrackSeconds + delta : 0;
-                if (this.offTrackSeconds > DIRTY_AFTER_S) this.lapDirty = true;
             }
             if (lapUpdate.lapRunning && !ring) {
                 this.updateDriftScore(delta, telemetry.speedKph, nowMs);
@@ -2384,8 +2365,6 @@ export default class RaceManager {
                     if (this.lapDelta.bestLapMs !== best) void this.syncGhost();
                     this.lastLapDirty = valid && this.lapDirty;
                     this.lapDirty = false;
-                    this.lapRewound = false;
-                    this.offTrackSeconds = 0;
                     // rewind can't reach back over the line
                     this.rewind.clear();
                 } else {

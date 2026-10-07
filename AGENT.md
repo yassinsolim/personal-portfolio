@@ -449,9 +449,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   stock or tuned setup (`yassinverse:raceDelta@v6:<car>:<stock|tuned>`) as the clock at
   1000 points along the lap; the hud's number next to the clock is this lap against it at
   the same spot (`LapTimer` reports an `exact` lap fraction between its samples), and Best
-  is that lap. All four wheels on grass or off for over 0.1 s makes the lap dirty
-  (`DIRTY_AFTER_S`): the hud says so, and the lap doesn't go on the board, the sector bests,
-  the ghost or the delta. The pause menu's Ghost row (`Ghost/ghostMode.ts`, off by default,
+  is that lap. Going off the road doesn't void a lap (grass and gravel cost grip and speed,
+  that's the price); `LapTimer` alone throws out laps that skip the track (under 92% of it
+  reached, or under its minimum time). Only a rewound lap is dirty: the hud says so, and it
+  doesn't go on the board, the sector bests, the ghost or the delta. The pause menu's Ghost
+  row (`Ghost/ghostMode.ts`, off by default,
   `?ghostReplay` still means the record) picks your best lap, a rival (the lap on your
   setup's board just faster than your best, from `getLapsFasterThan`; the slowest of the
   top ten before you have one) or the record. The ghost follows the lap clock
@@ -565,6 +567,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Photo mode moves: W A S D along the ground the way the camera looks, Q and E down and up,
   Shift faster (the left stick, the bumpers and a stick click on a pad), up to 60 m from the
   car. The car's input is off while paused, so the keys don't drive or shift it.
+- Driver names: an unset name (empty, or "Driver", which is what an empty one is sent as)
+  gets the name card (`NameCard.tsx`) on the first drive, once the fly in is over, with a
+  made-up name filled in (`Multiplayer/driverName.ts`, never over the 16 characters the
+  database takes). Enter, A or Esc keeps what's in the field. It's also under Online in the
+  pause menu and on the room panel; a change reaches a lobby with the next telemetry.
 
 ## Baseline (Phase 0)
 - Branch: `feature/nordschleife-racing` (created from latest `main` at start).

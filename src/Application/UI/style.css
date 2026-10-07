@@ -1563,7 +1563,129 @@ body.race-mode-touch #ui-app {
     line-height: 1.5;
 }
 
+/* the driver name: the menu's field, and the card on a first drive */
+.race-menu-panel .pm-input {
+    flex: 1;
+    min-width: 0;
+    max-width: 220px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--ui-line);
+    border-radius: 9px;
+    background: var(--ui-fill);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+}
+
+.race-menu-panel .pm-input:focus,
+.race-name-row input:focus {
+    border-color: var(--ui-accent);
+}
+
+.race-name {
+    position: fixed;
+    inset: 0;
+    z-index: 42;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.45);
+    pointer-events: auto;
+}
+
+.race-name-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: min(420px, 100%);
+    padding: 22px;
+    border: 1px solid var(--ui-line);
+    border-radius: 16px;
+    background: #0e0e0f;
+    color: var(--ui-text);
+    font-family: var(--ui-font);
+    font-size: 13px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+    box-sizing: border-box;
+    animation: race-lobby-in 0.35s ease-out;
+}
+
+.race-name-card h3 {
+    margin: 0;
+    color: #fff;
+    font-family: inherit;
+    font-size: 19px;
+    font-weight: 650;
+}
+
+.race-name-card p {
+    margin: -4px 0 4px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.race-name-row {
+    display: flex;
+    gap: 8px;
+}
+
+.race-name-row input {
+    flex: 1;
+    min-width: 0;
+    height: 42px;
+    padding: 0 12px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 10px;
+    background: var(--ui-fill);
+    color: #fff;
+    font-family: inherit;
+    font-size: 16px;
+    outline: none;
+}
+
+.race-name-card button {
+    height: 42px;
+    padding: 0 14px;
+    border: 1px solid var(--ui-line);
+    border-radius: 10px;
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.race-name-card button:hover {
+    border-color: var(--ui-line-strong);
+    background: var(--ui-fill-hover);
+}
+
+.race-name-card .race-menu-primary {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-size: 14px;
+    font-weight: 650;
+}
+
+.race-name-card .race-menu-primary:hover {
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
+}
+
 @media (max-width: 719px) {
+    /* up top, clear of the rotate hint and the touch controls */
+    .race-name {
+        align-items: flex-start;
+        padding-top: calc(16px + env(safe-area-inset-top));
+    }
+
     .race-menu-panel {
         width: calc(100vw - 16px);
         max-height: calc(100dvh - 16px);
