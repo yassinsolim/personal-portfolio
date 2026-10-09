@@ -61,8 +61,8 @@ const makeCar = (id, preset, autoGears, tune = garage.STOCK_TUNE) => {
 // keys in, ramped the way DrivingInput does it
 const keyboard = () => {
     const s = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
-    const rates = steerRates(1);
-    return (keys) => {
+    return (keys, speed = 0) => {
+        const rates = steerRates(1, speed);
         const w = keys.w ? 1 : 0;
         s.throttle = toward(s.throttle, w, DT * (w > s.throttle ? 7 : 11));
         const b = keys.s ? 1 : 0;
@@ -104,7 +104,7 @@ const brakeInTurn = (id, preset, autoGears, kph) => {
     let maxSlip = 0;
     for (let t = 0; t < 6 && car.gear > 0; t += DT) {
         const braking = t >= 0.6;
-        const c = keys({ a: true, s: braking });
+        const c = keys({ a: true, s: braking }, car.getSpeed());
         car.step(DT, c, FLAT, c.steer);
         const travel = car.yaw + Math.atan2(car.vy, car.vx);
         const d = Math.atan2(
@@ -145,6 +145,36 @@ test('locking the fronts without abs plows on instead of spinning', () => {
                 const label = `${id} ${kph}kph ${auto ? 'auto' : 'manual'}`;
                 assert.ok(r.maxSlip < 12, `${label}: slip ${r.maxSlip}`);
                 assert.ok(r.left > r.right, `${label}: turned back`);
+            }
+        }
+    }
+});
+
+// the front tires' squeal and smoke (getFrontSlideIntensity) braking and
+// steering together, straight from speed or braking first. the steering used
+// to keep growing as the car slowed and drive the fronts sideways at full
+// scale, which read as locked wheels
+const scrubInTurn = (id, kph, brakeFirst) => {
+    const car = makeCar(id, 'standard', true);
+    const keys = keyboard();
+    upToSpeed(car, keys, kph);
+    let worst = 0;
+    for (let t = 0; t < 1.5 && car.getSpeed() > 3; t += DT) {
+        const held = brakeFirst && t < 0.4 ? { s: true } : { s: true, d: true };
+        const c = keys(held, car.getSpeed());
+        car.step(DT, c, FLAT, c.steer);
+        worst = Math.max(worst, car.getFrontSlideIntensity());
+    }
+    return worst;
+};
+
+test('with abs, braking into a turn keeps the fronts gripping, not scrubbing', () => {
+    for (const id of CARS) {
+        for (const kph of [80, 140]) {
+            for (const brakeFirst of [false, true]) {
+                const scrub = scrubInTurn(id, kph, brakeFirst);
+                const label = `${id} ${kph}kph${brakeFirst ? ' braking first' : ''}`;
+                assert.ok(scrub < 0.25, `${label}: ${scrub.toFixed(2)}`);
             }
         }
     }

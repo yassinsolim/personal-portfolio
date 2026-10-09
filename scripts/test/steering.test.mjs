@@ -11,23 +11,28 @@ test('the steering setting stays in range', () => {
     assert.equal(clampSteering(Number.NaN), 1);
 });
 
-test('the default steers quicker than the old fixed ramps', () => {
-    // the old ramps: 5.5 in, 9 back, 13 across, and a 1.35 stick curve
-    const rates = steerRates(1);
-    assert.ok(rates.rise > 5.5);
-    assert.ok(rates.release >= 9);
-    assert.ok(rates.reverse > 13);
-    assert.ok(stickCurve(1) < 1.35);
+test('the default keys take a sixth of a second in town and a third at 200 km/h', () => {
+    const town = steerRates(1, 10);
+    const fast = steerRates(1, 200 / 3.6);
+    assert.ok(Math.abs(1 / town.rise - 1 / 6) < 0.01, `${1 / town.rise} s in town`);
+    assert.ok(Math.abs(1 / fast.rise - 1 / 3) < 0.02, `${1 / fast.rise} s at 200`);
+    // swapping sides slows the same way, letting go stays quick
+    assert.ok(fast.reverse < town.reverse * 0.55);
+    assert.ok(fast.release === town.release && town.release >= 9);
+    // gentler than the old default (8 in, 16 across) everywhere
+    assert.ok(town.rise < 8 && town.reverse < 16);
+    // the stick is finer in the middle than it was (1.1)
+    assert.ok(stickCurve(1) >= 1.4);
 });
 
 test('more sensitivity is quicker and a flatter stick, within limits', () => {
-    let last = steerRates(STEERING_MIN);
+    let last = steerRates(STEERING_MIN, 30);
     let lastCurve = stickCurve(STEERING_MIN);
     for (let s = STEERING_MIN + 0.1; s <= STEERING_MAX + 1e-9; s += 0.1) {
-        const rates = steerRates(s);
+        const rates = steerRates(s, 30);
         assert.ok(rates.rise > last.rise && rates.reverse > last.reverse);
         const curve = stickCurve(s);
-        assert.ok(curve <= lastCurve && curve >= 0.8 && curve <= 1.4);
+        assert.ok(curve <= lastCurve && curve >= 1 && curve <= 1.8);
         last = rates;
         lastCurve = curve;
     }

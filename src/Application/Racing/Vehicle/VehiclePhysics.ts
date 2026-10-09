@@ -211,6 +211,19 @@ const REVERSE_HOLD = 0.5;
 // the stock bias and forward of it
 const REAR_VALVE = 0.9;
 const VALVE_BIAS = 0.64;
+// abs lets a tire slip as far as what's left of its grip ellipse (in peak
+// slips) once it's also cornering, never under ABS_FLOOR of the straight
+// line slip, so the fronts keep steering under the brakes
+const ABS_ELLIPSE = 1.15;
+const ABS_FLOOR = 0.3;
+// with abs, braking keeps the front wheels this many peak slip angles either
+// side of where the front axle is going: past it they only scrub
+const BRAKING_STEER_REACH = 1.15;
+// stability control damps yaw past this share of what the tires can carry
+// the car round at its speed, at this rate (1/s), at most this hard (rad/s2)
+const YAW_MARGIN = 1.1;
+const YAW_DAMPING = 8;
+const YAW_DAMPING_MAX = 4;
 const RAD_PER_S_TO_RPM = 60 / (Math.PI * 2);
 // tires grip a bit harder braking and accelerating than cornering
 const LONGITUDINAL_GRIP = 1.1;
@@ -378,6 +391,8 @@ export default class VehiclePhysics {
     boost = 0;
     manualShiftRequest: number;
     handbrakeInput: number;
+    // the brake pedal (or the throttle backing up), 0 to 1
+    brakeInput = 0;
     onShift: ((gear: number, previous: number) => void) | null;
     private wheelX: number[];
     private wheelY: number[];
@@ -730,6 +745,10 @@ export default class VehiclePhysics {
             ? Math.min(spec.maxSteer, base + Math.abs(frontTravel) * 1.1)
             : base;
         let target = steerInput * limit;
+        if (this.assists.abs && this.brakeInput > 0.1 && this.vx > 5) {
+            const reach = spec.slipAnglePeak * BRAKING_STEER_REACH;
+            target = clamp(target, frontTravel - reach, frontTravel + reach);
+        }
         this.steerRequest = target;
         this.driftThrottle = 1;
 
@@ -1032,6 +1051,7 @@ export default class VehiclePhysics {
         this.displacementZ = 0;
         if (!(dt > 0)) return;
         this.handbrakeInput = clamp(controls.handbrake, 0, 1);
+        this.brakeInput = clamp(this.gear < 0 ? controls.throttle : controls.brake, 0, 1);
         this.updateDriftWindow(dt, controls);
         this.updateSteering(dt, steerInput);
         const steps = Math.max(1, Math.ceil(dt / INNER_STEP));
@@ -1136,6 +1156,19 @@ export default class VehiclePhysics {
                     Math.min(excess * 5.5, 1) *
                     spec.yawInertia *
                     3.2;
+            }
+            // the nose swinging round faster than the tires can carry the car
+            // (a snap turn in, a pendulum off a quick change of direction) is
+            // damped back. a held corner stays under it
+            const support = this.load[0] + this.load[1] + this.load[2] + this.load[3];
+            const carried = (spec.tireGrip * support * YAW_MARGIN) / spec.massKg / speed;
+            const overYaw = Math.abs(this.yawRate) - carried;
+            if (overYaw > 0) {
+                this.stabilityActive = true;
+                stabilityMoment -=
+                    Math.sign(this.yawRate) *
+                    Math.min(overYaw * YAW_DAMPING, YAW_DAMPING_MAX) *
+                    spec.yawInertia;
             }
             // the power comes off before the rear is far out, a slide held
             // on the throttle runs wide
@@ -1345,7 +1378,10 @@ export default class VehiclePhysics {
                 brakeTorque > 0 &&
                 (front || handbrake < 0.1)
             ) {
-                if (kappa < -spec.slipRatioPeak * 1.2 && Math.abs(vl) > 2) {
+                const cornering = Math.min(Math.abs(sy), ABS_ELLIPSE);
+                const room = Math.sqrt(ABS_ELLIPSE * ABS_ELLIPSE - cornering * cornering);
+                const limit = spec.slipRatioPeak * clamp(room, ABS_FLOOR, 1.2);
+                if (kappa < -limit && Math.abs(vl) > 2) {
                     // a kit past the stock torque drops straight back to it
                     const held = Math.min(this.absScale[i], absStep);
                     this.absScale[i] = Math.max(

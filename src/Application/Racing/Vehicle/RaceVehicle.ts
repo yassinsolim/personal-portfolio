@@ -4583,7 +4583,7 @@ export default class RaceVehicle {
         // grounding (or the ballistic path), which works from here
         this.stepStartY = this.position.y;
 
-        this.input.update(dt);
+        this.input.update(dt, this.physics.getSpeed());
         const controls = this.input.getState();
         const shift = this.input.consumeShift();
         if (shift !== 0) {
