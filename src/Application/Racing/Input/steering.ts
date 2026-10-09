@@ -1,6 +1,5 @@
-// the pause menu's steering speed: 1 is the default, about 0.6 the old feel
-
-export const STEERING_KEY = 'yassinverse:nordschleife:steering:v1';
+// the pause menu's steering speed: 1 is the default
+export const STEERING_KEY = 'yassinverse:nordschleife:steering:v2';
 export const STEERING_MIN = 0.6;
 export const STEERING_MAX = 1.6;
 
@@ -18,13 +17,18 @@ export const readSteering = () => {
     }
 };
 
-// per second for keys and touch: in, back to the middle, and across
-export const steerRates = (sensitivity: number) => ({
-    rise: 8 * sensitivity,
-    release: 9 + 2 * sensitivity,
-    reverse: 16 * sensitivity,
-});
+// per second for keys and touch: in, back to the middle, and across. a key
+// asks for the car's whole grip, so from town speeds (15 m/s) to 200 km/h
+// (55 m/s) it takes twice as long to get there and to swap sides
+export const steerRates = (sensitivity: number, speed = 0) => {
+    const pace = 1 - 0.5 * Math.min(1, Math.max(0, (speed - 15) / 40));
+    return {
+        rise: 6 * sensitivity * pace,
+        release: 9 + 2 * sensitivity,
+        reverse: 12 * sensitivity * pace,
+    };
+};
 
-// the pad stick's curve: lower turns more for the same push
+// the pad stick's curve: higher keeps the middle of the stick finer
 export const stickCurve = (sensitivity: number) =>
-    Math.min(1.4, Math.max(0.8, 1.6 - 0.5 * sensitivity));
+    Math.min(1.8, Math.max(1, 2.1 - 0.6 * sensitivity));

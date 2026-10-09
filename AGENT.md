@@ -388,12 +388,22 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   the pure parts (`scripts/test/gamepad.test.mjs`).
 
 ## Polish Notes (2026-10-06)
-- Steering: a Steering slider in the pause menu (60 to 160%, `yassinverse:nordschleife:steering:v1`,
+- Steering: a Steering slider in the pause menu (60 to 160%, `yassinverse:nordschleife:steering:v2`,
   `Racing/Input/steering.ts`). It sets how fast keys and touch ramp the steering and the pad
-  stick's curve (`steerRates`, `stickCurve`), not the physics, so lap times stay comparable. The
-  default is quicker than the old fixed ramps. Full lock already reaches the tires' limit
-  (skidpad g doesn't rise with more lock), so turning tighter would need more grip, a physics
-  change with new leaderboard tags. `race-drive-metrics.js` takes `skidpadMaxSteer` and `assists`.
+  stick's curve (`steerRates`, `stickCurve`), not the physics, so lap times stay comparable.
+  Full lock already reaches the tires' limit (skidpad g doesn't rise with more lock), so turning
+  tighter would need more grip, a physics change with new leaderboard tags.
+  `race-drive-metrics.js` takes `skidpadMaxSteer` and `assists`.
+- Twitchy steering (October 2026, the most common complaint): the keys took the wheel to full
+  lock in an eighth of a second at any speed (across in a sixteenth), and full lock asks for all
+  the grip, so a quick lane change at 200 km/h threw the car 9 degrees sideways. `steerRates`
+  now takes the speed (`DrivingInput.update(dt, speed)`): full lock in a sixth of a second in
+  town and a third by 200 km/h, swapping sides slows the same way, letting go doesn't. The pad
+  curve is 1.5 at 100% so the middle of the stick is finer. The storage key went to v2 so
+  everyone starts on the new default. Standard's stability control also damps yaw past
+  `YAW_MARGIN` of what the tires can carry the car round at its speed (a snap on turn in, the
+  pendulum after a lane change); a held corner stays under it. The lane change now peaks under
+  3 degrees. `scripts/test/handling.test.mjs` covers it and full steer on the power for every car.
 - Remote cars (`RaceManager.updateRemoteVehicleVisual`): the guess past a sample follows the
   bend at the sample's yaw rate (no tighter than 2 g), a sample further on than the car could
   have driven is a respawn and snaps (they used to slide through the scenery), and
@@ -436,6 +446,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   spun it against the steering. A tire braked past twice its peak slip (not the rears on the
   handbrake) pushes against the way its contact patch slides. Stock laps with abs are as
   before.
+- Braking into a turn looked like locked fronts (full squeal, smoke and skid marks) though the
+  abs never let them lock: it only watched the slip along the tire, and the steering limit
+  opens up as the car slows, so the fronts ran at several times their peak slip angle and
+  scrubbed. Now the abs lets a cornering tire slip only as far as what's left of its grip
+  ellipse (`ABS_ELLIPSE`, never under `ABS_FLOOR` of the straight line slip), and with abs the
+  brake keeps the front wheels within `BRAKING_STEER_REACH` peak slip angles of where the front
+  axle is going. Straight stops and skidpad g are unchanged and the cars turn more under the
+  brakes. Off has no abs, so its fronts still lock. Laps stayed on `@v6`: the tires hold what
+  they did, only the assists and the input changed.
 - Brake kits (garage Tuning tab): stock, street, sport and race, 1, 1.15, 1.3 and 1.5 times the
   brake torque, and sport and race add a pressure slider (70 to 130%). Stock brakes already
   lock the tires on most cars, so like in Forza the kits pay off with grippier tires,

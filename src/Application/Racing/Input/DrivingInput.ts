@@ -368,7 +368,8 @@ export default class DrivingInput {
         return state;
     }
 
-    update(deltaSeconds: number) {
+    // speed: the car's, m/s, for the keys' steering ramp
+    update(deltaSeconds: number, speed = 0) {
         const dt = Math.min(0.1, Math.max(0, deltaSeconds));
         const pad = this.enabled ? this.readGamepad() : null;
         const smooth = this.smoothState;
@@ -420,7 +421,7 @@ export default class DrivingInput {
             brakeTarget,
             dt * (brakeTarget > smooth.brake ? BRAKE_RISE : BRAKE_RELEASE)
         );
-        const rates = steerRates(this.sensitivity);
+        const rates = steerRates(this.sensitivity, speed);
         let steerRate = rates.rise;
         if (steerTarget === 0) steerRate = rates.release;
         else if (
