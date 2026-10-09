@@ -559,6 +559,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Track cards (pause menu, room panel) draw each lap from `UI/trackOutlines.ts`, which
   `node scripts/track/outlines.mjs` writes from the track data: rerun it when a track
   changes.
+- The logo is a white geometric y on a black tile. `node scripts/icons.mjs` draws it and
+  writes every icon from it (favicon.svg and .ico, the png favicons, apple touch, android,
+  maskable); `--preview` renders them on light and dark tab strips first.
 - Esc: with the mouse locked the browser eats the key and only unlocks, so losing the lock
   while driving pauses (`RaceChaseCamera`, our own unlocks set `releasing`). Esc in the menu
   resumes, but not the esc that paused: that one is default-prevented by the camera before
