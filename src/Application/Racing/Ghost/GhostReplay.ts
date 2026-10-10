@@ -300,6 +300,20 @@ export default class GhostReplay {
         }
     }
 
+    // your best lap taken off the board: its ghost goes from this device too
+    forgetBest(lapTimeMs: number) {
+        if (!this.bestLapTimeMs || Math.floor(this.bestLapTimeMs) !== lapTimeMs) return;
+        this.bestLapTimeMs = 0;
+        this.playbackSamples = [];
+        this.playbackDurationMs = 0;
+        try {
+            window.localStorage.removeItem(STORAGE_KEY);
+        } catch {
+            // storage blocked, it's gone until a reload
+        }
+        this.root.visible = this.active && this.getActivePlaybackSamples().length > 1;
+    }
+
     load() {
         if (typeof window === 'undefined') return;
         try {

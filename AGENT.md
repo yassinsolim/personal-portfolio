@@ -475,7 +475,25 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   5:02 on the tuned board (October 2026) sat on the grid, backed over the line, went the wrong
   way down the straight and came back, and the old furthest-point-seen check counted the
   lap's end as reached. Only a rewound lap is dirty: the hud says so, and it
-  doesn't go on the board, the sector bests, the ghost or the delta. The pause menu's Ghost
+  doesn't go on the board, the sector bests, the ghost or the delta.
+- The database checks every lap too (`supabase/racing.sql`): a lap row starts `verified`
+  false (the api can't insert it true) and the ghost upsert's trigger sets it from
+  `nordschleife_replay_drives_lap`: the ghost starts by the line, comes within 50 m of 200
+  checkpoints about 100 m apart in order (the real laps pass all of them within 19 m), and its
+  clock ends on the lap's time. The boards only read verified laps (`.eq('verified', true)`)
+  and refresh on any change to the table, not just inserts. The checkpoints come from the
+  track data: rerun `node scripts/track/checkpoints.mjs` and racing.sql (its backfill rechecks
+  every lap) when the ring changes; `scripts/test/lap-checkpoints.test.mjs` fails until then.
+  A forged replay could still pass, it just takes real work now. Run racing.sql on the live
+  project with `supabase db query --linked --project-ref qdepbyxxzbdknkfgpwyl -f
+  supabase/racing.sql` (the cli is logged in on this machine).
+- Taking a lap off the board: `select public.nordschleife_remove_lap('<lap id>', '<why>')`
+  (sql only, the api can't). It lists the lap in `nordschleife_removed_laps`, which anyone can
+  read, and deletes it with its ghost. On entering race mode the device whose own board has
+  that lap (same time to the ms, car and board) drops its copies, its best for the delta and
+  its ghost (`checkRemovedLaps`), and shows `RemovedLapCard` with the reason once
+  (`Leaderboard/removedLaps.ts`). The 5:02 was the first, October 2026.
+- The pause menu's Ghost
   row (`Ghost/ghostMode.ts`, off by default,
   `?ghostReplay` still means the record) picks your best lap, a rival (the lap on your
   setup's board just faster than your best, from `getLapsFasterThan`; the slowest of the

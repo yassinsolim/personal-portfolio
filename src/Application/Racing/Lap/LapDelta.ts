@@ -103,4 +103,17 @@ export default class LapDelta {
             // storage full or blocked
         }
     }
+
+    // a lap taken off the board stops being the best on this device too
+    forget(carId: string, tuned: boolean, lapMs: number) {
+        const key = `${carId}:${tuned ? 'tuned' : 'stock'}`;
+        try {
+            const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
+            if (!raw || Math.floor(JSON.parse(raw)?.lapMs) !== lapMs) return;
+            window.localStorage.removeItem(STORAGE_PREFIX + key);
+        } catch {
+            return;
+        }
+        if (key === this.key) this.load();
+    }
 }

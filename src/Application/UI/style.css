@@ -1728,6 +1728,33 @@ button:hover:not(:disabled) > .track-map {
     gap: 8px;
 }
 
+/* a removed lap: its time and car over why */
+.race-removed-lap {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--ui-line);
+    border-radius: 10px;
+}
+
+.race-removed-lap strong {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.race-removed-lap span {
+    color: var(--ui-muted);
+    font-size: 12.5px;
+}
+
+.race-name-card .race-removed-lap + p {
+    margin-top: 0;
+    color: rgba(255, 255, 255, 0.85);
+}
+
 .race-name-row input {
     flex: 1;
     min-width: 0;

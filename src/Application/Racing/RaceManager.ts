@@ -41,6 +41,7 @@ import { carHasCalipers, kitsThatFit } from './Garage/carLook';
 import GarageScene, { GARAGE_ORIGIN, TURNTABLE_TOP } from './Garage/GarageScene';
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
+import { addRemovedNotices } from './Leaderboard/removedLaps';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import type { RemoteCarAudioState } from './Audio/CarAudio';
 import GhostReplay, { type GhostLapReplay } from './Ghost/GhostReplay';
@@ -779,8 +780,24 @@ export default class RaceManager {
         UIEventBus.dispatch('race:pauseState', { paused: false });
         UIEventBus.dispatch('race:inputReset', { source: 'enterRaceMode' });
         this.refreshLeaderboard();
+        void this.checkRemovedLaps();
         this.engineAudio.setRaceActive(true);
         this.engineAudio.setPaused(false);
+    }
+
+    // laps taken off the board that this device set: its own copies go (its
+    // board, best lap and ghost) and the player is told why
+    async checkRemovedLaps() {
+        const removed = await this.leaderboardService.getRemovedLaps();
+        const mine = this.leaderboardService.forgetRemovedLaps(removed);
+        if (!mine.length) return;
+        mine.forEach((lap) => {
+            this.lapDelta.forget(lap.carId, lap.tuned, lap.lapTimeMs);
+            this.ghostReplay.forgetBest(lap.lapTimeMs);
+        });
+        addRemovedNotices(mine);
+        UIEventBus.dispatch('race:removedLaps', {});
+        void this.refreshLeaderboard();
     }
 
     // back to the start line with a fresh lap, keeping race mode running

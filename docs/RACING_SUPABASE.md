@@ -69,12 +69,25 @@ Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, 
 - `nordschleife_ghost_replays`: public read, insert and update (the client upserts), but only
   for a real lap with the same car and lap time, 8 to 5001 samples, every sample an object and
   at most 2 MB (a real 10 minute lap is about 1 MB). A ghost can only be replaced in the 15 minutes after it's written.
+- Verified laps: a lap row's `verified` starts false (the api can't insert it true) and a
+  trigger on the ghost sets it once the ghost drove the whole ring forward from the line (200
+  checkpoints in order, `nordschleife_replay_drives_lap`). The game's boards only read
+  verified laps. The checkpoints are written from the track data by
+  `node scripts/track/checkpoints.mjs`; rerun it and this file when the ring changes.
+- `nordschleife_removed_laps`: laps taken off the board and why, public read only. Remove a
+  lap from the SQL editor (the api can't) with
+  `select public.nordschleife_remove_lap('<lap id>', '<why, shown to the player>');`, which
+  lists it there and deletes it with its ghost. The player's device tells them the next time
+  they race.
 - `nordschleife_rate_events`: private, no access for the browser roles.
 - Grants: anon/authenticated get select + insert on laps and select + insert + update on
-  ghosts, nothing else (no delete, truncate or update on laps).
-- The leaderboard table in the `supabase_realtime` publication, so boards refresh on new laps.
+  ghosts, select on removed laps, nothing else (no delete, truncate or update on laps).
+- The leaderboard table in the `supabase_realtime` publication, so boards refresh when laps
+  are added, verified or removed.
 
 Test it locally first (docker, nothing touches the real project): `./scripts/test-racing-sql.sh`.
+The Supabase CLI can also run it on the live project:
+`supabase db query --linked --project-ref qdepbyxxzbdknkfgpwyl -f supabase/racing.sql`.
 
 ## 4) Realtime for multiplayer lobbies
 
