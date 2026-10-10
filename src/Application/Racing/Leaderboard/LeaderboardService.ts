@@ -5,6 +5,7 @@ import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
 import { SEASON_TAG } from './season';
+import type { RemovedLap } from './removedLaps';
 
 type SupabaseConfig = {
     supabaseUrl: string;
@@ -30,6 +31,8 @@ const MAX_UPLOAD_SAMPLES = 5000;
 // this device's laps (LocalLeaderboard ids): only their ghosts are kept in
 // storage, a lap on the board can be fetched again (and is about 1 MB)
 const LOCAL_LAP_PREFIX = 'local-';
+// laps taken off the board, and why (supabase/racing.sql)
+const REMOVED_LAPS_TABLE = 'nordschleife_removed_laps';
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -45,6 +48,15 @@ type RemoteGhostReplayRow = {
     car_id: string;
     samples: unknown;
     created_at?: string;
+};
+
+type RemoteRemovedRow = {
+    lap_id: string;
+    name: string;
+    lap_time_ms: number;
+    car_id: string;
+    reason: string;
+    removed_at: string;
 };
 
 type RemoteDriftRow = {
@@ -158,7 +170,8 @@ export default class LeaderboardService {
         );
     }
 
-    // stock laps end in the season tag, tuned ones carry ~t<tune code> after it
+    // stock laps end in the season tag, tuned ones carry ~t<tune code> after it.
+    // a lap shows once the database has checked its ghost drove the whole ring
     async getLeaderboard(limit = 10, board: 'stock' | 'tuned' = 'stock') {
         const localEntries = this.local.getTop(limit, board);
         await this.initialize();
@@ -172,6 +185,7 @@ export default class LeaderboardService {
                 .from(this.tableName)
                 .select('id,name,lap_time_ms,car_id,created_at')
                 .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
+                .eq('verified', true)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
 
@@ -207,6 +221,7 @@ export default class LeaderboardService {
                 .from(this.tableName)
                 .select('id,name,lap_time_ms,car_id,created_at')
                 .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
+                .eq('verified', true)
                 .lt('lap_time_ms', Math.floor(lapTimeMs))
                 .order('lap_time_ms', { ascending: false })
                 .limit(limit);
@@ -235,6 +250,7 @@ export default class LeaderboardService {
                     .from(this.tableName)
                     .select('id,name,lap_time_ms,car_id,created_at')
                     .like('car_id', `${carId}${SEASON_TAG}${TUNE_TAG}%`)
+                    .eq('verified', true)
                     .order('lap_time_ms', { ascending: true })
                     .limit(limit * 4);
                 if (!error && data) {
@@ -400,6 +416,48 @@ export default class LeaderboardService {
         };
     }
 
+    // laps taken off the board, and why
+    async getRemovedLaps(): Promise<RemovedLap[]> {
+        await this.initialize();
+        if (!this.supabase) return [];
+        try {
+            const { data, error } = await this.supabase
+                .from(REMOVED_LAPS_TABLE)
+                .select('lap_id,name,lap_time_ms,car_id,reason,removed_at')
+                .order('removed_at', { ascending: false })
+                .limit(200);
+            if (error || !data) return [];
+            return (data as RemoteRemovedRow[]).map((row) => ({
+                lapId: String(row.lap_id || '').slice(0, 80),
+                name: this.sanitizeName(row.name),
+                lapTimeMs: this.sanitizeLapTime(row.lap_time_ms),
+                carId: this.sanitizeCarId(row.car_id),
+                tuned: Boolean(this.readTune(row.car_id)),
+                reason: String(row.reason || '').slice(0, 600),
+                removedAt: row.removed_at || '',
+            }));
+        } catch {
+            return [];
+        }
+    }
+
+    // the removed laps this device set (its local board has them to the ms):
+    // its copies and their ghosts go, and those laps are returned
+    forgetRemovedLaps(removed: RemovedLap[]) {
+        const mine = removed.filter((lap) => {
+            const gone = this.local.removeWhere(
+                (entry) =>
+                    entry.lapTimeMs === lap.lapTimeMs &&
+                    entry.carId === lap.carId &&
+                    Boolean(entry.tune) === lap.tuned
+            );
+            gone.forEach((entry) => this.ghostReplayCache.delete(entry.id));
+            return gone.length > 0;
+        });
+        if (mine.length) this.persistGhostFallbackCache();
+        return mine;
+    }
+
     notifyLeaderboardChanged() {
         this.listeners.forEach((listener) => {
             try {
@@ -417,10 +475,11 @@ export default class LeaderboardService {
             `leaderboard-changes:${this.tableName}`
         );
 
+        // a lap going on the board, checked, or taken off
         channel.on(
             'postgres_changes',
             {
-                event: 'INSERT',
+                event: '*',
                 schema: 'public',
                 table: this.tableName,
             },

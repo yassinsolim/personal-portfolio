@@ -30,6 +30,12 @@ import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Trac
 import PauseMenu from './components/PauseMenu';
 import LapCard, { type LapEntry } from './components/LapCard';
 import WatchMode from './components/WatchMode';
+import RemovedLapCard from './components/RemovedLapCard';
+import {
+    dismissRemovedNotice,
+    readRemovedNotices,
+    type RemovedLap,
+} from '../Racing/Leaderboard/removedLaps';
 import TrackMap from './components/TrackMap';
 import NameCard from './components/NameCard';
 import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
@@ -354,6 +360,12 @@ const App = () => {
     const [watching, setWatching] = useState<{ durationMs: number } | null>(null);
     const closeLapCard = useCallback(() => setLapCard(null), []);
     const stopWatching = useCallback(() => eventBus.dispatch('race:watchStop', {}), []);
+    // this device's laps taken off the board, waiting to be explained
+    const [removedLaps, setRemovedLaps] = useState<RemovedLap[]>(() => readRemovedNotices());
+    const dismissRemovedLap = useCallback(
+        () => setRemovedLaps((laps) => (laps[0] ? dismissRemovedNotice(laps[0].lapId) : laps)),
+        []
+    );
     const [lineMode, setLineMode] = useState<LineMode>(() => readLineMode());
     const [steering, setSteering] = useState(() => readSteering());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
@@ -482,6 +494,8 @@ const App = () => {
         eventBus.on('race:watchState', (state: { on?: boolean; durationMs?: number } | undefined) => {
             setWatching(state?.on ? { durationMs: Number(state.durationMs) || 0 } : null);
         });
+
+        eventBus.on('race:removedLaps', () => setRemovedLaps(readRemovedNotices()));
 
         eventBus.on('race:photoState', (state: { on?: boolean } | undefined) => {
             setPhotoMode(Boolean(state?.on));
@@ -1590,6 +1604,9 @@ const App = () => {
                         setAskName(false);
                     }}
                 />
+            )}
+            {raceModeActive && !askName && !sceneOnly && removedLaps[0] && (
+                <RemovedLapCard lap={removedLaps[0]} onDone={dismissRemovedLap} />
             )}
         </div>
     );

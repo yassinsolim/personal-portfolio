@@ -69,4 +69,14 @@ export default class LocalLeaderboard {
         this.write();
         return next;
     }
+
+    // takes laps off this device's board, returns them
+    removeWhere(match: (entry: LeaderboardEntry) => boolean) {
+        const removed = this.entries.filter(match);
+        if (removed.length) {
+            this.entries = this.entries.filter((entry) => !match(entry));
+            this.write();
+        }
+        return removed;
+    }
 }

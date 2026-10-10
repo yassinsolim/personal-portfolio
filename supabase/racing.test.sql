@@ -223,6 +223,128 @@ begin
   delete from public.nordschleife_rate_events;
 end $$;
 
+-- a lap shows on the board once its ghost drove the whole ring forward from
+-- the line. a full lap is verified; backing over the line and coming back up
+-- the straight (the 5:02 of october 2026), half a lap, or a ghost whose clock
+-- doesn't end on the lap's time aren't. the api can't insert a verified lap
+select set_config('request.headers', '{"sb-forwarded-for": "203.0.113.120"}', false);
+do $$
+declare
+  cp integer[] := public.nordschleife_lap_checkpoints();
+  n integer := array_length(cp, 1) / 2;
+  lap uuid;
+  ok boolean;
+  test record;
+begin
+  if n <> 200 then raise exception 'expected 200 checkpoints, got %', n; end if;
+  delete from public.nordschleife_rate_events;
+  for test in
+    with steps(what, lap_ms, path, step_ms, verified) as (values
+      -- the line, then every checkpoint in order
+      ('a full lap', 400000, array[n] || array(select generate_series(1, n)), 2000, true),
+      -- the line, back 30 checkpoints the wrong way, then forward over the line
+      ('backing over the line and coming back', 240000,
+        array[n] || array(select n - k from generate_series(1, 30) k) || array(select n - 30 + k from generate_series(1, 30) k),
+        4000, false),
+      ('half a lap and back to the line', 202000, array[n] || array(select generate_series(1, 100)) || array[n], 2000, false),
+      ('a ghost ending well before the lap', 400000, array[n] || array(select generate_series(1, n)), 1500, false)
+    )
+    select what, lap_ms, verified, (
+      select jsonb_agg(sample order by o) from (
+        select o, jsonb_build_object('t', (o - 1) * step_ms, 'x', cp[2 * k - 1], 'y', 0, 'z', cp[2 * k],
+          'qx', 0, 'qy', 0, 'qz', 0, 'qw', 1) as sample
+        from unnest(path) with ordinality as p(k, o)
+        union all
+        -- the recording closes on its first pose at the lap's time
+        select array_length(path, 1) + 1, jsonb_build_object('t', (array_length(path, 1) - 1) * step_ms, 'x', cp[2 * n - 1],
+          'y', 0, 'z', cp[2 * n], 'qx', 0, 'qy', 0, 'qz', 0, 'qw', 1)
+      ) samples
+    ) as samples
+    from steps
+  loop
+    set local role anon;
+    insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id)
+      values ('QA verify', test.lap_ms, 'bmw-e92-m3@v6') returning id into lap;
+    if (select verified from public.nordschleife_leaderboard where id = lap) then
+      raise exception 'a lap was verified before its ghost';
+    end if;
+    insert into public.nordschleife_ghost_replays (lap_id, lap_time_ms, car_id, samples)
+      values (lap, test.lap_ms, 'bmw-e92-m3@v6', test.samples);
+    if (select verified from public.nordschleife_leaderboard where id = lap) is distinct from test.verified then
+      raise exception '%: verified should be %', test.what, test.verified;
+    end if;
+    -- the ghost the client upserts again is checked again
+    if test.verified then
+      update public.nordschleife_ghost_replays set samples = samples - 50 where lap_id = lap;
+      if (select verified from public.nordschleife_leaderboard where id = lap) then
+        raise exception 'a ghost missing a checkpoint kept its lap verified';
+      end if;
+    end if;
+    reset role;
+  end loop;
+
+  set local role anon;
+  begin
+    insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+      values ('QA cheat', 190000, 'bmw-e92-m3@v6', true);
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon inserted a verified lap'; end if;
+  begin
+    perform public.nordschleife_replay_drives_lap('[]'::jsonb, 1000);
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon can run the replay check'; end if;
+  reset role;
+  delete from public.nordschleife_rate_events;
+end $$;
+
+-- a removed lap goes with its ghost and is listed with why, which anyone can
+-- read and only the sql editor can write
+do $$
+declare
+  lap uuid;
+  ok boolean;
+begin
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id)
+    values ('QA unfair', 302406, 'bugatti-chiron-super-sport@v6~ti1iiiiiiizy0tz08') returning id into lap;
+  insert into public.nordschleife_ghost_replays (lap_id, lap_time_ms, car_id, samples)
+    values (lap, 302406, 'bugatti-chiron-super-sport@v6~ti1iiiiiiizy0tz08',
+      (select jsonb_agg(jsonb_build_object('t', g)) from generate_series(0, 7) g));
+  perform public.nordschleife_remove_lap(lap, 'QA: it backed over the line');
+  if exists (select 1 from public.nordschleife_leaderboard where id = lap) then raise exception 'the lap stayed'; end if;
+  if exists (select 1 from public.nordschleife_ghost_replays where lap_id = lap) then raise exception 'its ghost stayed'; end if;
+  begin
+    perform public.nordschleife_remove_lap(gen_random_uuid(), 'QA');
+    ok := true;
+  exception when raise_exception then ok := false;
+  end;
+  if ok then raise exception 'removing a lap that isn''t there passed'; end if;
+
+  set local role anon;
+  if (select reason from public.nordschleife_removed_laps where lap_id = lap) is distinct from 'QA: it backed over the line' then
+    raise exception 'anon can''t read why a lap was removed';
+  end if;
+  begin
+    insert into public.nordschleife_removed_laps (lap_id, name, lap_time_ms, car_id, reason)
+      values (gen_random_uuid(), 'QA', 1, 'x', 'x');
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon listed a removed lap'; end if;
+  begin delete from public.nordschleife_removed_laps; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon deleted removed laps'; end if;
+  begin
+    perform public.nordschleife_remove_lap(gen_random_uuid(), 'QA');
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon can remove laps'; end if;
+  reset role;
+end $$;
+
 -- the sql editor (no request headers) isn't limited
 select set_config('request.headers', '', false);
 insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('Admin', 400000, 'bmw-e92-m3@v3');
