@@ -7,6 +7,12 @@ const MIN_LAP_TIME_MS = 180_000;
 const START_GATE_RADIUS = 40;
 const START_TRIGGER_COOLDOWN_MS = 1_500;
 const PROGRESS_VALID_THRESHOLD = 0.92;
+// progress only counts reached driving forward from the lap's start, at most
+// this much further per update (about 1 km of the ring). backing over the
+// line puts the car at the lap's end without having driven there
+const MAX_PROGRESS_STEP = 0.05;
+// the line is both ends of the lap: a lap starting on it starts at 0
+const startProgress = (progress: number) => (progress > 0.5 ? 0 : progress);
 // the first lap waits at 0 until the car moves. the grid sits just past the
 // line (the furthest slot is ~60 m on), so arming only happens this close to it
 export const ARM_PROGRESS = 0.012;
@@ -86,7 +92,7 @@ export default class LapTimer {
             .sub(this.startPoint)
             .dot(this.startNormal);
         this.lastCrossTimestampMs = nowMs;
-        this.maxProgress = progress;
+        this.maxProgress = startProgress(progress);
         this.armed = progress <= ARM_PROGRESS;
         this.armOrigin.copy(position);
         return {
@@ -107,7 +113,7 @@ export default class LapTimer {
 
         this.lapRunning = true;
         this.lapStartMs = nowMs;
-        this.maxProgress = progress;
+        this.maxProgress = startProgress(progress);
         this.previousDistance = signedDistance;
         this.lastCrossTimestampMs = nowMs;
 
@@ -199,7 +205,7 @@ export default class LapTimer {
                 this.armed = false;
                 this.lapRunning = true;
                 this.lapStartMs = nowMs;
-                this.maxProgress = progress;
+                this.maxProgress = startProgress(progress);
             } else {
                 this.previousDistance = position
                     .clone()
@@ -209,8 +215,12 @@ export default class LapTimer {
             }
         }
 
-        if (this.lapRunning) {
-            this.maxProgress = Math.max(this.maxProgress, progress);
+        if (
+            this.lapRunning &&
+            progress > this.maxProgress &&
+            progress - this.maxProgress <= MAX_PROGRESS_STEP
+        ) {
+            this.maxProgress = progress;
         }
 
         const signedDistance = position
@@ -235,7 +245,7 @@ export default class LapTimer {
             if (!this.lapRunning) {
                 this.lapRunning = true;
                 this.lapStartMs = nowMs;
-                this.maxProgress = progress;
+                this.maxProgress = startProgress(progress);
                 return {
                     progress,
                     exact,
@@ -250,7 +260,7 @@ export default class LapTimer {
                 this.maxProgress >= PROGRESS_VALID_THRESHOLD;
 
             this.lapStartMs = nowMs;
-            this.maxProgress = progress;
+            this.maxProgress = startProgress(progress);
 
             return {
                 progress,

@@ -129,3 +129,64 @@ test('later laps keep timing across the line', () => {
     assert.equal(laps[1].completedLapTimeMs, laps[1].at - laps[0].at);
     assert.ok(Math.abs(laps[1].completedLapTimeMs - length / 50 * 1000) < 2000);
 });
+
+// 4 m steps from one point of the lap to another, either way, at speed m/s
+const drive = (timer, from, to, startMs, speed = 50) => {
+    const sign = Math.sign(to - from);
+    const step = (4 / length) * sign;
+    let now = startMs;
+    let lap = null;
+    for (let t = from; sign > 0 ? t < to : t > to; t += step) {
+        now += (4 / speed) * 1000;
+        const dir = heading(t);
+        if (sign < 0) dir.negate();
+        const u = timer.update(now, at(t), speed, dir, true);
+        if (u.completedLapTimeMs && !lap) lap = u;
+    }
+    return { now, lap };
+};
+
+// the 5:02 that topped the tuned board: off the grid, back over the line and
+// the wrong way down the straight, round, and over the line again. the lap's
+// end was only reached backwards, so it isn't a lap
+test('backing over the line and coming back after 3 minutes is not a lap', () => {
+    const timer = fresh();
+    timer.arm(0, at(SPAWN_T));
+    timer.update(0, at(SPAWN_T), 0, heading(SPAWN_T), true);
+    const back = drive(timer, SPAWN_T, SPAWN_T - 0.16, 0, 20);
+    assert.equal(back.lap, null, 'backing over the line times nothing');
+    const { lap } = drive(timer, SPAWN_T - 0.16, SPAWN_T + 0.01, back.now);
+    assert.ok(lap, 'the line still stops the clock');
+    assert.ok(lap.completedLapTimeMs >= 180000);
+    assert.equal(lap.validLap, false);
+});
+
+test('a lap begun on the line still has to go all the way round', () => {
+    const timer = fresh();
+    timer.arm(0, at(SPAWN_T));
+    timer.update(0, at(SPAWN_T), 0, heading(SPAWN_T), true);
+    const [first] = driveLap(timer, 0);
+    assert.equal(first.validLap, true);
+    // just past the line: back over it, sit out three minutes, come forward
+    const back = drive(timer, SPAWN_T + 0.002, -0.02, first.at, 20);
+    let now = back.now;
+    for (let i = 0; i < 200; i++) {
+        now += 1000;
+        timer.update(now, at(-0.02), 0, heading(-0.02), false);
+    }
+    const { lap } = drive(timer, -0.02, 0.005, now);
+    assert.ok(lap, 'the line stops the clock');
+    assert.ok(lap.completedLapTimeMs >= 180000);
+    assert.equal(lap.validLap, false);
+});
+
+test('backing up mid lap and driving on still counts', () => {
+    const timer = fresh();
+    timer.arm(0, at(SPAWN_T));
+    timer.update(0, at(SPAWN_T), 0, heading(SPAWN_T), true);
+    const out = drive(timer, SPAWN_T, 0.5, 0);
+    const back = drive(timer, 0.5, 0.49, out.now, 10);
+    const { lap } = drive(timer, 0.49, 1.005, back.now);
+    assert.ok(lap);
+    assert.equal(lap.validLap, true);
+});
