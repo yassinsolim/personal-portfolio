@@ -470,7 +470,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   the same spot (`LapTimer` reports an `exact` lap fraction between its samples), and Best
   is that lap. Going off the road doesn't void a lap (grass and gravel cost grip and speed,
   that's the price); `LapTimer` alone throws out laps that skip the track (under 92% of it
-  reached, or under its minimum time). Only a rewound lap is dirty: the hud says so, and it
+  reached, or under its minimum time). Reached means driven forward from the lap's start, at
+  most `MAX_PROGRESS_STEP` further per update, and a lap starting on the line starts at 0: a
+  5:02 on the tuned board (October 2026) sat on the grid, backed over the line, went the wrong
+  way down the straight and came back, and the old furthest-point-seen check counted the
+  lap's end as reached. Only a rewound lap is dirty: the hud says so, and it
   doesn't go on the board, the sector bests, the ghost or the delta. The pause menu's Ghost
   row (`Ghost/ghostMode.ts`, off by default,
   `?ghostReplay` still means the record) picks your best lap, a rival (the lap on your
