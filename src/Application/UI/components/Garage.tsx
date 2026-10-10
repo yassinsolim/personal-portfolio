@@ -75,7 +75,7 @@ const BARS = [
     ['braking', 'Braking'],
 ] as const;
 
-const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
+export const TOP_LIMIT: Record<GarageState['stats']['topLimitedBy'], string> = {
     limiter: 'limited',
     drag: 'drag',
     revs: 'redline',
@@ -133,19 +133,19 @@ const FINISHES: Array<[PaintFinish, string]> = [
     ['matte', 'Matte'],
     ['chrome', 'Chrome'],
 ];
-const SPOILERS: Array<[Spoiler, string, string]> = [
+export const SPOILERS: Array<[Spoiler, string, string]> = [
     ['none', 'None', 'Factory body'],
     ['ducktail', 'Ducktail', 'A lip on the boot, a little rear downforce'],
     ['wing', 'GT wing', 'Real rear downforce, costs some top speed'],
 ];
-const TIRES: Array<[TireCompound, string]> = [
+export const TIRES: Array<[TireCompound, string]> = [
     ['street', 'Street'],
     ['sport', 'Sport (stock)'],
     ['semi', 'Semi slick'],
     ['slick', 'Race slick'],
     ['drift', 'Drift'],
 ];
-const BRAKES: Array<[BrakeKit, string, string]> = [
+export const BRAKES: Array<[BrakeKit, string, string]> = [
     ['stock', 'Stock', 'Factory calipers, rotors and pads'],
     ['street', 'Street', 'Performance pads and braided lines, 15% more bite'],
     [
@@ -184,19 +184,19 @@ const WHEELS = [
 const carName = (id: string) =>
     carOptions.find((car) => car.id === id)?.label || id;
 
-const INDUCTIONS: Array<[Induction, string, string]> = [
+export const INDUCTIONS: Array<[Induction, string, string]> = [
     ['stock', 'Factory', 'As the engine left the factory'],
     ['na', 'Naturally aspirated', 'Turbos off: sharp, linear, a lot less power'],
     ['twin', 'Twin turbo', 'Big midrange once they spool'],
     ['quad', 'Quad turbo', 'Huge power up top, real lag below it'],
     ['super', 'Supercharger', 'Boost from idle and the blower whine'],
 ];
-const EXHAUSTS: Array<[Exhaust, string]> = [
+export const EXHAUSTS: Array<[Exhaust, string]> = [
     ['stock', 'Factory'],
     ['sport', 'Sport'],
     ['straight', 'Straight pipe'],
 ];
-const WEIGHTS: Array<[WeightReduction, string, string]> = [
+export const WEIGHTS: Array<[WeightReduction, string, string]> = [
     ['stock', 'Stock', 'As it left the factory'],
     ['sport', 'Sport', 'Lighter panels, glass and seats, 5% off'],
     ['race', 'Race', 'Stripped interior and a cage, 10% off'],
@@ -206,7 +206,7 @@ const LAYOUT: Record<GarageState['drive'], string> = {
     AWD: 'all wheel drive',
     FWD: 'front wheel drive',
 };
-const SWAPS: Array<[Exclude<Drivetrain, 'stock'>, string, string]> = [
+export const SWAPS: Array<[Exclude<Drivetrain, 'stock'>, string, string]> = [
     ['awd', 'AWD swap', 'About a third of the torque to the front: harder launches and exits, 3.5% heavier'],
     ['rwd', 'RWD swap', 'Everything to the rear: looser, easier to slide, 2.5% lighter'],
 ];
@@ -303,7 +303,7 @@ const Slider = ({
     </div>
 );
 
-const signed = (value: number) =>
+export const signed = (value: number) =>
     `${value > 0 ? '+' : ''}${Math.round(value * 100)}`;
 
 // the car picker opens over the garage, and its keys are its own

@@ -161,6 +161,13 @@ export default class RaceChaseCamera {
     // and the way it's moving (right, up, forward, each -1..1)
     photoPan = new THREE.Vector3();
     photoMove = { x: 0, y: 0, z: 0, fast: false };
+    // a board lap being watched: the camera follows its car instead of yours,
+    // dragged round it and zoomed
+    watchTarget: THREE.Object3D | null = null;
+    watchLength = REFERENCE_CAR_LENGTH;
+    watchAngle = 0;
+    watchPitch = 0;
+    watchZoom = 1;
     // advanced graphics switches
     shakeOff = readGraphicsOff().includes('shake');
     speedFovOff = readGraphicsOff().includes('speedFov');
@@ -269,6 +276,14 @@ export default class RaceChaseCamera {
         });
         UIEventBus.on('race:photoFov', (state: { fov?: number } | undefined) => {
             this.photoFov = Math.min(90, Math.max(15, Number(state?.fov) || 50));
+        });
+        UIEventBus.on('race:watchOrbit', (state: { dx?: number; dy?: number } | undefined) => {
+            this.watchAngle = wrapAngle(this.watchAngle - (state?.dx || 0) * 0.008);
+            this.watchPitch = Math.min(0.9, Math.max(-0.12, this.watchPitch + (state?.dy || 0) * 0.004));
+        });
+        UIEventBus.on('race:watchZoom', (state: { delta?: number } | undefined) => {
+            const zoom = this.watchZoom * Math.exp((state?.delta || 0) * 0.0015);
+            this.watchZoom = Math.min(3, Math.max(0.5, zoom));
         });
         UIEventBus.on(
             'race:photoMove',
@@ -625,6 +640,11 @@ export default class RaceChaseCamera {
         this.tmpUp.set(0, 1, 0);
         const anchor = this.tmpAnchor.copy(vehicle.position);
 
+        if (this.watchTarget) {
+            this.updateWatch(camera, this.watchTarget, dt);
+            return;
+        }
+
         if (this.photo) {
             this.updatePhoto(camera, anchor, carYaw, dt);
             return;
@@ -758,6 +778,54 @@ export default class RaceChaseCamera {
         camera.position.copy(position);
         camera.lookAt(look);
         this.applyRoll(camera, telemetry);
+    }
+
+    // following a watched lap's car, or back on yours with null. each watch
+    // starts from behind it
+    setWatch(target: THREE.Object3D | null, length = REFERENCE_CAR_LENGTH) {
+        if (target && !this.watchTarget) {
+            this.watchAngle = 0;
+            this.watchPitch = 0;
+            this.watchZoom = 1;
+        }
+        if (Boolean(target) !== Boolean(this.watchTarget)) this.initialized = false;
+        this.watchTarget = target;
+        this.watchLength = length;
+    }
+
+    // behind the watched car, its heading followed through a spring, never
+    // under the ground
+    updateWatch(camera: THREE.PerspectiveCamera, target: THREE.Object3D, dt: number) {
+        const anchor = this.tmpAnchor.copy(target.position);
+        const forward = this.tmpForward.set(0, 0, 1).applyQuaternion(target.quaternion);
+        const goal = Math.atan2(forward.x, forward.z) + this.watchAngle;
+        if (!this.initialized) {
+            this.heading = goal;
+            this.headingVelocity = 0;
+            this.lookY = anchor.y;
+            this.lookYVelocity = 0;
+        }
+        const error = wrapAngle(this.heading - goal);
+        [this.heading, this.headingVelocity] = spring(goal + error, this.headingVelocity, goal, 3.6, dt);
+        [this.lookY, this.lookYVelocity] = spring(this.lookY, this.lookYVelocity, anchor.y, 10, dt);
+        const distance = (this.watchLength + 3.4) * this.watchZoom;
+        const pitch = 0.17 + this.watchPitch;
+        const position = this.tmpPosition.set(
+            anchor.x - Math.sin(this.heading) * distance * Math.cos(pitch),
+            this.lookY + 0.9 + distance * Math.sin(pitch),
+            anchor.z - Math.cos(this.heading) * distance * Math.cos(pitch)
+        );
+        const ground = this.vehicle.track.sampleGround(position.x, position.z);
+        if (ground !== null && position.y < ground + 0.55) position.y = ground + 0.55;
+        if (camera.view?.enabled) camera.clearViewOffset();
+        if (camera.fov !== VIEWS[0].fov) {
+            camera.fov = VIEWS[0].fov;
+            camera.updateProjectionMatrix();
+        }
+        camera.position.copy(position);
+        camera.up.set(0, 1, 0);
+        camera.lookAt(anchor.x, this.lookY + 0.8, anchor.z);
+        this.initialized = true;
     }
 
     // where the first update() after setActive(true) puts the camera, from the

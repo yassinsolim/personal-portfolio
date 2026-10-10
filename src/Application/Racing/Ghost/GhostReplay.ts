@@ -65,6 +65,8 @@ export default class GhostReplay {
     playbackTimeMs: number;
     // playback waits at the start while the lap clock is armed
     held = false;
+    // drawn whole, for watching a lap rather than racing it
+    solid = false;
     playbackDurationMs: number;
     bestLapTimeMs: number;
     carId: string;
@@ -135,10 +137,9 @@ export default class GhostReplay {
             this.setGhostCar(this.ghostCarId);
         }
         this.root.visible = active && this.getActivePlaybackSamples().length > 1;
-        if (!active) {
-            this.recording = false;
-            this.playbackTimeMs = 0;
-        }
+        // a lap being recorded carries on: hiding the ghost (picking off, or
+        // after watching a lap) mustn't lose this lap's replay
+        if (!active) this.playbackTimeMs = 0;
     }
 
     // recording and playback both run from the lap's first instant, so the
@@ -440,14 +441,31 @@ export default class GhostReplay {
 
     makeGhostMaterial(material: THREE.Material) {
         const cloned = material.clone();
-        if ('transparent' in cloned) cloned.transparent = true;
-        if ('opacity' in cloned) cloned.opacity = GHOST_OPACITY;
-        if ('depthWrite' in cloned) cloned.depthWrite = false;
+        cloned.userData.ghostBase = {
+            transparent: cloned.transparent,
+            opacity: cloned.opacity,
+            depthWrite: cloned.depthWrite,
+            fog: 'fog' in cloned ? cloned.fog : undefined,
+        };
         if ('colorWrite' in cloned) cloned.colorWrite = true;
-        if ('fog' in cloned) cloned.fog = false;
-        cloned.needsUpdate = true;
+        this.styleGhostMaterial(cloned);
         this.ghostMaterialOverrides.push(cloned);
         return cloned;
+    }
+
+    styleGhostMaterial(material: THREE.Material) {
+        const base = material.userData.ghostBase;
+        material.transparent = this.solid ? base.transparent : true;
+        material.opacity = this.solid ? base.opacity : GHOST_OPACITY;
+        material.depthWrite = this.solid ? base.depthWrite : false;
+        if ('fog' in material) material.fog = this.solid ? base.fog : false;
+        material.needsUpdate = true;
+    }
+
+    setSolid(solid: boolean) {
+        if (solid === this.solid) return;
+        this.solid = solid;
+        this.ghostMaterialOverrides.forEach((material) => this.styleGhostMaterial(material));
     }
 
     setGhostCar(carId: string) {

@@ -23,11 +23,13 @@ import './style.css';
 import ShellCredits from './components/ShellCredits';
 import { buildInviteLink, getInviteLobbyCode } from '../Racing/Multiplayer/invite';
 import { padShared } from '../Gamepad/pad';
-import { readGhostMode, type GhostMode } from '../Racing/Ghost/ghostMode';
+import { readGhostMode, readGhostPick, type GhostMode, type GhostPick } from '../Racing/Ghost/ghostMode';
 import { readLineMode, type LineMode } from '../Racing/Track/lineMode';
 import { STEERING_KEY, readSteering } from '../Racing/Input/steering';
 import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Track/startTrack';
 import PauseMenu from './components/PauseMenu';
+import LapCard, { type LapEntry } from './components/LapCard';
+import WatchMode from './components/WatchMode';
 import TrackMap from './components/TrackMap';
 import NameCard from './components/NameCard';
 import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
@@ -122,14 +124,7 @@ type DebugStats = {
 
 type TouchControlName = 'throttle' | 'brake' | 'steerLeft' | 'steerRight' | 'handbrake';
 
-type LeaderboardEntry = {
-    id: string;
-    name: string;
-    lapTimeMs: number;
-    carId: string;
-    createdAt: string;
-    source: 'local' | 'remote';
-};
+type LeaderboardEntry = LapEntry;
 
 const defaultMultiplayerState: MultiplayerState = {
     mode: 'solo',
@@ -353,6 +348,12 @@ const App = () => {
     const [debugStats, setDebugStats] = useState<DebugStats | null>(null);
     const [assists, setAssists] = useState(() => readAssistSettings());
     const [ghostMode, setGhostMode] = useState<GhostMode>(() => readGhostMode());
+    const [ghostPick, setGhostPick] = useState<GhostPick | null>(() => readGhostPick());
+    // a board lap's card, open over the pause menu, and the lap being watched
+    const [lapCard, setLapCard] = useState<LapEntry | null>(null);
+    const [watching, setWatching] = useState<{ durationMs: number } | null>(null);
+    const closeLapCard = useCallback(() => setLapCard(null), []);
+    const stopWatching = useCallback(() => eventBus.dispatch('race:watchStop', {}), []);
     const [lineMode, setLineMode] = useState<LineMode>(() => readLineMode());
     const [steering, setSteering] = useState(() => readSteering());
     const [lobbyChoiceOpen, setLobbyChoiceOpen] = useState(false);
@@ -436,6 +437,7 @@ const App = () => {
                     setPointerLocked(false);
                     setLobbyChoiceOpen(false);
                     setGarageOpen(false);
+                    setLapCard(null);
                 }
             }
         );
@@ -474,6 +476,11 @@ const App = () => {
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
             setRacePaused(Boolean(state?.paused));
+            if (!state?.paused) setLapCard(null);
+        });
+
+        eventBus.on('race:watchState', (state: { on?: boolean; durationMs?: number } | undefined) => {
+            setWatching(state?.on ? { durationMs: Number(state.durationMs) || 0 } : null);
         });
 
         eventBus.on('race:photoState', (state: { on?: boolean } | undefined) => {
@@ -872,6 +879,13 @@ const App = () => {
     const displayedGear = hud.gear < 0 ? 'R' : String(hud.gear);
     // lined up or racing in a lobby race: no garage until it's over
     const inLobbyRace = Boolean(hud.race?.entered && hud.race.phase !== 'finished');
+    // photo mode and a watched lap leave nothing over the view but their bar
+    const sceneOnly = photoMode || Boolean(watching);
+    // a lap on the board: paused, its card over the menu
+    const openLap = (entry: LapEntry) => {
+        if (!racePaused) eventBus.dispatch('race:pauseRequest', { source: 'board' });
+        setLapCard(entry);
+    };
     const multiplayerBusy = multiplayer.connecting;
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
     const panelMenu = compactPanel && !raceModeActive && !deskView;
@@ -925,7 +939,7 @@ const App = () => {
                     onClose={closePicker}
                 />
             )}
-            {showHint && !photoMode && (
+            {showHint && !sceneOnly && (
                 <div
                     className={[
                         'look-hint',
@@ -1215,7 +1229,7 @@ const App = () => {
                     )}
                 </div>
             )}
-            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && !photoMode && !hud.race?.entered && (
+            {multiplayer.mode === 'lobby' && multiplayer.lobbyCode && !sceneOnly && !hud.race?.entered && (
                 <div className="lobby-code-banner" data-prevent-click>
                     <span>Lobby Code: {multiplayer.lobbyCode}</span>
                     <button type="button" onClick={handleCopyLobbyCode}>
@@ -1223,7 +1237,7 @@ const App = () => {
                     </button>
                 </div>
             )}
-            {raceModeActive && !garageOpen && !photoMode && (
+            {raceModeActive && !garageOpen && !sceneOnly && (
                 <RaceHudGauges
                     speedKph={hud.speedKph}
                     gear={displayedGear}
@@ -1242,10 +1256,10 @@ const App = () => {
                     sectors={hud.sectors || null}
                 />
             )}
-            {raceModeActive && hud.race && !garageOpen && !photoMode && (
+            {raceModeActive && hud.race && !garageOpen && !sceneOnly && (
                 <LobbyRaceHud race={hud.race} />
             )}
-            {raceModeActive && typeof hud.rewind === 'number' && !photoMode && (
+            {raceModeActive && typeof hud.rewind === 'number' && !sceneOnly && (
                 <div className="race-rewind" data-prevent-click>
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M11 6v12l-8.5-6zM21 6v12l-8.5-6z" />
@@ -1256,7 +1270,7 @@ const App = () => {
                     </i>
                 </div>
             )}
-            {raceModeActive && hud.map && !garageOpen && !photoMode && (
+            {raceModeActive && hud.map && !garageOpen && !sceneOnly && (
                 <Minimap
                     outline={trackOutline}
                     bounds={hud.sectors?.bounds || []}
@@ -1266,7 +1280,7 @@ const App = () => {
                     remotes={hud.map.remotes}
                 />
             )}
-            {raceModeActive && !garageOpen && !photoMode && hud.track === 'drift' && hud.drift && (
+            {raceModeActive && !garageOpen && !sceneOnly && hud.track === 'drift' && hud.drift && (
                 <DriftHud drift={hud.drift} best={driftBoard[0]?.score || 0} />
             )}
             {raceModeActive && trackState.building && (
@@ -1274,7 +1288,7 @@ const App = () => {
                     Building the drift park
                 </div>
             )}
-            {raceModeActive && trackState.track === 'drift' && !photoMode && (
+            {raceModeActive && trackState.track === 'drift' && !sceneOnly && (
                 <div className="race-hud" data-prevent-click>
                     <div className="race-hud-board">
                         <h4 className="race-board-head">Drift park</h4>
@@ -1293,7 +1307,7 @@ const App = () => {
                     </div>
                 </div>
             )}
-            {raceModeActive && trackState.track === 'ring' && !photoMode && (
+            {raceModeActive && trackState.track === 'ring' && !sceneOnly && (
                 <div className="race-hud" data-prevent-click>
                     {hud.race && !(hud.race.entered && hud.race.phase === 'finished') && (
                         <RaceStandings race={hud.race} />
@@ -1324,8 +1338,14 @@ const App = () => {
                             <ol>
                                 {leaderboard.slice(0, 5).map((entry) => (
                                     <li key={entry.id}>
-                                        <span>{entry.name}</span>
-                                        <span>{formatLapTime(entry.lapTimeMs)}</span>
+                                        <button
+                                            type="button"
+                                            title={`${entry.name}'s car, setup and replay`}
+                                            onClick={() => openLap(entry)}
+                                        >
+                                            <span>{entry.name}</span>
+                                            <span>{formatLapTime(entry.lapTimeMs)}</span>
+                                        </button>
                                     </li>
                                 ))}
                             </ol>
@@ -1474,7 +1494,7 @@ const App = () => {
             <div className={`garage-fade ${garageFade ? 'on' : ''}`} data-prevent-click={garageFade ? '' : undefined}>
                 <span>{garageFade === 'home' ? 'Back to the room' : 'Opening the garage'}</span>
             </div>
-            {raceModeActive && racePaused && !lobbyChoiceOpen && !photoMode && !askName && (
+            {raceModeActive && racePaused && !lobbyChoiceOpen && !sceneOnly && !askName && (
                 <PauseMenu
                     track={trackState.track}
                     building={trackState.building}
@@ -1492,6 +1512,15 @@ const App = () => {
                     renderScale={renderScale}
                     assists={assists}
                     ghostMode={ghostMode}
+                    ghostPick={ghostPick}
+                    board={leaderboard}
+                    boardKind={leaderboardBoard}
+                    onBoard={(board) => {
+                        setLeaderboardBoard(board);
+                        eventBus.dispatch('race:leaderboardBoard', { board });
+                    }}
+                    onLap={setLapCard}
+                    dimmed={Boolean(lapCard)}
                     lineMode={lineMode}
                     steering={steering}
                     onResume={handleResumeRace}
@@ -1521,6 +1550,39 @@ const App = () => {
                 />
             )}
             {raceModeActive && photoMode && <PhotoMode />}
+            {raceModeActive && racePaused && lapCard && !sceneOnly && !lobbyChoiceOpen && (
+                <LapCard
+                    entry={lapCard}
+                    rank={leaderboard.findIndex((entry) => entry.id === lapCard.id) + 1}
+                    board={lapCard.tune ? 'tuned' : 'stock'}
+                    outline={trackOutline}
+                    canWatch={trackState.track === 'ring' && !inLobbyRace}
+                    racing={ghostMode === 'lap' && ghostPick?.id === lapCard.id}
+                    onWatch={() =>
+                        eventBus.dispatch('race:watch', {
+                            id: lapCard.id,
+                            name: lapCard.name,
+                            lapTimeMs: lapCard.lapTimeMs,
+                            carId: lapCard.carId,
+                        })
+                    }
+                    onRace={() => {
+                        const pick = {
+                            id: lapCard.id,
+                            name: lapCard.name,
+                            lapTimeMs: lapCard.lapTimeMs,
+                            carId: lapCard.carId,
+                        };
+                        setGhostPick(pick);
+                        setGhostMode('lap');
+                        eventBus.dispatch('race:ghostLap', pick);
+                    }}
+                    onClose={closeLapCard}
+                />
+            )}
+            {raceModeActive && watching && lapCard && (
+                <WatchMode entry={lapCard} durationMs={watching.durationMs} onBack={stopWatching} />
+            )}
             {raceModeActive && askName && (
                 <NameCard
                     onDone={(name) => {

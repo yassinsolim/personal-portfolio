@@ -27,6 +27,9 @@ const GHOST_FALLBACK_STORAGE_KEY = 'yassinverse:nordschleife:leaderboard-ghosts:
 const CONFIG_FETCH_TIMEOUT_MS = 10000;
 const TUNE_TAG = '~t';
 const MAX_UPLOAD_SAMPLES = 5000;
+// this device's laps (LocalLeaderboard ids): only their ghosts are kept in
+// storage, a lap on the board can be fetched again (and is about 1 MB)
+const LOCAL_LAP_PREFIX = 'local-';
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -590,7 +593,7 @@ export default class LeaderboardService {
             if (!oldestKey) break;
             this.ghostReplayCache.delete(oldestKey);
         }
-        this.persistGhostFallbackCache();
+        if (lapId.startsWith(LOCAL_LAP_PREFIX)) this.persistGhostFallbackCache();
     }
 
     loadGhostFallbackCache() {
@@ -619,7 +622,9 @@ export default class LeaderboardService {
         try {
             const serialized: Record<string, GhostLapReplay> = {};
             this.ghostReplayCache.forEach((replay, lapId) => {
-                serialized[lapId] = this.cloneGhostReplay(replay);
+                if (lapId.startsWith(LOCAL_LAP_PREFIX)) {
+                    serialized[lapId] = this.cloneGhostReplay(replay);
+                }
             });
             window.localStorage.setItem(
                 GHOST_FALLBACK_STORAGE_KEY,

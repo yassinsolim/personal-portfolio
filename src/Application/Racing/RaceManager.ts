@@ -10,6 +10,7 @@ import {
     predictTopSpeed,
     rpmAtSpeed,
     torqueAt,
+    type PhysicsSpec,
 } from './Vehicle/VehiclePhysics';
 import {
     measureEnvelope,
@@ -27,20 +28,34 @@ import LapTimer from './Lap/LapTimer';
 import LapDelta from './Lap/LapDelta';
 import SectorTimer from './Lap/SectorTimer';
 import DriftScore, { type DriftEvent } from './Lap/DriftScore';
-import { isStockSetup, sanitizeLook, sanitizeTune, STOCK_LOOK, tuneCode } from './Garage/garage';
+import {
+    decodeTune,
+    isStockSetup,
+    sanitizeLook,
+    sanitizeTune,
+    STOCK_LOOK,
+    STOCK_TUNE,
+    tuneCode,
+} from './Garage/garage';
 import { carHasCalipers, kitsThatFit } from './Garage/carLook';
 import GarageScene, { GARAGE_ORIGIN, TURNTABLE_TOP } from './Garage/GarageScene';
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import type { RemoteCarAudioState } from './Audio/CarAudio';
-import GhostReplay from './Ghost/GhostReplay';
+import GhostReplay, { type GhostLapReplay } from './Ghost/GhostReplay';
 import {
     GHOST_MODES,
     readGhostMode,
+    readGhostPick,
+    sanitizeGhostPick,
     writeGhostMode,
+    writeGhostPick,
     type GhostMode,
+    type GhostPick,
 } from './Ghost/ghostMode';
+import { realEndMs, speedAt, summarizeReplay } from './Ghost/replayStats';
+import WatchClock, { type WatchControl } from './Ghost/watchClock';
 import DriftSmoke from './Effects/DriftSmoke';
 import MultiplayerService, {
     type MultiplayerPlayerState,
@@ -264,6 +279,17 @@ export default class RaceManager {
     ghostMode: GhostMode = readGhostMode();
     // the board lap the ghost replays, null for your own best
     ghostLabel: GhostLabel | null = null;
+    // the board lap picked from its card to race (ghost mode 'lap')
+    ghostPick: GhostPick | null = readGhostPick();
+    lapCardSerial = 0;
+    // a board lap being watched: the race paused under it, its car followed
+    watch: {
+        lap: GhostPick;
+        samples: GhostLapReplay['samples'];
+        clock: WatchClock;
+        hudAt: number;
+    } | null = null;
+    watchSerial = 0;
     lapDelta = new LapDelta();
     // this lap used rewind and won't count, the last one did
     lapDirty = false;
@@ -597,6 +623,7 @@ export default class RaceManager {
         UIEventBus.on('race:garageOpen', (state: { open?: boolean } | undefined) => {
             const open = Boolean(state?.open);
             if (open === this.garageOpen) return;
+            if (open) this.stopWatch();
             this.garageOpen = open;
             this.rewind.clear();
             this.chaseCamera.garage = open;
@@ -649,14 +676,30 @@ export default class RaceManager {
         });
 
         UIEventBus.on('race:ghostMode', (state: { mode?: string } | undefined) => {
-            const mode = GHOST_MODES.find((option) => option === state?.mode);
+            const mode =
+                state?.mode === 'lap' && this.ghostPick
+                    ? 'lap'
+                    : GHOST_MODES.find((option) => option === state?.mode);
             if (!mode || mode === this.ghostMode) return;
             this.ghostMode = mode;
             writeGhostMode(mode);
+            if (this.watch) return;
             this.ghostReplay.setActive(
                 this.active && this.trackMode === 'ring' && this.ghostPlaybackEnabled
             );
             void this.syncGhost();
+        });
+
+        UIEventBus.on('race:ghostLap', (state: unknown) => this.pickGhostLap(state));
+        UIEventBus.on('race:lapOpen', (state: unknown) => void this.openLap(state));
+        UIEventBus.on('race:watch', (state: unknown) => void this.startWatch(state));
+        UIEventBus.on('race:watchStop', () => this.stopWatch());
+        UIEventBus.on('race:watchControl', (state: WatchControl | undefined) => {
+            const watch = this.watch;
+            if (!watch) return;
+            // a jump cuts the camera to behind the car instead of swinging
+            if (watch.clock.control(state)) this.chaseCamera.initialized = false;
+            watch.hudAt = 0;
         });
 
         UIEventBus.on('race:submitLapName', async (payload: { name?: string }) => {
@@ -789,6 +832,7 @@ export default class RaceManager {
                   ? { world: this.ringWorld, laps: this.ringLaps }
                   : null;
         if (!target) return;
+        this.stopWatch();
         this.trackMode = mode;
         this.track = target.world.track;
         this.visuals.useWorld(target.world);
@@ -906,6 +950,7 @@ export default class RaceManager {
     exitRaceMode() {
         if (!this.initialized && !this.active) return;
         this.startTrack = null;
+        this.stopWatch();
         this.setPhotoMode(false);
         if (this.garageOpen) {
             this.garageOpen = false;
@@ -994,7 +1039,10 @@ export default class RaceManager {
     }
 
     setPaused(paused: boolean) {
-        if (!paused) this.setPhotoMode(false);
+        if (!paused) {
+            this.setPhotoMode(false);
+            this.stopWatch();
+        }
         this.paused = paused;
         this.vehicle.setActive(!paused);
         this.chaseCamera.setPaused(paused);
@@ -1023,6 +1071,7 @@ export default class RaceManager {
     setPhotoMode(on: boolean) {
         if (on && (!this.active || this.garageOpen)) return;
         if (on === this.photoMode) return;
+        if (on) this.stopWatch();
         this.photoMode = on;
         if (on && !this.paused) this.setPaused(true);
         this.chaseCamera.setPhoto(on);
@@ -1163,12 +1212,8 @@ export default class RaceManager {
     // worked out from the physics the car drives with
     dispatchGarage() {
         const { look, tune } = this.vehicle;
-        const spec = this.vehicle.physics.spec;
-        const peak = peakOutput(spec);
-        const top = predictTopSpeed(spec);
         const performance = this.performance.get(this.setupKey());
         if (!performance) this.schedulePerformance();
-        const pi = performance ? performanceIndex(performance.lapSeconds) : 0;
         UIEventBus.dispatch('race:garageState', {
             carId: this.vehicle.currentCarId,
             look,
@@ -1180,33 +1225,170 @@ export default class RaceManager {
             speedLimiter: this.vehicle.currentTuning.speedLimitKph,
             drive: this.vehicle.currentTuning.drivetrain,
             tuned: !isStockSetup(tune, look),
-            stats: {
-                powerKw: Math.round(peak.powerW / 1000),
-                torqueNm: Math.round(peak.torqueNm),
-                massKg: Math.round(spec.massKg),
-                grip: Math.round(spec.tireGrip * 100) / 100,
-                topKph: Math.round(top.speed * 3.6),
-                topLimitedBy: top.limitedBy,
-                downforce: Math.round(spec.clA * 100) / 100,
-                brakeFront: Math.round(spec.brakeBias * 100),
-                stop100: Math.round(predictStop(spec, 100 / 3.6)),
-                stop200: Math.round(predictStop(spec, 200 / 3.6)),
-                rpmAt100: Math.round(
-                    rpmAtSpeed(spec, 100 / 3.6, spec.gearRatios.length)
-                ),
-                rating: performance
-                    ? {
-                          pi,
-                          class: performanceClass(pi),
-                          bars: performanceBars(performance.env),
-                      }
-                    : null,
-            },
+            stats: this.setupStats(this.vehicle.physics.spec, performance || null),
         });
+    }
+
+    // a setup's numbers for the garage and the lap card, the rating once its
+    // ideal lap is worked out
+    setupStats(spec: PhysicsSpec, performance: SetupPerformance | null) {
+        const peak = peakOutput(spec);
+        const top = predictTopSpeed(spec);
+        const pi = performance ? performanceIndex(performance.lapSeconds) : 0;
+        return {
+            powerKw: Math.round(peak.powerW / 1000),
+            torqueNm: Math.round(peak.torqueNm),
+            massKg: Math.round(spec.massKg),
+            grip: Math.round(spec.tireGrip * 100) / 100,
+            topKph: Math.round(top.speed * 3.6),
+            topLimitedBy: top.limitedBy,
+            downforce: Math.round(spec.clA * 100) / 100,
+            brakeFront: Math.round(spec.brakeBias * 100),
+            stop100: Math.round(predictStop(spec, 100 / 3.6)),
+            stop200: Math.round(predictStop(spec, 200 / 3.6)),
+            rpmAt100: Math.round(rpmAtSpeed(spec, 100 / 3.6, spec.gearRatios.length)),
+            rating: performance
+                ? {
+                      pi,
+                      class: performanceClass(pi),
+                      bars: performanceBars(performance.env),
+                  }
+                : null,
+        };
     }
 
     setupKey() {
         return `${this.vehicle.currentCarId}:${tuneCode(this.vehicle.tune, this.vehicle.look)}`;
+    }
+
+    // a lap on the board, for its card: its car with its setup as the garage
+    // works it out, and what its replay shows. sent once with what's quick
+    // and again with the performance index
+    async openLap(state: unknown) {
+        const lap = sanitizeGhostPick(state);
+        if (!lap) return;
+        const serial = ++this.lapCardSerial;
+        const shared = decodeTune(String((state as { tune?: unknown }).tune || ''));
+        const tune = shared ? shared.tune : STOCK_TUNE;
+        const look = shared
+            ? { ...STOCK_LOOK, ride: shared.ride, spoiler: shared.spoiler, wingAngle: shared.wingAngle }
+            : STOCK_LOOK;
+        const [replay, model] = await Promise.all([
+            this.leaderboardService.getGhostReplayForLap(lap.id, lap.carId, lap.lapTimeMs),
+            this.vehicle.ensurePreparedModel(lap.carId),
+        ]);
+        if (serial !== this.lapCardSerial) return;
+        const spec = this.vehicle.specFor(lap.carId, tune, look, model);
+        const key = `${lap.carId}:${tuneCode(tune, look)}`;
+        const summary = replay && replay.samples.length >= 8 ? summarizeReplay(replay.samples) : null;
+        const ringM = Math.round(this.ringWorld?.track.length || 0);
+        const send = (performance: SetupPerformance | null, pending: boolean) =>
+            UIEventBus.dispatch('race:lapState', {
+                id: lap.id,
+                stats: this.setupStats(spec, performance),
+                pending,
+                replay: summary,
+                ringM,
+            });
+        const known = this.performance.get(key) || null;
+        send(known, !known);
+        if (known) return;
+        // after the card has drawn, it takes a few frames' worth
+        window.setTimeout(() => {
+            if (serial === this.lapCardSerial) send(this.performanceOf(key, spec), false);
+        }, 60);
+    }
+
+    // a board lap picked from its card: the ghost races you on it from now on
+    pickGhostLap(state: unknown) {
+        const pick = sanitizeGhostPick(state);
+        if (!pick) return;
+        this.ghostPick = pick;
+        writeGhostPick(pick);
+        this.ghostMode = 'lap';
+        writeGhostMode('lap');
+        if (this.watch) return;
+        this.ghostReplay.setActive(this.active && this.trackMode === 'ring');
+        void this.syncGhost();
+    }
+
+    // watching a board lap: the race stays paused under it and the menus
+    // hide, the ghost drives the lap whole on its own clock and the camera
+    // follows it. your car is hidden and only the watched one is heard
+    async startWatch(state: unknown) {
+        const lap = sanitizeGhostPick(state);
+        if (!lap || !this.active || this.trackMode !== 'ring' || this.garageOpen) return;
+        if (this.inLobbyRace() || this.watch) return;
+        const serial = ++this.watchSerial;
+        const replay = await this.leaderboardService.getGhostReplayForLap(
+            lap.id,
+            lap.carId,
+            lap.lapTimeMs
+        );
+        if (serial !== this.watchSerial) return;
+        if (!replay || replay.samples.length < 8 || !this.active || this.trackMode !== 'ring') {
+            UIEventBus.dispatch('race:watchState', { on: false, id: lap.id, failed: true });
+            return;
+        }
+        this.setPhotoMode(false);
+        if (!this.paused) this.setPaused(true);
+        const carId = replay.carId || lap.carId;
+        this.watch = {
+            lap,
+            samples: replay.samples,
+            clock: new WatchClock(realEndMs(replay.samples)),
+            hudAt: 0,
+        };
+        this.ghostReplay.setExternalReplay({ lapTimeMs: lap.lapTimeMs, carId, samples: replay.samples });
+        this.ghostLapId = null;
+        this.ghostReplay.setActive(true);
+        this.ghostReplay.setSolid(true);
+        this.vehicle.root.visible = false;
+        this.chaseCamera.setWatch(this.ghostReplay.ghostMesh, carOptionsById[carId]?.lengthMeters);
+        this.engineAudio.setSpectating(true);
+        this.engineAudio.setPaused(false);
+        UIEventBus.dispatch('race:watchState', {
+            on: true,
+            id: lap.id,
+            durationMs: this.watch.clock.endMs,
+        });
+    }
+
+    stopWatch() {
+        this.watchSerial++;
+        if (!this.watch) return;
+        this.watch = null;
+        this.ghostReplay.setSolid(false);
+        this.ghostReplay.setActive(
+            this.active && this.trackMode === 'ring' && this.ghostPlaybackEnabled
+        );
+        this.vehicle.root.visible = true;
+        this.chaseCamera.setWatch(null);
+        this.visuals.focus = null;
+        this.engineAudio.setSpectating(false);
+        this.engineAudio.setPaused(this.active && this.paused);
+        this.ghostLapId = null;
+        void this.syncGhost();
+        UIEventBus.dispatch('race:watchState', { on: false });
+    }
+
+    // the watched lap's clock, its car and the camera on it, and its time and
+    // speed for the overlay a few times a second
+    updateWatch(delta: number, nowMs: number) {
+        const watch = this.watch!;
+        watch.clock.advance(delta);
+        this.ghostReplay.update(delta, watch.clock.timeMs);
+        const target = this.ghostReplay.ghostMesh;
+        this.chaseCamera.watchTarget = target;
+        this.visuals.focus = target.position;
+        if (nowMs - watch.hudAt < 100) return;
+        watch.hudAt = nowMs;
+        UIEventBus.dispatch('race:watchHud', {
+            timeMs: watch.clock.timeMs,
+            speedKph: Math.round(speedAt(watch.samples, watch.clock.timeMs) * 3.6),
+            playing: watch.clock.playing,
+            rate: watch.clock.rate,
+        });
     }
 
     // the ring's racing line, worked out the first time something needs it
@@ -1220,11 +1402,16 @@ export default class RaceManager {
     // the setup on the car now: how it does round the ring as a point mass,
     // and the speeds the driving line asks for, with room for a driver
     getPerformance() {
-        const key = this.setupKey();
+        return this.performanceOf(this.setupKey(), this.vehicle.physics.spec);
+    }
+
+    // any setup's, cached by car and tune code (null until the ring's racing
+    // line is built)
+    performanceOf(key: string, spec: PhysicsSpec) {
         const known = this.performance.get(key);
         const line = this.getRacingLine();
         if (known || !line) return known || null;
-        const env = measureEnvelope(this.vehicle.physics.spec);
+        const env = measureEnvelope(spec);
         const careful = {
             ...env,
             grip: env.grip * 0.95,
@@ -1314,8 +1501,10 @@ export default class RaceManager {
 
     // the board lap the ghost replays: the record, or a rival just faster
     // than your best with this car (the slowest of the top ten until you
-    // have one). no ghost on the board to chase: your own best lap
+    // have one), or the one picked from its card. no ghost on the board to
+    // chase: your own best lap. a lap being watched keeps the ghost
     async syncGhost() {
+        if (this.watch) return;
         const serial = ++this.ghostSyncSerial;
         const mode = this.ghostMode;
         if (mode === 'off' || mode === 'best') {
@@ -1327,14 +1516,18 @@ export default class RaceManager {
         const board = this.setupBoard();
         const best = this.lapDelta.bestLapMs;
         const service = this.leaderboardService;
-        const candidates =
-            mode === 'record'
-                ? await service.getLeaderboard(1, board)
-                : best > 0
-                  ? await service.getLapsFasterThan(best, board)
-                  : (await service.getLeaderboard(10, board)).slice(-1);
+        const candidates: GhostPick[] =
+            mode === 'lap'
+                ? this.ghostPick
+                    ? [this.ghostPick]
+                    : []
+                : mode === 'record'
+                  ? await service.getLeaderboard(1, board)
+                  : best > 0
+                    ? await service.getLapsFasterThan(best, board)
+                    : (await service.getLeaderboard(10, board)).slice(-1);
         for (const entry of candidates) {
-            if (serial !== this.ghostSyncSerial) return;
+            if (serial !== this.ghostSyncSerial || this.watch) return;
             if (entry.id === this.ghostLapId) {
                 if (this.ghostLabel) this.ghostLabel.kind = mode;
                 return;
@@ -2206,11 +2399,12 @@ export default class RaceManager {
         const ghostCarId = this.ghostReplay.ghostCarId || this.ghostReplay.carId;
         if (this.ghostReplay.root.visible && ghostCarId && ghostCarId !== 'unknown') {
             const p = this.ghostReplay.ghostMesh.getWorldPosition(AUDIO_REMOTE_POSITION);
+            // a watched lap's car is heard like a real one
             remotes.push({
-                id: 'ghost',
+                id: this.watch ? 'watch' : 'ghost',
                 carId: ghostCarId,
                 position: { x: p.x, y: p.y, z: p.z },
-                ghost: true,
+                ghost: !this.watch,
             });
         }
         this.engineAudio.updateWorld(
@@ -2471,15 +2665,19 @@ export default class RaceManager {
             }
         }
         this.track.update();
-        // the ghost follows the lap clock, so a pause or a ghost picked mid
-        // lap stays in step
-        this.ghostReplay.update(
-            delta,
-            this.trackMode === 'ring' && this.lapRunning ? this.currentLapTimeMs : undefined
-        );
+        if (this.watch) {
+            this.updateWatch(delta, nowMs);
+        } else {
+            // the ghost follows the lap clock, so a pause or a ghost picked
+            // mid lap stays in step
+            this.ghostReplay.update(
+                delta,
+                this.trackMode === 'ring' && this.lapRunning ? this.currentLapTimeMs : undefined
+            );
+        }
         this.chaseCamera.update(delta);
         if (this.lineView) {
-            if (this.photoMode) {
+            if (this.photoMode || this.watch) {
                 this.lineView.mesh.visible = false;
             } else {
                 const position = this.vehicle.position;

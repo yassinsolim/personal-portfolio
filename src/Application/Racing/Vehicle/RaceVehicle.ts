@@ -3955,6 +3955,15 @@ export default class RaceVehicle {
         return applyTune(buildPhysicsSpec(option, geometry), this.tune, this.look, option.id);
     }
 
+    // any car with a given setup (a board lap's), sized from its model
+    specFor(carId: string, tune: CarTune, look: CarLook, model: THREE.Group | null) {
+        const option = carOptionsById[carId] || carOptionsById[defaultCarId];
+        const geometry = model
+            ? this.getWheelGeometry(model, option)
+            : defaultWheelGeometry(option, this.wheelRadius);
+        return applyTune(buildPhysicsSpec(option, geometry), tune, look, option.id);
+    }
+
     // new garage choices for the current car: saved, shown and driven
     setGarage(look: CarLook, tune: CarTune, save = true) {
         this.look = sanitizeLook(look);
@@ -3991,9 +4000,10 @@ export default class RaceVehicle {
     }
 
     // wheelbase and track from the wheel rig, in the pivot frame (meters)
-    getWheelGeometry(model: THREE.Group): WheelGeometry {
-        const option =
-            carOptionsById[this.currentCarId] || carOptionsById[defaultCarId];
+    getWheelGeometry(
+        model: THREE.Group,
+        option = carOptionsById[this.currentCarId] || carOptionsById[defaultCarId]
+    ): WheelGeometry {
         const fallback = defaultWheelGeometry(option, this.wheelRadius);
         const rig = (model.userData.raceWheelRig || []) as WheelRig[];
         const toPivot = (wheel: WheelRig) =>
