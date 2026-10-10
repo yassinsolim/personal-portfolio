@@ -152,6 +152,8 @@ export default class RaceVisuals {
     photo = false;
     // a rewind playing back: no new skid marks or sparks along the way
     rewinding = false;
+    // a watched lap's car: shadows and the sky go with it, not your car
+    focus: THREE.Vector3 | null = null;
     // the advanced graphics switches that are off
     graphicsOff = new Set<GraphicsOption>(readGraphicsOff());
     private lastImpact = 0;
@@ -901,12 +903,13 @@ export default class RaceVisuals {
         this.updateAuto();
         this.singlePassGlass();
         this.updateReveal();
-        this.atmosphere.follow(vehicle.position);
+        const focus = this.focus || vehicle.position;
+        this.atmosphere.follow(focus);
         this.extras.update(this.application.camera.instance.position);
         this.terrain.update(this.application.camera.instance);
         this.forest.update(
             this.application.camera.instance,
-            vehicle.position,
+            focus,
             this.application.time.elapsed / 1000
         );
         const sky = this.atmosphere.sky.material.uniforms;

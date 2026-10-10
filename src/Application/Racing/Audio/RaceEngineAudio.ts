@@ -61,6 +61,11 @@ export default class RaceEngineAudio {
         this.carAudio.setPaused(paused);
     }
 
+    // a replay being watched: only the cars placed in 3d are heard
+    setSpectating(spectating: boolean) {
+        this.carAudio.setSpectating(spectating);
+    }
+
     update(telemetry: EngineTelemetry, deltaSeconds: number) {
         this.carAudio.update(
             {

@@ -998,7 +998,8 @@ body.race-mode-touch #ui-app {
 }
 
 .race-menu-panel kbd,
-.race-photo-hint kbd {
+.race-photo-hint kbd,
+.race-watch-bar kbd {
     display: inline-block;
     min-width: 12px;
     margin-left: 6px;
@@ -1265,6 +1266,66 @@ button:hover:not(:disabled) > .track-map {
 }
 
 .pm-board li strong {
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+/* the ring's board in the menu: each lap a row that opens its card */
+.pm-board-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 12px;
+    color: rgba(255, 255, 255, 0.78);
+}
+
+.pm-board.pm-laps {
+    margin-top: 6px;
+}
+
+.pm-board.pm-laps li {
+    display: block;
+    padding: 0;
+}
+
+.pm-board.pm-laps li::before {
+    content: none;
+}
+
+.race-menu-panel .pm-laps button {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    padding: 5px 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    text-align: left;
+}
+
+.race-menu-panel .pm-laps button::before {
+    content: counter(pm-board);
+    color: var(--ui-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.race-menu-panel .pm-laps button:hover:not(:disabled) {
+    background: var(--ui-fill-hover);
+    color: #fff;
+}
+
+.pm-laps button span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pm-laps button strong {
     color: #fff;
     font-variant-numeric: tabular-nums;
 }
@@ -1844,6 +1905,337 @@ button:hover:not(:disabled) > .track-map {
     margin: 0 1px;
 }
 
+/* watching a lap: who's driving up top, the replay's controls along the
+   bottom like photo mode's */
+.race-watch-tag {
+    position: absolute;
+    top: max(18px, env(safe-area-inset-top));
+    left: max(18px, env(safe-area-inset-left));
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    background: rgba(14, 15, 18, 0.78);
+    backdrop-filter: blur(8px);
+    color: #fff;
+    font-family: var(--ui-font);
+    cursor: default;
+}
+
+.race-watch-tag span {
+    color: var(--ui-muted);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+}
+
+.race-watch-tag strong {
+    font-size: 17px;
+    font-weight: 650;
+}
+
+.race-watch-tag small {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+}
+
+.race-watch-bar .race-watch-play {
+    min-width: 64px;
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 650;
+}
+
+.race-watch-bar .race-watch-play:hover {
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
+}
+
+.race-watch-time,
+.race-watch-speed {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.race-watch-scrub {
+    width: min(320px, 40vw);
+    accent-color: var(--ui-accent);
+}
+
+.race-watch-rates {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 10px;
+}
+
+.race-watch-bar .race-watch-rates button {
+    height: 26px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.race-watch-bar .race-watch-rates button.on {
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 600;
+}
+
+.race-watch-speed strong {
+    display: inline-block;
+    min-width: 3ch;
+    color: #fff;
+    font-size: 16px;
+    text-align: right;
+}
+
+/* a lap from the board: who, the car and setup with its numbers, the line
+   it took, and its replay. over the pause menu like help */
+.lap-card {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 41;
+    width: min(760px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    transform: translate(-50%, -50%);
+    padding: 20px 22px 18px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 16px;
+    background: #0e0e0f;
+    color: var(--ui-text);
+    font-family: var(--ui-font);
+    font-size: 13px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7);
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    pointer-events: auto;
+}
+
+.lap-card header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.lap-card header p {
+    margin: 0 0 2px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 11.5px;
+}
+
+.lap-card h3 {
+    margin: 0;
+    color: #fff;
+    font-family: inherit;
+    font-size: 22px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+}
+
+.lap-card-time {
+    color: #fff;
+    font-size: 26px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+
+.lap-card-car {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 14px 0 4px;
+    padding: 8px;
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+}
+
+.lap-card-car img {
+    width: 96px;
+    height: 54px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    object-fit: cover;
+}
+
+.lap-card-car > div:not(.garage-pi) {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.lap-card-car strong {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.lap-card-car span {
+    color: var(--ui-muted);
+    font-size: 12px;
+}
+
+.lap-card-car .garage-pi span {
+    color: #111;
+}
+
+.lap-card-body {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0 24px;
+}
+
+@media (min-width: 640px) {
+    .lap-card-body {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.lap-card h4 {
+    margin: 16px 0 8px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+}
+
+.lap-card dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 5px 14px;
+    margin: 0;
+}
+
+.lap-card dt {
+    color: var(--ui-muted);
+}
+
+.lap-card dd {
+    margin: 0;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}
+
+.lap-card dd small {
+    color: var(--ui-muted);
+    font-size: 11.5px;
+}
+
+.lap-card-note {
+    margin: 6px 0 0;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.lap-card-warn {
+    margin: 10px 0 0;
+    color: #ffc163;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.lap-map {
+    display: block;
+    width: 100%;
+    max-width: 230px;
+    margin: 0 0 10px;
+}
+
+.lap-map path {
+    fill: none;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.lap-map .track {
+    stroke: rgba(255, 255, 255, 0.25);
+    stroke-width: 3px;
+}
+
+.lap-map .lap {
+    stroke: #fff;
+    stroke-width: 1.5px;
+}
+
+.lap-card footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--ui-line);
+}
+
+.lap-card button {
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--ui-line);
+    border-radius: 9px;
+    background: var(--ui-fill);
+    color: var(--ui-text);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.lap-card button:hover:not(:disabled) {
+    background: var(--ui-fill-hover);
+    border-color: var(--ui-line-strong);
+}
+
+.lap-card button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.lap-card .race-menu-primary {
+    border-color: var(--ui-accent);
+    background: var(--ui-accent);
+    color: var(--ui-on-accent);
+    font-weight: 650;
+}
+
+.lap-card .race-menu-primary:hover:not(:disabled) {
+    border-color: var(--ui-accent-hover);
+    background: var(--ui-accent-hover);
+}
+
+.lap-card footer button:last-child {
+    margin-left: auto;
+}
+
+.lap-card kbd {
+    margin-left: 6px;
+    padding: 1px 5px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 5px;
+    color: var(--ui-muted);
+    font-family: inherit;
+    font-size: 10.5px;
+    font-weight: 600;
+}
+
 /* no keyboard on a phone */
 @media (pointer: coarse) {
     .race-photo-keys {
@@ -1920,6 +2312,29 @@ button:hover:not(:disabled) > .track-map {
     gap: 10px;
     font-size: 11px;
     color: rgba(255, 255, 255, 0.84);
+}
+
+/* a lap on the hud's board opens its card */
+.race-hud-board li button {
+    display: flex;
+    flex: 1;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 -4px;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 4px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.race-hud-board li button:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
 }
 
 /* a lobby race: the places, you picked out in white */

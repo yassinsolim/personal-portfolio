@@ -9,7 +9,7 @@ export type SectorHud = {
 };
 
 export type GhostHud = {
-    kind: 'off' | 'best' | 'rival' | 'record';
+    kind: 'off' | 'best' | 'rival' | 'record' | 'lap';
     name?: string;
     lapTimeMs: number;
     carId: string;
@@ -20,6 +20,7 @@ const GHOST_LABEL: Record<GhostHud['kind'], string> = {
     best: 'Your ghost',
     rival: 'Rival',
     record: 'Record',
+    lap: 'Ghost',
 };
 
 type Props = {

@@ -489,6 +489,25 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   setting snapped back to its slider step, so codes round trip exactly) with its ride height
   and spoiler, and keeps your paint and wheels. Closing the garage with a new setup restarts
   the lap as before.
+- Lap cards (October 2026): a lap on the board opens `UI/components/LapCard.tsx` over the pause
+  menu, from the menu's Leaderboard under the track cards or a row of the hud's board (which
+  pauses). It shows the car, its setup in the garage's words (`setupLines` from the board
+  code), the garage's numbers for it (`race:lapOpen` to `RaceManager.openLap`, which builds the
+  spec with `vehicle.specFor` from that car's own model and answers `race:lapState`, again with
+  the performance index from the shared `performanceOf` cache), and its replay's line on a
+  map with top speed and distance (`Ghost/replayStats.ts`). A replay well short of the ring
+  says so. Watch the lap (`startWatch`): the race stays paused and the menus hide (`sceneOnly`
+  in App), the ghost drives it solid (`GhostReplay.setSolid`) on its own clock
+  (`Ghost/watchClock.ts`: play, 0.5 to 4x, seek, skip), the chase camera follows it
+  (`setWatch`, drag to orbit, scroll to zoom), shadows and tree shadows follow it
+  (`RaceVisuals.focus`), your car is hidden and only the watched car is heard, as a full volume
+  remote (`CarAudio.setSpectating`). Back (Esc) puts it all back and the ghost mode's own
+  ghost. Race this ghost pins the lap as ghost mode `lap` (`ghostLap@v6` in storage; the menu's
+  Ghost row gets the driver's name). Hiding the ghost no longer stops recording the lap in
+  progress, and only this device's own laps keep their ghosts in local storage (a board lap's
+  is about 1 MB and can be fetched again). `.tmp-validation/lapviewer.mjs`-style checks read
+  the live board when the build's `config/racing.config.json` is the live one; don't finish a
+  lap with it.
 - Performance index (`Vehicle/performance.ts`): a setup's envelope is measured by driving the
   model on the flat (flat out from rest for the drive at each m/s, flat out on the brakes from
   its top speed), grip from its tires (times 0.93) plus downforce. A point mass then laps the

@@ -126,6 +126,8 @@ export default class CarAudio {
     active: boolean;
     paused: boolean;
     muted: boolean;
+    // watching a replay: your own car and its road noise are quiet
+    spectating = false;
     volume: number;
     lastGear: number;
     lastSpeed: number;
@@ -322,6 +324,11 @@ export default class CarAudio {
         this.applyMix();
     }
 
+    setSpectating(spectating: boolean) {
+        this.spectating = spectating;
+        this.applyMix();
+    }
+
     setVolume(volume: number) {
         this.volume = clamp(Number.isFinite(volume) ? volume : 1, 0, 1);
         this.applyMix();
@@ -332,6 +339,8 @@ export default class CarAudio {
         if (!context || !this.master || !this.raceGain) return;
         const now = context.currentTime;
         setParam(this.master.gain, this.muted ? 0 : this.volume, now, 0.03);
+        setParam(this.engineBus?.gain, this.spectating ? 0 : 1, now, 0.1);
+        setParam(this.fxBus?.gain, this.spectating ? 0 : 1, now, 0.1);
         const running = this.active && !this.paused;
         setParam(this.raceGain.gain, running || this.offline ? 1 : 0, now, running ? 0.05 : 0.08);
         if (this.offline) return;

@@ -7,9 +7,10 @@ import GraphicsInfo from './GraphicsInfo';
 import RaceHelp from './RaceHelp';
 import TrackMap from './TrackMap';
 import type { RaceHud } from './LobbyRaceHud';
+import type { LapEntry } from './LapCard';
 import type { MultiplayerState } from '../../Racing/Multiplayer/MultiplayerService';
 import type { AssistPreset } from '../../Racing/Vehicle/assists';
-import { GHOST_MODES, type GhostMode } from '../../Racing/Ghost/ghostMode';
+import { GHOST_MODES, type GhostMode, type GhostPick } from '../../Racing/Ghost/ghostMode';
 import { LINE_MODES, type LineMode } from '../../Racing/Track/lineMode';
 import { STEERING_MAX, STEERING_MIN, clampSteering } from '../../Racing/Input/steering';
 import { MAX_DRIVER_NAME } from '../../Racing/Multiplayer/driverName';
@@ -37,6 +38,7 @@ const GHOST_LABEL: Record<GhostMode, string> = {
     best: 'Your best',
     rival: 'Rival',
     record: 'Record',
+    lap: 'Picked lap',
 };
 const LINE_LABEL: Record<LineMode, string> = {
     off: 'Off',
@@ -101,6 +103,15 @@ type Props = {
     renderScale: number | null;
     assists: { preset: AssistPreset; autoGears: boolean };
     ghostMode: GhostMode;
+    // a board lap picked from its card to race
+    ghostPick: GhostPick | null;
+    // the ring's top laps on the board picked, each opens its card
+    board: LapEntry[];
+    boardKind: 'stock' | 'tuned';
+    onBoard: (kind: 'stock' | 'tuned') => void;
+    onLap: (entry: LapEntry) => void;
+    // a lap's card is open over the menu
+    dimmed: boolean;
     lineMode: LineMode;
     steering: number;
     onResume: () => void;
@@ -181,13 +192,13 @@ const PauseMenu = (props: Props) => {
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             if (event.key !== 'Escape' || event.defaultPrevented) return;
-            if (help || document.querySelector('.car-picker')) return;
+            if (help || props.dimmed || document.querySelector('.car-picker')) return;
             event.preventDefault();
             props.onResume();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [help, props.onResume]);
+    }, [help, props.dimmed, props.onResume]);
 
     // the switches open under the columns: bring them into view
     useEffect(() => {
@@ -216,7 +227,10 @@ const PauseMenu = (props: Props) => {
     };
 
     return (
-        <div className={`race-menu-overlay${help ? ' helping' : ''}`} data-prevent-click>
+        <div
+            className={`race-menu-overlay${help || props.dimmed ? ' helping' : ''}`}
+            data-prevent-click
+        >
             <div className="race-menu-panel pm" data-prevent-click>
                 <header className="pm-head">
                     <div>
@@ -286,6 +300,43 @@ const PauseMenu = (props: Props) => {
                                 </button>
                             ))}
                         </div>
+                        {track === 'ring' && (
+                            <>
+                                <div className="pm-board-head">
+                                    <span>Leaderboard</span>
+                                    <Choice
+                                        value={props.boardKind}
+                                        options={[
+                                            ['stock', 'Stock'],
+                                            ['tuned', 'Tuned'],
+                                        ]}
+                                        onPick={props.onBoard}
+                                    />
+                                </div>
+                                {props.board.length === 0 ? (
+                                    <p className="pm-note">No laps yet.</p>
+                                ) : (
+                                    <ol className="pm-board pm-laps">
+                                        {props.board.slice(0, 5).map((entry) => (
+                                            <li key={entry.id}>
+                                                <button
+                                                    type="button"
+                                                    title={`${entry.name}'s car, setup and replay`}
+                                                    onClick={() => props.onLap(entry)}
+                                                >
+                                                    <span>{entry.name}</span>
+                                                    <span>
+                                                        {carOptions.find((option) => option.id === entry.carId)
+                                                            ?.label || entry.carId}
+                                                    </span>
+                                                    <strong>{formatTime(entry.lapTimeMs)}</strong>
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                )}
+                            </>
+                        )}
                         {track === 'drift' && props.driftBoard.length > 0 && (
                             <ol className="pm-board">
                                 {props.driftBoard.slice(0, 5).map((entry) => (
@@ -420,9 +471,14 @@ const PauseMenu = (props: Props) => {
                                 <Row label="Ghost">
                                     <Choice
                                         value={props.ghostMode}
-                                        options={GHOST_MODES.map(
-                                            (mode) => [mode, GHOST_LABEL[mode]] as [GhostMode, string]
-                                        )}
+                                        options={[
+                                            ...GHOST_MODES.map(
+                                                (mode) => [mode, GHOST_LABEL[mode]] as [GhostMode, string]
+                                            ),
+                                            ...(props.ghostPick
+                                                ? [['lap', props.ghostPick.name] as [GhostMode, string]]
+                                                : []),
+                                        ]}
                                         onPick={props.onGhost}
                                     />
                                 </Row>
