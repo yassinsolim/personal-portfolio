@@ -15,6 +15,9 @@
 --   - a lap only shows on the board once its ghost shows it drove the whole
 --     ring forward from the line (verified, set by a trigger on the ghost)
 --   - removed laps are listed with why, so the game can tell the player
+--   - a driver's profile is public to read except its key's hash, and only
+--     changes through racing_save_player with the device's key. laps and
+--     runs sent with that key (x-player-id, x-player-key) are the player's
 
 create extension if not exists pgcrypto;
 
@@ -303,54 +306,89 @@ create table if not exists public.nordschleife_rate_events (
 );
 create index if not exists nordschleife_rate_events_idx on public.nordschleife_rate_events (bucket, at);
 alter table public.nordschleife_rate_events enable row level security;
+-- what was counted: laps (and drift runs), or profile saves
+alter table public.nordschleife_rate_events
+  add column if not exists kind text not null default 'lap';
+create index if not exists nordschleife_rate_events_kind_idx on public.nordschleife_rate_events (kind, at);
 
+-- the client's network as supabase's edge sets it: its ipv4 address or ipv6
+-- /64 (one client usually holds a whole /64). null outside the data api (the
+-- sql editor, migrations), which only the api sets request.headers for.
+-- x-forwarded-for keeps whatever the client sent as its first entry, so it's
+-- not used. sb-forwarded-for is overwritten with the real address, and
+-- cloudflare refuses a request that sets cf-connecting-ip itself (checked
+-- against the live project, sep 2026)
+create or replace function public.racing_client_net()
+returns text
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v_headers text := nullif(current_setting('request.headers', true), '');
+  v_ip text;
+begin
+  if v_headers is null then
+    return null;
+  end if;
+  v_ip := coalesce(
+    nullif(trim(v_headers::json ->> 'sb-forwarded-for'), ''),
+    nullif(trim(v_headers::json ->> 'cf-connecting-ip'), '')
+  );
+  begin
+    return coalesce(
+      host(network(set_masklen(v_ip::inet, case when family(v_ip::inet) = 6 then 64 else 32 end))),
+      'unknown'
+    );
+  exception when others then
+    return 'unknown';
+  end;
+end;
+$$;
+
+-- at most p_per_client of a kind per client and p_total from everyone (a
+-- backstop if addresses are rotated) per 10 minutes. 53400 past either
+create or replace function public.racing_rate_limit(p_kind text, p_per_client integer, p_total integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_net text := racing_client_net();
+  v_bucket text;
+  v_count integer;
+  v_total integer;
+begin
+  if v_net is null then
+    return;
+  end if;
+  v_bucket := md5(p_kind || ':' || v_net);
+  if random() < 0.02 then
+    delete from nordschleife_rate_events where at < clock_timestamp() - interval '1 day';
+  end if;
+  select count(*) filter (where bucket = v_bucket), count(*) into v_count, v_total
+    from nordschleife_rate_events
+    where kind = p_kind and at > clock_timestamp() - interval '10 minutes';
+  if v_count >= p_per_client then
+    raise exception 'too many from this client, try again later' using errcode = '53400';
+  end if;
+  if v_total >= p_total then
+    raise exception 'too many right now, try again later' using errcode = '53400';
+  end if;
+  insert into nordschleife_rate_events (bucket, kind) values (v_bucket, p_kind);
+end;
+$$;
+
+-- a real lap takes 7 to 10 minutes: 30 a client and 300 in all per 10 minutes
 create or replace function public.nordschleife_limit_lap_inserts()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_headers text := nullif(current_setting('request.headers', true), '');
-  v_ip text;
-  v_net text;
-  v_bucket text;
-  v_count integer;
-  v_total integer;
 begin
-  -- only the data api sets request.headers, so the sql editor and migrations skip the limit
-  if v_headers is null then
-    return new;
-  end if;
-  -- the client ip as supabase's edge sets it. x-forwarded-for keeps whatever
-  -- the client sent as its first entry, so it's not used. sb-forwarded-for is
-  -- overwritten with the real address, and cloudflare refuses a request that
-  -- sets cf-connecting-ip itself (checked against the live project, sep 2026)
-  v_ip := coalesce(
-    nullif(trim(v_headers::json ->> 'sb-forwarded-for'), ''),
-    nullif(trim(v_headers::json ->> 'cf-connecting-ip'), '')
-  );
-  -- one client usually holds a whole ipv6 /64, so that's the unit
-  begin
-    v_net := host(network(set_masklen(v_ip::inet, case when family(v_ip::inet) = 6 then 64 else 32 end)));
-  exception when others then
-    v_net := 'unknown';
-  end;
-  v_bucket := md5('nordschleife:' || coalesce(v_net, 'unknown'));
-  if random() < 0.02 then
-    delete from nordschleife_rate_events where at < clock_timestamp() - interval '1 day';
-  end if;
-  select count(*) filter (where bucket = v_bucket), count(*) into v_count, v_total
-    from nordschleife_rate_events
-    where at > clock_timestamp() - interval '10 minutes';
-  if v_count >= 30 then
-    raise exception 'too many laps from this client, try again later' using errcode = '53400';
-  end if;
-  -- a backstop if addresses are rotated: the whole game, 300 laps per 10 minutes
-  if v_total >= 300 then
-    raise exception 'too many laps right now, try again later' using errcode = '53400';
-  end if;
-  insert into nordschleife_rate_events (bucket) values (v_bucket);
+  perform racing_rate_limit('lap', 30, 300);
   return new;
 end;
 $$;
@@ -417,6 +455,219 @@ create trigger drift_park_limit_inserts
   before insert on public.drift_park_scores
   for each row execute function public.nordschleife_limit_lap_inserts();
 
+-- ---------------------------------------------------------------- players
+
+-- a driver's profile: the badge, name, number and bio the board and the pause
+-- menu show, the car they show off and how their cars are set up. a device
+-- keeps its player id and a secret key, only the key's sha256 is here (and the
+-- api can't read it)
+create table if not exists public.racing_players (
+  id uuid primary key,
+  key_hash text not null check (key_hash ~ '^[0-9a-f]{64}$'),
+  name text not null check (char_length(name) between 1 and 16),
+  avatar text not null default 'helmet' check (avatar ~ '^[a-z0-9-]{1,24}$'),
+  color text not null default '#e8b04a' check (color ~ '^#[0-9a-f]{6}$'),
+  number smallint check (number between 0 and 99),
+  bio text not null default '' check (char_length(bio) <= 140),
+  car text check (car ~ '^[a-z0-9-]{1,48}$'),
+  -- car id to its look and tune codes (garage.ts encodeLook and tuneCode)
+  garage jsonb not null default '{}'::jsonb check (jsonb_typeof(garage) = 'object'),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.racing_players enable row level security;
+
+drop policy if exists "public read players" on public.racing_players;
+create policy "public read players"
+  on public.racing_players for select
+  to anon, authenticated
+  using (true);
+
+-- names and bios: no control characters, nor the invisible ones that flip or
+-- hide text
+create or replace function public.racing_clean_text(p_text text)
+returns boolean
+language sql
+immutable
+as $$
+  select p_text !~ '[[:cntrl:]\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]';
+$$;
+
+-- up to 32 cars, each its look and tune code
+create or replace function public.racing_valid_garage(p_garage jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select jsonb_typeof(p_garage) = 'object'
+    and octet_length(p_garage::text) <= 8192
+    and (select count(*) from jsonb_object_keys(p_garage)) <= 32
+    and not exists (
+      select 1 from jsonb_each(p_garage) e
+      where not public.nordschleife_valid_car_id(e.key || '@v0')
+        or jsonb_typeof(e.value) <> 'object'
+        or exists (select 1 from jsonb_object_keys(e.value) k where k not in ('look', 'tune'))
+        or jsonb_typeof(coalesce(e.value -> 'look', '""')) <> 'string'
+        or jsonb_typeof(coalesce(e.value -> 'tune', '""')) <> 'string'
+        or coalesce(e.value ->> 'look', '') !~ '^[0-9a-z.-]{0,80}$'
+        or coalesce(e.value ->> 'tune', '') !~ '^[0-9a-z]{0,24}$'
+    );
+$$;
+
+-- makes the profile, or changes it with the key it was made with. a field the
+-- game can't make is 22023, another device's player 42501, too many saves 53400
+create or replace function public.racing_save_player(p_id uuid, p_key text, p_profile jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_name text := btrim(coalesce(p_profile ->> 'name', ''));
+  v_avatar text := coalesce(p_profile ->> 'avatar', 'helmet');
+  v_color text := lower(coalesce(p_profile ->> 'color', '#e8b04a'));
+  v_number smallint;
+  v_bio text := btrim(coalesce(p_profile ->> 'bio', ''));
+  v_car text := nullif(p_profile ->> 'car', '');
+  v_garage jsonb := coalesce(p_profile -> 'garage', '{}'::jsonb);
+  v_rows integer;
+begin
+  if p_id is null or coalesce(p_key, '') !~ '^[A-Za-z0-9_-]{32,128}$' then
+    raise exception 'a player id and key are needed' using errcode = '22023';
+  end if;
+  if jsonb_typeof(p_profile) is distinct from 'object' then
+    raise exception 'the profile is an object' using errcode = '22023';
+  end if;
+  if char_length(v_name) not between 1 and 16 or not racing_clean_text(v_name) then
+    raise exception 'bad name' using errcode = '22023';
+  end if;
+  if v_avatar !~ '^[a-z0-9-]{1,24}$' then
+    raise exception 'bad avatar' using errcode = '22023';
+  end if;
+  if v_color !~ '^#[0-9a-f]{6}$' then
+    raise exception 'bad color' using errcode = '22023';
+  end if;
+  if jsonb_typeof(p_profile -> 'number') = 'number' then
+    if (p_profile ->> 'number')::numeric not between 0 and 99 or (p_profile ->> 'number')::numeric % 1 <> 0 then
+      raise exception 'bad number' using errcode = '22023';
+    end if;
+    v_number := (p_profile ->> 'number')::smallint;
+  elsif coalesce(jsonb_typeof(p_profile -> 'number'), 'null') <> 'null' then
+    raise exception 'bad number' using errcode = '22023';
+  end if;
+  if char_length(v_bio) > 140 or not racing_clean_text(v_bio) then
+    raise exception 'bad bio' using errcode = '22023';
+  end if;
+  if v_car is not null and not nordschleife_valid_car_id(v_car || '@v0') then
+    raise exception 'bad car' using errcode = '22023';
+  end if;
+  if not racing_valid_garage(v_garage) then
+    raise exception 'bad garage' using errcode = '22023';
+  end if;
+  perform racing_rate_limit('player', 60, 1200);
+  insert into racing_players as p (id, key_hash, name, avatar, color, number, bio, car, garage)
+    values (p_id, encode(sha256(convert_to(p_key, 'UTF8')), 'hex'), v_name, v_avatar, v_color,
+      v_number, v_bio, v_car, v_garage)
+    on conflict (id) do update set
+      name = excluded.name,
+      avatar = excluded.avatar,
+      color = excluded.color,
+      number = excluded.number,
+      bio = excluded.bio,
+      car = excluded.car,
+      garage = excluded.garage,
+      updated_at = now()
+    where p.key_hash = excluded.key_hash;
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    raise exception 'that player belongs to another device' using errcode = '42501';
+  end if;
+end;
+$$;
+
+-- a device's own profile, gone. its laps stay on the board under their names
+create or replace function public.racing_delete_player(p_id uuid, p_key text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform racing_rate_limit('player', 60, 1200);
+  delete from racing_players
+    where id = p_id and key_hash = encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex');
+  if not found then
+    raise exception 'no player with that key' using errcode = '42501';
+  end if;
+end;
+$$;
+
+-- whose lap or run it is
+alter table public.nordschleife_leaderboard
+  add column if not exists player_id uuid references public.racing_players (id) on delete set null;
+create index if not exists idx_nordschleife_leaderboard_player
+  on public.nordschleife_leaderboard (player_id, lap_time_ms) where player_id is not null;
+alter table public.drift_park_scores
+  add column if not exists player_id uuid references public.racing_players (id) on delete set null;
+create index if not exists idx_drift_park_scores_player
+  on public.drift_park_scores (player_id, score desc) where player_id is not null;
+
+-- a lap or run sent with a player's id and key (x-player-id, x-player-key) is
+-- theirs, and a device that hasn't saved its profile yet gets one with the
+-- lap's name. anything else through the api is nobody's, whatever the row
+-- said. the sql editor (no request headers) keeps what it's given
+create or replace function public.racing_attribute_player()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_headers json;
+  v_id uuid;
+  v_hash text;
+begin
+  begin
+    v_headers := nullif(current_setting('request.headers', true), '')::json;
+  exception when others then
+    v_headers := null;
+  end;
+  if v_headers is null then
+    return new;
+  end if;
+  new.player_id := null;
+  if coalesce(v_headers ->> 'x-player-key', '') !~ '^[A-Za-z0-9_-]{32,128}$' then
+    return new;
+  end if;
+  begin
+    v_id := (v_headers ->> 'x-player-id')::uuid;
+  exception when others then
+    return new;
+  end;
+  if v_id is null then
+    return new;
+  end if;
+  v_hash := encode(sha256(convert_to(v_headers ->> 'x-player-key', 'UTF8')), 'hex');
+  insert into racing_players (id, key_hash, name) values (v_id, v_hash, btrim(new.name))
+    on conflict (id) do nothing;
+  if exists (select 1 from racing_players where id = v_id and key_hash = v_hash) then
+    new.player_id := v_id;
+  end if;
+  return new;
+end;
+$$;
+
+-- after the limits (triggers fire by name)
+drop trigger if exists racing_attribute_lap on public.nordschleife_leaderboard;
+create trigger racing_attribute_lap
+  before insert on public.nordschleife_leaderboard
+  for each row execute function public.racing_attribute_player();
+drop trigger if exists racing_attribute_run on public.drift_park_scores;
+create trigger racing_attribute_run
+  before insert on public.drift_park_scores
+  for each row execute function public.racing_attribute_player();
+
 -- ---------------------------------------------------------------- realtime
 
 -- the board listens for new laps (postgres changes on insert)
@@ -442,8 +693,21 @@ revoke all on public.drift_park_scores from anon, authenticated;
 grant select, insert on public.drift_park_scores to anon, authenticated;
 revoke all on public.nordschleife_removed_laps from anon, authenticated;
 grant select on public.nordschleife_removed_laps to anon, authenticated;
+-- everything but the key's hash, so the api has to name the columns it reads
+revoke all on public.racing_players from anon, authenticated;
+grant select (id, name, avatar, color, number, bio, car, garage, created_at, updated_at)
+  on public.racing_players to anon, authenticated;
 
 revoke all on function public.nordschleife_limit_lap_inserts() from public, anon, authenticated;
+revoke all on function public.racing_client_net() from public, anon, authenticated;
+revoke all on function public.racing_rate_limit(text, integer, integer) from public, anon, authenticated;
+revoke all on function public.racing_attribute_player() from public, anon, authenticated;
+revoke all on function public.racing_clean_text(text) from public, anon, authenticated;
+revoke all on function public.racing_valid_garage(jsonb) from public, anon, authenticated;
+revoke all on function public.racing_save_player(uuid, text, jsonb) from public;
+grant execute on function public.racing_save_player(uuid, text, jsonb) to anon, authenticated;
+revoke all on function public.racing_delete_player(uuid, text) from public;
+grant execute on function public.racing_delete_player(uuid, text) to anon, authenticated;
 revoke all on function public.nordschleife_lap_checkpoints() from public, anon, authenticated;
 revoke all on function public.nordschleife_replay_drives_lap(jsonb, integer) from public, anon, authenticated;
 revoke all on function public.nordschleife_verify_lap() from public, anon, authenticated;

@@ -1,4 +1,5 @@
 import { randomInt } from '../../Utils/Random';
+import type { PlayerBadge } from '../Profile/profile';
 
 export type DriftEntry = {
     id: string;
@@ -8,6 +9,8 @@ export type DriftEntry = {
     carId: string;
     createdAt: string;
     source: 'local' | 'remote';
+    playerId?: string | null;
+    player?: PlayerBadge | null;
 };
 
 const STORAGE_KEY = 'yassinverse:driftpark:scores:v1';

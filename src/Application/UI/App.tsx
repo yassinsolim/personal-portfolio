@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import LoadingScreen from './components/LoadingScreen';
 import HybridLoader from './components/loaders/HybridLoader';
@@ -27,8 +27,9 @@ import { readGhostMode, readGhostPick, type GhostMode, type GhostPick } from '..
 import { readLineMode, type LineMode } from '../Racing/Track/lineMode';
 import { STEERING_KEY, readSteering } from '../Racing/Input/steering';
 import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Track/startTrack';
-import PauseMenu from './components/PauseMenu';
+import PauseMenu, { type MenuTab } from './components/PauseMenu';
 import LapCard, { type LapEntry } from './components/LapCard';
+import PlayerCard from './components/PlayerCard';
 import WatchMode from './components/WatchMode';
 import RemovedLapCard from './components/RemovedLapCard';
 import {
@@ -39,6 +40,14 @@ import {
 import TrackMap from './components/TrackMap';
 import NameCard from './components/NameCard';
 import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
+import {
+    profilePayload,
+    readDraft,
+    readIdentity,
+    writeDraft,
+    type ProfileDraft,
+} from '../Racing/Profile/profile';
+import type { SaveStatus } from '../Racing/Profile/ProfileService';
 
 const QUALITY_MODE_KEY = 'yassinverse:qualityMode';
 const RENDER_MODE_KEY = 'yassinverse:renderMode';
@@ -357,8 +366,21 @@ const App = () => {
     const [ghostPick, setGhostPick] = useState<GhostPick | null>(() => readGhostPick());
     // a board lap's card, open over the pause menu, and the lap being watched
     const [lapCard, setLapCard] = useState<LapEntry | null>(null);
+    // its place on the board it was opened from, 0 when that isn't known
+    const [lapCardRank, setLapCardRank] = useState(0);
     const [watching, setWatching] = useState<{ durationMs: number } | null>(null);
     const closeLapCard = useCallback(() => setLapCard(null), []);
+    const openLapCard = useCallback((entry: LapEntry, rank: number) => {
+        setLapCardRank(rank);
+        setLapCard(entry);
+    }, []);
+    // a driver's card, the menu's tab, and this device's profile
+    const [playerCard, setPlayerCard] = useState<string | null>(null);
+    const closePlayerCard = useCallback(() => setPlayerCard(null), []);
+    const [menuTab, setMenuTab] = useState<MenuTab>('board');
+    const [profileDraft, setProfileDraft] = useState<ProfileDraft>(() => readDraft());
+    const [profileStatus, setProfileStatus] = useState<SaveStatus | null>(null);
+    const [myId, setMyId] = useState<string | null>(() => readIdentity()?.id || null);
     const stopWatching = useCallback(() => eventBus.dispatch('race:watchStop', {}), []);
     // this device's laps taken off the board, waiting to be explained
     const [removedLaps, setRemovedLaps] = useState<RemovedLap[]>(() => readRemovedNotices());
@@ -450,6 +472,7 @@ const App = () => {
                     setLobbyChoiceOpen(false);
                     setGarageOpen(false);
                     setLapCard(null);
+                    setPlayerCard(null);
                 }
             }
         );
@@ -488,7 +511,17 @@ const App = () => {
 
         eventBus.on('race:pauseState', (state: { paused?: boolean }) => {
             setRacePaused(Boolean(state?.paused));
-            if (!state?.paused) setLapCard(null);
+            if (!state?.paused) {
+                setLapCard(null);
+                setPlayerCard(null);
+                // esc opens the menu on the leaderboard
+                setMenuTab('board');
+            }
+        });
+
+        eventBus.on('race:profileStatus', (state: { status?: SaveStatus } | undefined) => {
+            setProfileStatus(state?.status || null);
+            setMyId(readIdentity()?.id || null);
         });
 
         eventBus.on('race:watchState', (state: { on?: boolean; durationMs?: number } | undefined) => {
@@ -896,9 +929,9 @@ const App = () => {
     // photo mode and a watched lap leave nothing over the view but their bar
     const sceneOnly = photoMode || Boolean(watching);
     // a lap on the board: paused, its card over the menu
-    const openLap = (entry: LapEntry) => {
+    const openLap = (entry: LapEntry, rank: number) => {
         if (!racePaused) eventBus.dispatch('race:pauseRequest', { source: 'board' });
-        setLapCard(entry);
+        openLapCard(entry, rank);
     };
     const multiplayerBusy = multiplayer.connecting;
     const hasJoinCode = sanitizeLobbyCode(lobbyCodeInput).length >= 4;
@@ -940,6 +973,34 @@ const App = () => {
             setAskName(true);
         }
     }, [raceModeActive, racePaused, garageOpen, transitionLocked]);
+
+    // the profile goes out a moment after the last change, as a race starts
+    // and when the garage closes (its setups are on the profile). an
+    // unchanged one isn't sent again
+    useEffect(() => {
+        if (!raceModeActive || askName || garageOpen || transitionLocked) return undefined;
+        // the first drive's name card comes first
+        if (isDefaultDriverName(playerName)) return undefined;
+        const timer = window.setTimeout(
+            () => eventBus.dispatch('race:profileSave', profilePayload(playerName, profileDraft, selectedCar)),
+            900
+        );
+        return () => window.clearTimeout(timer);
+    }, [raceModeActive, askName, garageOpen, transitionLocked, playerName, profileDraft, selectedCar]);
+
+    const changeProfile = useCallback((draft: ProfileDraft) => {
+        setProfileDraft(draft);
+        writeDraft(draft);
+    }, []);
+
+    // your own card falls back on what's on this device
+    const localPlayer = useMemo(
+        () =>
+            myId && playerCard === myId
+                ? { id: myId, ...profilePayload(playerName, profileDraft, selectedCar), createdAt: '' }
+                : null,
+        [myId, playerCard, playerName, profileDraft, selectedCar]
+    );
 
     return (
         <div id="ui-app" className={garageOpen ? 'garage-open' : ''}>
@@ -1350,12 +1411,12 @@ const App = () => {
                             <p>No laps yet.</p>
                         ) : (
                             <ol>
-                                {leaderboard.slice(0, 5).map((entry) => (
+                                {leaderboard.slice(0, 5).map((entry, index) => (
                                     <li key={entry.id}>
                                         <button
                                             type="button"
                                             title={`${entry.name}'s car, setup and replay`}
-                                            onClick={() => openLap(entry)}
+                                            onClick={() => openLap(entry, index + 1)}
                                         >
                                             <span>{entry.name}</span>
                                             <span>{formatLapTime(entry.lapTimeMs)}</span>
@@ -1364,6 +1425,9 @@ const App = () => {
                                 ))}
                             </ol>
                         )}
+                        <button type="button" className="race-board-more" onClick={handlePauseMenu}>
+                            Full board and profiles <kbd>Esc</kbd>
+                        </button>
                     </div>
                     {multiplayer.connected && multiplayer.mode === 'lobby' && (
                         <div className="race-hud-board">
@@ -1527,14 +1591,21 @@ const App = () => {
                     assists={assists}
                     ghostMode={ghostMode}
                     ghostPick={ghostPick}
-                    board={leaderboard}
                     boardKind={leaderboardBoard}
                     onBoard={(board) => {
                         setLeaderboardBoard(board);
                         eventBus.dispatch('race:leaderboardBoard', { board });
                     }}
-                    onLap={setLapCard}
-                    dimmed={Boolean(lapCard)}
+                    onLap={openLapCard}
+                    onPlayer={setPlayerCard}
+                    dimmed={Boolean(lapCard || playerCard)}
+                    tab={menuTab}
+                    onTab={setMenuTab}
+                    myId={myId}
+                    profileDraft={profileDraft}
+                    onProfileDraft={changeProfile}
+                    profileStatus={profileStatus}
+                    onRemoveProfile={() => eventBus.dispatch('race:profileRemove', {})}
                     lineMode={lineMode}
                     steering={steering}
                     onResume={handleResumeRace}
@@ -1564,10 +1635,24 @@ const App = () => {
                 />
             )}
             {raceModeActive && photoMode && <PhotoMode />}
+            {raceModeActive && racePaused && playerCard && !sceneOnly && !lobbyChoiceOpen && (
+                <PlayerCard
+                    playerId={playerCard}
+                    mine={playerCard === myId}
+                    local={localPlayer}
+                    covered={Boolean(lapCard)}
+                    onLap={(entry) => openLapCard(entry, 0)}
+                    onEdit={() => {
+                        setPlayerCard(null);
+                        setMenuTab('profile');
+                    }}
+                    onClose={closePlayerCard}
+                />
+            )}
             {raceModeActive && racePaused && lapCard && !sceneOnly && !lobbyChoiceOpen && (
                 <LapCard
                     entry={lapCard}
-                    rank={leaderboard.findIndex((entry) => entry.id === lapCard.id) + 1}
+                    rank={lapCardRank}
                     board={lapCard.tune ? 'tuned' : 'stock'}
                     outline={trackOutline}
                     canWatch={trackState.track === 'ring' && !inLobbyRace}

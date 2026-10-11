@@ -42,6 +42,9 @@ import GarageScene, { GARAGE_ORIGIN, TURNTABLE_TOP } from './Garage/GarageScene'
 import LocalLeaderboard from './Leaderboard/LocalLeaderboard';
 import LeaderboardService from './Leaderboard/LeaderboardService';
 import { addRemovedNotices } from './Leaderboard/removedLaps';
+import { BOARD_SIZE, sanitizeBoardQuery, type BoardQuery } from './Leaderboard/boardQuery';
+import ProfileService from './Profile/ProfileService';
+import { isPlayerId, readIdentity, sanitizePayload } from './Profile/profile';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import type { RemoteCarAudioState } from './Audio/CarAudio';
 import GhostReplay, { type GhostLapReplay } from './Ghost/GhostReplay';
@@ -230,6 +233,11 @@ export default class RaceManager {
     lastLapTimeMs = 0;
     localLeaderboard: LocalLeaderboard;
     leaderboardService: LeaderboardService;
+    profiles: ProfileService;
+    // the pause menu's board while it's open, refreshed when laps change
+    boardQuery: BoardQuery | null = null;
+    boardSerial = 0;
+    playerSerial = 0;
     currentLapTimeMs: number;
     lapRunning: boolean;
     // the first lap's clock is at 0, waiting for the car to move
@@ -356,6 +364,10 @@ export default class RaceManager {
         );
         this.localLeaderboard = new LocalLeaderboard();
         this.leaderboardService = new LeaderboardService(this.localLeaderboard);
+        this.profiles = new ProfileService(
+            () => this.leaderboardService.client(),
+            (status) => UIEventBus.dispatch('race:profileStatus', { status })
+        );
         this.ringWorld = this.visuals.world();
         this.ringLaps = { lapTimer: this.lapTimer, sectors: this.sectors };
         this.currentLapTimeMs = 0;
@@ -429,6 +441,7 @@ export default class RaceManager {
         });
         this.leaderboardService.onLeaderboardChanged(() => {
             void this.refreshLeaderboard();
+            void this.sendBoard();
         });
         this.setupEvents();
         yield 'manager';
@@ -693,6 +706,20 @@ export default class RaceManager {
 
         UIEventBus.on('race:ghostLap', (state: unknown) => this.pickGhostLap(state));
         UIEventBus.on('race:lapOpen', (state: unknown) => void this.openLap(state));
+        UIEventBus.on('race:profileSave', (payload: unknown) => this.profiles.save(sanitizePayload(payload)));
+        UIEventBus.on('race:profileRemove', async () => {
+            const status = await this.profiles.remove();
+            UIEventBus.dispatch('race:profileStatus', { status });
+            void this.sendBoard();
+        });
+        UIEventBus.on('race:playerOpen', (state: { id?: unknown } | undefined) => void this.openPlayer(state?.id));
+        UIEventBus.on('race:boardRequest', (state: unknown) => {
+            this.boardQuery = sanitizeBoardQuery(state);
+            void this.sendBoard();
+        });
+        UIEventBus.on('race:boardClose', () => {
+            this.boardQuery = null;
+        });
         UIEventBus.on('race:watch', (state: unknown) => void this.startWatch(state));
         UIEventBus.on('race:watchStop', () => this.stopWatch());
         UIEventBus.on('race:watchControl', (state: WatchControl | undefined) => {
@@ -1509,6 +1536,44 @@ export default class RaceManager {
             board,
         });
         void this.syncGhost();
+    }
+
+    // the pause menu's board: the top laps or runs with their drivers'
+    // badges, then where your best lap is when it's further down
+    async sendBoard() {
+        const query = this.boardQuery;
+        if (!query) return;
+        const serial = ++this.boardSerial;
+        const service = this.leaderboardService;
+        if (query.track === 'drift') {
+            const entries = await service.getDriftBoard(BOARD_SIZE);
+            if (serial === this.boardSerial) UIEventBus.dispatch('race:boardList', { ...query, entries, mine: null });
+            return;
+        }
+        const entries = await service.getLeaderboard(BOARD_SIZE, query.board, query.carId);
+        if (serial !== this.boardSerial) return;
+        UIEventBus.dispatch('race:boardList', { ...query, entries, mine: null });
+        const me = readIdentity()?.id;
+        if (!me || entries.some((entry) => entry.playerId === me)) return;
+        const best = await service.getPlayerBest(me, query.board, query.carId);
+        const rank = best ? await service.getRankOf(best.lapTimeMs, query.board, query.carId) : 0;
+        if (serial !== this.boardSerial || !best) return;
+        UIEventBus.dispatch('race:boardList', { ...query, entries, mine: { entry: best, rank } });
+    }
+
+    // a driver's card: their profile, fastest laps and best drift run
+    async openPlayer(id: unknown) {
+        if (!isPlayerId(id)) return;
+        const serial = ++this.playerSerial;
+        const service = this.leaderboardService;
+        const [player, laps, drift, online] = await Promise.all([
+            this.profiles.getPlayer(id),
+            service.getPlayerLaps(id),
+            service.getPlayerDriftBest(id),
+            service.client(),
+        ]);
+        if (serial !== this.playerSerial) return;
+        UIEventBus.dispatch('race:playerState', { id, player, laps, drift, offline: !online });
     }
 
     // the board your laps go on with the car as it's set up

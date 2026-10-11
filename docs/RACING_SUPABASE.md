@@ -79,9 +79,23 @@ Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, 
   `select public.nordschleife_remove_lap('<lap id>', '<why, shown to the player>');`, which
   lists it there and deletes it with its ghost. The player's device tells them the next time
   they race.
-- `nordschleife_rate_events`: private, no access for the browser roles.
+- `nordschleife_rate_events`: private, no access for the browser roles. Rows have a `kind`
+  (`lap` for laps and drift runs, `player` for profile saves), each counted on its own by
+  `racing_rate_limit`.
+- `racing_players`: driver profiles (name, badge, color, race number, bio, the car shown off,
+  and a `garage` of each set up car's look and tune codes). Public to read except `key_hash`
+  (column grants, so the api has to name the columns it reads). The browser can't write the
+  table: `racing_save_player(id, key, profile)` makes a profile, or changes one with the key it
+  was made with (only the key's sha256 is stored), checking every field and capping saves at 60
+  per 10 minutes per client. `racing_delete_player(id, key)` takes one off; its laps stay with
+  `player_id` cleared.
+- `player_id` on laps and drift runs: a trigger sets it from the `x-player-id` and
+  `x-player-key` request headers when the key matches (a device that hasn't saved its profile
+  yet gets one with the lap's name), and clears whatever the row said otherwise. The SQL
+  editor sends no headers and keeps what it's given. Old laps have no player.
 - Grants: anon/authenticated get select + insert on laps and select + insert + update on
-  ghosts, select on removed laps, nothing else (no delete, truncate or update on laps).
+  ghosts, select on removed laps, select on the players' public columns, execute on the two
+  player functions, nothing else (no delete, truncate or update on laps).
 - The leaderboard table in the `supabase_realtime` publication, so boards refresh when laps
   are added, verified or removed.
 

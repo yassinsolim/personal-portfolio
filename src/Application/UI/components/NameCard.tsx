@@ -37,7 +37,7 @@ const NameCard = ({ onDone }: { onDone: (name: string) => void }) => {
                 }}
             >
                 <h3>Pick a driver name</h3>
-                <p>It goes on the leaderboard and over your car in lobbies. Change it any time in the menu.</p>
+                <p>It goes on the leaderboard and over your car in lobbies. Your badge and the rest of your profile are in the menu (Esc).</p>
                 <div className="race-name-row">
                     <input
                         ref={input}

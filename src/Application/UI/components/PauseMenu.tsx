@@ -6,6 +6,8 @@ import { formatTime } from './RaceHudGauges';
 import GraphicsInfo from './GraphicsInfo';
 import RaceHelp from './RaceHelp';
 import TrackMap from './TrackMap';
+import BoardTab from './BoardTab';
+import ProfileTab from './ProfileTab';
 import type { RaceHud } from './LobbyRaceHud';
 import type { LapEntry } from './LapCard';
 import type { MultiplayerState } from '../../Racing/Multiplayer/MultiplayerService';
@@ -13,7 +15,8 @@ import type { AssistPreset } from '../../Racing/Vehicle/assists';
 import { GHOST_MODES, type GhostMode, type GhostPick } from '../../Racing/Ghost/ghostMode';
 import { LINE_MODES, type LineMode } from '../../Racing/Track/lineMode';
 import { STEERING_MAX, STEERING_MIN, clampSteering } from '../../Racing/Input/steering';
-import { MAX_DRIVER_NAME } from '../../Racing/Multiplayer/driverName';
+import type { ProfileDraft } from '../../Racing/Profile/profile';
+import type { SaveStatus } from '../../Racing/Profile/ProfileService';
 import {
     readGraphicsOff,
     writeGraphicsOff,
@@ -21,7 +24,14 @@ import {
 } from '../../Racing/Visuals/graphicsOptions';
 
 export type QualityMode = 'auto' | 'quality' | 'performance';
+export type MenuTab = 'board' | 'profile' | 'race';
 type Track = 'ring' | 'drift';
+
+const TABS: Array<[MenuTab, string]> = [
+    ['board', 'Leaderboard'],
+    ['profile', 'Profile'],
+    ['race', 'Race'],
+];
 
 const RENDER_MODES: Array<[QualityMode, string]> = [
     ['auto', 'Auto'],
@@ -105,13 +115,21 @@ type Props = {
     ghostMode: GhostMode;
     // a board lap picked from its card to race
     ghostPick: GhostPick | null;
-    // the ring's top laps on the board picked, each opens its card
-    board: LapEntry[];
+    // the board kind the hud shows, and the menu's board starts on
     boardKind: 'stock' | 'tuned';
     onBoard: (kind: 'stock' | 'tuned') => void;
-    onLap: (entry: LapEntry) => void;
-    // a lap's card is open over the menu
+    onLap: (entry: LapEntry, rank: number) => void;
+    onPlayer: (id: string) => void;
+    // a lap's or a driver's card is open over the menu
     dimmed: boolean;
+    tab: MenuTab;
+    onTab: (tab: MenuTab) => void;
+    // this device's player, once it has one
+    myId: string | null;
+    profileDraft: ProfileDraft;
+    onProfileDraft: (draft: ProfileDraft) => void;
+    profileStatus: SaveStatus | null;
+    onRemoveProfile: () => void;
     lineMode: LineMode;
     steering: number;
     onResume: () => void;
@@ -167,9 +185,9 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
     </div>
 );
 
-// the pause menu: what to do next along the top, then the track, the driving
-// and the settings side by side (stacked on a phone). the controls and tips
-// live behind Help
+// the pause menu: what to do next along the top, then the leaderboard (where
+// esc lands), your profile, and the race's settings in three columns
+// (stacked on a phone). the controls and tips live behind Help
 const PauseMenu = (props: Props) => {
     const {
         track,
@@ -273,308 +291,293 @@ const PauseMenu = (props: Props) => {
                     </button>
                 </div>
 
-                <div className="pm-grid">
-                    <section>
-                        <h4>Track</h4>
-                        <div className="pm-tracks">
-                            {TRACKS.map(([id, label, hint]) => (
-                                <button
-                                    type="button"
-                                    key={id}
-                                    className={`pm-track ${track === id ? 'on' : ''}`}
-                                    disabled={props.building || inLobbyRace}
-                                    onClick={() => pickTrack(id)}
-                                >
-                                    <TrackMap track={id} />
-                                    <strong>{label}</strong>
-                                    <small>{hint}</small>
-                                    <em>
-                                        {id === 'ring'
-                                            ? props.bestLapMs > 0 && track === 'ring'
-                                                ? `Your best ${formatTime(props.bestLapMs)}`
-                                                : 'Leaderboard, ghosts, lobbies'
-                                            : props.driftBoard[0]
-                                              ? `Top score ${Math.round(props.driftBoard[0].score).toLocaleString('en-US')}`
-                                              : 'Solo, its own scoreboard'}
-                                    </em>
-                                </button>
-                            ))}
-                        </div>
-                        {track === 'ring' && (
-                            <>
-                                <div className="pm-board-head">
-                                    <span>Leaderboard</span>
-                                    <Choice
-                                        value={props.boardKind}
-                                        options={[
-                                            ['stock', 'Stock'],
-                                            ['tuned', 'Tuned'],
-                                        ]}
-                                        onPick={props.onBoard}
-                                    />
-                                </div>
-                                {props.board.length === 0 ? (
-                                    <p className="pm-note">No laps yet.</p>
-                                ) : (
-                                    <ol className="pm-board pm-laps">
-                                        {props.board.slice(0, 5).map((entry) => (
-                                            <li key={entry.id}>
-                                                <button
-                                                    type="button"
-                                                    title={`${entry.name}'s car, setup and replay`}
-                                                    onClick={() => props.onLap(entry)}
-                                                >
-                                                    <span>{entry.name}</span>
-                                                    <span>
-                                                        {carOptions.find((option) => option.id === entry.carId)
-                                                            ?.label || entry.carId}
-                                                    </span>
-                                                    <strong>{formatTime(entry.lapTimeMs)}</strong>
-                                                </button>
-                                            </li>
-                                        ))}
-                                    </ol>
-                                )}
-                            </>
-                        )}
-                        {track === 'drift' && props.driftBoard.length > 0 && (
-                            <ol className="pm-board">
-                                {props.driftBoard.slice(0, 5).map((entry) => (
-                                    <li key={entry.id}>
-                                        <span>{entry.name}</span>
-                                        <span>
-                                            {carOptions.find((option) => option.id === entry.carId)?.label ||
-                                                entry.carId}
-                                        </span>
-                                        <strong>{Math.round(entry.score).toLocaleString('en-US')}</strong>
-                                    </li>
-                                ))}
-                            </ol>
-                        )}
-                        <h4>Car</h4>
-                        <button type="button" className="pm-car" onClick={props.onPickCar}>
-                            <img src={carThumb(props.carId)} alt="" width={72} height={40} />
-                            <span>{car?.label || props.carId}</span>
-                            <em>Change</em>
-                        </button>
-                        <h4>Online</h4>
-                        <Row label="Name">
-                            <input
-                                className="pm-input"
-                                value={props.playerName}
-                                maxLength={MAX_DRIVER_NAME}
-                                placeholder="Your name"
-                                aria-label="Driver name"
-                                spellCheck={false}
-                                onChange={(event) =>
-                                    props.onPlayerName(event.target.value.slice(0, MAX_DRIVER_NAME))
-                                }
-                            />
-                        </Row>
-                        {inLobby ? (
-                            <>
-                                <Row label={`Lobby ${multiplayer.lobbyCode}`}>
-                                    <div className="pm-inline">
-                                        <button type="button" onClick={props.onCopyLobbyCode}>
-                                            {props.lobbyCodeCopyState || 'Copy invite'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            disabled={props.multiplayerBusy}
-                                            onClick={props.onLeaveLobby}
-                                        >
-                                            Leave
-                                        </button>
-                                    </div>
-                                </Row>
-                                {track === 'ring' && multiplayer.connected && (
-                                    <Row label="Race">
-                                        {multiplayer.isHost && inLobbyRace ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => eventBus.dispatch('race:lobbyRaceEnd', {})}
-                                            >
-                                                End race
-                                            </button>
-                                        ) : multiplayer.isHost ? (
-                                            <Choice
-                                                value={0}
-                                                disabled={multiplayer.players.length < 2}
-                                                options={[
-                                                    [1, '1 lap'],
-                                                    [2, '2 laps'],
-                                                    [3, '3 laps'],
-                                                ]}
-                                                onPick={(laps) =>
-                                                    eventBus.dispatch('race:lobbyRaceStart', { laps })
-                                                }
-                                            />
-                                        ) : raceOver ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => eventBus.dispatch('race:lobbyRaceLeave', {})}
-                                            >
-                                                Back to free drive
-                                            </button>
-                                        ) : (
-                                            <em className="pm-note">
-                                                {inLobbyRace ? 'Racing' : 'The host starts races'}
-                                            </em>
-                                        )}
-                                    </Row>
-                                )}
-                            </>
-                        ) : (
-                            <button type="button" className="pm-wide" onClick={props.onDriveWithOthers}>
-                                Drive with others
-                            </button>
-                        )}
-                    </section>
-
-                    <section>
-                        <h4>Driving</h4>
-                        <Row label="Assists">
-                            <Choice
-                                value={props.assists.preset}
-                                options={ASSISTS}
-                                onPick={(preset) => eventBus.dispatch('race:assists', { preset })}
-                            />
-                        </Row>
-                        <Row label="Gearbox">
-                            <Choice
-                                value={props.assists.autoGears}
-                                options={[
-                                    [true, 'Auto'],
-                                    [false, 'Manual'],
-                                ]}
-                                onPick={(autoGears) => eventBus.dispatch('race:assists', { autoGears })}
-                            />
-                        </Row>
-                        <Row label="Steering">
-                            <div className="pm-slider">
-                                <input
-                                    type="range"
-                                    aria-label="Steering"
-                                    min={STEERING_MIN}
-                                    max={STEERING_MAX}
-                                    step="0.1"
-                                    value={props.steering}
-                                    onChange={(event) =>
-                                        props.onSteering(clampSteering(Number(event.target.value)))
-                                    }
-                                />
-                                <span>{Math.round(props.steering * 100)}%</span>
-                            </div>
-                        </Row>
-                        {track === 'ring' && (
-                            <>
-                                <Row label="Ghost">
-                                    <Choice
-                                        value={props.ghostMode}
-                                        options={[
-                                            ...GHOST_MODES.map(
-                                                (mode) => [mode, GHOST_LABEL[mode]] as [GhostMode, string]
-                                            ),
-                                            ...(props.ghostPick
-                                                ? [['lap', props.ghostPick.name] as [GhostMode, string]]
-                                                : []),
-                                        ]}
-                                        onPick={props.onGhost}
-                                    />
-                                </Row>
-                                <Row label="Driving line">
-                                    <Choice
-                                        value={props.lineMode}
-                                        options={LINE_MODES.map(
-                                            (mode) => [mode, LINE_LABEL[mode]] as [LineMode, string]
-                                        )}
-                                        onPick={props.onLine}
-                                    />
-                                </Row>
-                            </>
-                        )}
-                    </section>
-
-                    <section>
-                        <h4>Sound</h4>
-                        <Row label="Volume">
-                            <div className="pm-slider">
-                                <input
-                                    type="range"
-                                    aria-label="Volume"
-                                    min="0"
-                                    max="1"
-                                    step="0.01"
-                                    value={props.volume}
-                                    onChange={(event) => props.onVolume(Number(event.target.value))}
-                                />
-                                <span>{Math.round(props.volume * 100)}%</span>
-                            </div>
-                        </Row>
+                <div className="pm-tabs" role="tablist" aria-label="Menu">
+                    {TABS.map(([id, label]) => (
                         <button
                             type="button"
-                            role="switch"
-                            aria-checked={props.muted}
-                            className={`pm-switch ${props.muted ? 'on' : ''}`}
-                            onClick={props.onMuteToggle}
+                            key={id}
+                            role="tab"
+                            aria-selected={props.tab === id}
+                            className={props.tab === id ? 'on' : ''}
+                            onClick={() => props.onTab(id)}
                         >
-                            <span>Mute</span>
-                            <i aria-hidden="true" />
+                            {label}
                         </button>
-                        <h4>Graphics</h4>
-                        <Row label="Render">
-                            <Choice value={props.qualityMode} options={RENDER_MODES} onPick={props.onQuality} />
-                        </Row>
-                        {props.qualityMode === 'auto' && props.renderScale ? (
-                            <p className="pm-note">Resolution now {props.renderScale.toFixed(2)}x</p>
-                        ) : null}
-                        <div className="pm-inline pm-graphics-links">
-                            <button
-                                type="button"
-                                aria-expanded={advanced}
-                                onClick={() => setAdvanced((open) => !open)}
-                            >
-                                {advanced ? 'Hide advanced' : 'Advanced'}
-                            </button>
-                            <button type="button" onClick={() => setInfo((open) => !open)}>
-                                {info ? 'Hide info' : 'Graphics info'}
-                            </button>
-                        </div>
-                        {info && <GraphicsInfo />}
-                    </section>
+                    ))}
                 </div>
 
-                {advanced && (
-                    <div className="pm-advanced" ref={advancedRef}>
-                        <h4>Advanced graphics</h4>
-                        <p className="pm-note">
-                            Switch off what you can do without. These only take things away from the
-                            render mode, never add.
-                        </p>
-                        <div className="pm-advanced-groups">
-                            {GRAPHICS.map(([group, options]) => (
-                                <div key={group} className="pm-switches">
-                                    <h5>{group}</h5>
-                                    {options.map(([option, label]) => {
-                                        const on = !graphicsOff.includes(option);
-                                        return (
-                                            <button
-                                                type="button"
-                                                key={option}
-                                                role="switch"
-                                                aria-checked={on}
-                                                className={`pm-switch ${on ? 'on' : ''}`}
-                                                onClick={() => toggleGraphics(option)}
-                                            >
-                                                <span>{label}</span>
-                                                <i aria-hidden="true" />
-                                            </button>
-                                        );
-                                    })}
+                {props.tab === 'board' && (
+                    <BoardTab
+                        track={track}
+                        board={props.boardKind}
+                        myId={props.myId}
+                        onBoard={props.onBoard}
+                        onLap={props.onLap}
+                        onPlayer={props.onPlayer}
+                    />
+                )}
+
+                {props.tab === 'profile' && (
+                    <ProfileTab
+                        name={props.playerName}
+                        onName={props.onPlayerName}
+                        draft={props.profileDraft}
+                        onDraft={props.onProfileDraft}
+                        status={props.profileStatus}
+                        drivenCar={props.carId}
+                        canView={Boolean(props.myId)}
+                        onView={() => props.myId && props.onPlayer(props.myId)}
+                        onRemove={props.onRemoveProfile}
+                    />
+                )}
+
+                {props.tab === 'race' && (
+                    <>
+                        <div className="pm-grid">
+                            <section>
+                                <h4>Track</h4>
+                                <div className="pm-tracks">
+                                    {TRACKS.map(([id, label, hint]) => (
+                                        <button
+                                            type="button"
+                                            key={id}
+                                            className={`pm-track ${track === id ? 'on' : ''}`}
+                                            disabled={props.building || inLobbyRace}
+                                            onClick={() => pickTrack(id)}
+                                        >
+                                            <TrackMap track={id} />
+                                            <strong>{label}</strong>
+                                            <small>{hint}</small>
+                                            <em>
+                                                {id === 'ring'
+                                                    ? props.bestLapMs > 0 && track === 'ring'
+                                                        ? `Your best ${formatTime(props.bestLapMs)}`
+                                                        : 'Leaderboard, ghosts, lobbies'
+                                                    : props.driftBoard[0]
+                                                      ? `Top score ${Math.round(props.driftBoard[0].score).toLocaleString('en-US')}`
+                                                      : 'Solo, its own scoreboard'}
+                                            </em>
+                                        </button>
+                                    ))}
                                 </div>
-                            ))}
+                                <h4>Car</h4>
+                                <button type="button" className="pm-car" onClick={props.onPickCar}>
+                                    <img src={carThumb(props.carId)} alt="" width={72} height={40} />
+                                    <span>{car?.label || props.carId}</span>
+                                    <em>Change</em>
+                                </button>
+                                <h4>Online</h4>
+                                <Row label={`Driving as ${props.playerName || 'Driver'}`}>
+                                    <button type="button" onClick={() => props.onTab('profile')}>
+                                        Profile
+                                    </button>
+                                </Row>
+                                {inLobby ? (
+                                    <>
+                                        <Row label={`Lobby ${multiplayer.lobbyCode}`}>
+                                            <div className="pm-inline">
+                                                <button type="button" onClick={props.onCopyLobbyCode}>
+                                                    {props.lobbyCodeCopyState || 'Copy invite'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={props.multiplayerBusy}
+                                                    onClick={props.onLeaveLobby}
+                                                >
+                                                    Leave
+                                                </button>
+                                            </div>
+                                        </Row>
+                                        {track === 'ring' && multiplayer.connected && (
+                                            <Row label="Race">
+                                                {multiplayer.isHost && inLobbyRace ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => eventBus.dispatch('race:lobbyRaceEnd', {})}
+                                                    >
+                                                        End race
+                                                    </button>
+                                                ) : multiplayer.isHost ? (
+                                                    <Choice
+                                                        value={0}
+                                                        disabled={multiplayer.players.length < 2}
+                                                        options={[
+                                                            [1, '1 lap'],
+                                                            [2, '2 laps'],
+                                                            [3, '3 laps'],
+                                                        ]}
+                                                        onPick={(laps) =>
+                                                            eventBus.dispatch('race:lobbyRaceStart', { laps })
+                                                        }
+                                                    />
+                                                ) : raceOver ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => eventBus.dispatch('race:lobbyRaceLeave', {})}
+                                                    >
+                                                        Back to free drive
+                                                    </button>
+                                                ) : (
+                                                    <em className="pm-note">
+                                                        {inLobbyRace ? 'Racing' : 'The host starts races'}
+                                                    </em>
+                                                )}
+                                            </Row>
+                                        )}
+                                    </>
+                                ) : (
+                                    <button type="button" className="pm-wide" onClick={props.onDriveWithOthers}>
+                                        Drive with others
+                                    </button>
+                                )}
+                            </section>
+
+                            <section>
+                                <h4>Driving</h4>
+                                <Row label="Assists">
+                                    <Choice
+                                        value={props.assists.preset}
+                                        options={ASSISTS}
+                                        onPick={(preset) => eventBus.dispatch('race:assists', { preset })}
+                                    />
+                                </Row>
+                                <Row label="Gearbox">
+                                    <Choice
+                                        value={props.assists.autoGears}
+                                        options={[
+                                            [true, 'Auto'],
+                                            [false, 'Manual'],
+                                        ]}
+                                        onPick={(autoGears) => eventBus.dispatch('race:assists', { autoGears })}
+                                    />
+                                </Row>
+                                <Row label="Steering">
+                                    <div className="pm-slider">
+                                        <input
+                                            type="range"
+                                            aria-label="Steering"
+                                            min={STEERING_MIN}
+                                            max={STEERING_MAX}
+                                            step="0.1"
+                                            value={props.steering}
+                                            onChange={(event) =>
+                                                props.onSteering(clampSteering(Number(event.target.value)))
+                                            }
+                                        />
+                                        <span>{Math.round(props.steering * 100)}%</span>
+                                    </div>
+                                </Row>
+                                {track === 'ring' && (
+                                    <>
+                                        <Row label="Ghost">
+                                            <Choice
+                                                value={props.ghostMode}
+                                                options={[
+                                                    ...GHOST_MODES.map(
+                                                        (mode) => [mode, GHOST_LABEL[mode]] as [GhostMode, string]
+                                                    ),
+                                                    ...(props.ghostPick
+                                                        ? [['lap', props.ghostPick.name] as [GhostMode, string]]
+                                                        : []),
+                                                ]}
+                                                onPick={props.onGhost}
+                                            />
+                                        </Row>
+                                        <Row label="Driving line">
+                                            <Choice
+                                                value={props.lineMode}
+                                                options={LINE_MODES.map(
+                                                    (mode) => [mode, LINE_LABEL[mode]] as [LineMode, string]
+                                                )}
+                                                onPick={props.onLine}
+                                            />
+                                        </Row>
+                                    </>
+                                )}
+                            </section>
+
+                            <section>
+                                <h4>Sound</h4>
+                                <Row label="Volume">
+                                    <div className="pm-slider">
+                                        <input
+                                            type="range"
+                                            aria-label="Volume"
+                                            min="0"
+                                            max="1"
+                                            step="0.01"
+                                            value={props.volume}
+                                            onChange={(event) => props.onVolume(Number(event.target.value))}
+                                        />
+                                        <span>{Math.round(props.volume * 100)}%</span>
+                                    </div>
+                                </Row>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={props.muted}
+                                    className={`pm-switch ${props.muted ? 'on' : ''}`}
+                                    onClick={props.onMuteToggle}
+                                >
+                                    <span>Mute</span>
+                                    <i aria-hidden="true" />
+                                </button>
+                                <h4>Graphics</h4>
+                                <Row label="Render">
+                                    <Choice value={props.qualityMode} options={RENDER_MODES} onPick={props.onQuality} />
+                                </Row>
+                                {props.qualityMode === 'auto' && props.renderScale ? (
+                                    <p className="pm-note">Resolution now {props.renderScale.toFixed(2)}x</p>
+                                ) : null}
+                                <div className="pm-inline pm-graphics-links">
+                                    <button
+                                        type="button"
+                                        aria-expanded={advanced}
+                                        onClick={() => setAdvanced((open) => !open)}
+                                    >
+                                        {advanced ? 'Hide advanced' : 'Advanced'}
+                                    </button>
+                                    <button type="button" onClick={() => setInfo((open) => !open)}>
+                                        {info ? 'Hide info' : 'Graphics info'}
+                                    </button>
+                                </div>
+                                {info && <GraphicsInfo />}
+                            </section>
                         </div>
-                    </div>
+
+                        {advanced && (
+                            <div className="pm-advanced" ref={advancedRef}>
+                                <h4>Advanced graphics</h4>
+                                <p className="pm-note">
+                                    Switch off what you can do without. These only take things away from the
+                                    render mode, never add.
+                                </p>
+                                <div className="pm-advanced-groups">
+                                    {GRAPHICS.map(([group, options]) => (
+                                        <div key={group} className="pm-switches">
+                                            <h5>{group}</h5>
+                                            {options.map(([option, label]) => {
+                                                const on = !graphicsOff.includes(option);
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        key={option}
+                                                        role="switch"
+                                                        aria-checked={on}
+                                                        className={`pm-switch ${on ? 'on' : ''}`}
+                                                        onClick={() => toggleGraphics(option)}
+                                                    >
+                                                        <span>{label}</span>
+                                                        <i aria-hidden="true" />
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <footer className="pm-foot">

@@ -345,6 +345,198 @@ begin
   reset role;
 end $$;
 
+-- profiles: made and changed with the device's key and nothing else, the
+-- key's hash unreadable, the table closed to writes, fields the game can't
+-- make refused
+select set_config('request.headers', '{"sb-forwarded-for": "203.0.113.200"}', false);
+do $$
+declare
+  me uuid := gen_random_uuid();
+  key text := repeat('k', 43);
+  ok boolean;
+  bad record;
+  saved record;
+begin
+  delete from public.nordschleife_rate_events;
+  set local role anon;
+  perform public.racing_save_player(me, key, '{"name": "QA Driver", "avatar": "bolt", "color": "#1F4FA8", "number": 7,
+    "bio": "Late on the brakes", "car": "bmw-e92-m3",
+    "garage": {"bmw-e92-m3": {"look": "1f4fa8.2....0.-3", "tune": "ihhhhhhhhh"}, "amg-one": {"look": "", "tune": ""}}}');
+  select name, avatar, color, number, bio, car, garage into saved from public.racing_players where id = me;
+  if saved.name <> 'QA Driver' or saved.avatar <> 'bolt' or saved.color <> '#1f4fa8' or saved.number <> 7
+     or saved.bio <> 'Late on the brakes' or saved.car <> 'bmw-e92-m3' or saved.garage -> 'bmw-e92-m3' ->> 'tune' <> 'ihhhhhhhhh' then
+    raise exception 'the profile didn''t save: %', saved;
+  end if;
+  perform public.racing_save_player(me, key, '{"name": "QA Renamed", "number": null}');
+  select name, number, car into saved from public.racing_players where id = me;
+  if saved.name <> 'QA Renamed' or saved.number is not null or saved.car is not null then
+    raise exception 'the profile didn''t change: %', saved;
+  end if;
+  begin
+    perform public.racing_save_player(me, repeat('x', 43), '{"name": "QA Thief"}');
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'another key changed the profile'; end if;
+
+  begin perform key_hash from public.racing_players; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon read a key hash'; end if;
+  begin update public.racing_players set name = 'QA' where id = me; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon updated a profile'; end if;
+  begin
+    insert into public.racing_players (id, key_hash, name) values (gen_random_uuid(), repeat('0', 64), 'QA');
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon inserted a profile'; end if;
+  begin delete from public.racing_players; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon deleted profiles'; end if;
+
+  for bad in
+    select * from (values
+      ('{"name": "   "}', 'a blank name'),
+      ('{"name": "seventeen chars!!"}', 'a 17 character name'),
+      ('{"name": "QA\u0007"}', 'a control character in the name'),
+      ('{"name": "QA\u202ex"}', 'a right to left override in the name'),
+      ('{"name": "QA", "avatar": "<b>"}', 'a bad avatar'),
+      ('{"name": "QA", "color": "red"}', 'a color that isn''t hex'),
+      ('{"name": "QA", "number": 100}', 'number 100'),
+      ('{"name": "QA", "number": 4.5}', 'a fractional number'),
+      ('{"name": "QA", "number": "7"}', 'a number as text'),
+      ('{"name": "QA", "car": "gt3rs"}', 'an unknown car'),
+      ('{"name": "QA", "car": "amg-one@v6"}', 'a car with a season tag'),
+      ('{"name": "QA", "bio": "' || repeat('x', 141) || '"}', 'a 141 character bio'),
+      ('{"name": "QA", "bio": "two\nlines"}', 'a line break in the bio'),
+      ('{"name": "QA", "garage": {"gt3rs": {"look": ""}}}', 'a garage with an unknown car'),
+      ('{"name": "QA", "garage": {"amg-one": {"look": "<b>"}}}', 'a look code with markup'),
+      ('{"name": "QA", "garage": {"amg-one": {"paint": "x"}}}', 'a garage entry with other fields'),
+      ('{"name": "QA", "garage": {"amg-one": {"tune": 5}}}', 'a tune that isn''t text'),
+      ('{"name": "QA", "garage": []}', 'a garage that isn''t an object'),
+      ('[]', 'a profile that isn''t an object')
+    ) as t(profile, what)
+  loop
+    begin
+      perform public.racing_save_player(me, key, bad.profile::jsonb);
+      ok := true;
+    exception when invalid_parameter_value then ok := false;
+    end;
+    if ok then raise exception '% was accepted', bad.what; end if;
+  end loop;
+  begin
+    perform public.racing_save_player(me, 'short', '{"name": "QA"}');
+    ok := true;
+  exception when invalid_parameter_value then ok := false;
+  end;
+  if ok then raise exception 'a short key was accepted'; end if;
+  begin
+    perform public.racing_rate_limit('player', 1, 1);
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon can run the rate limiter'; end if;
+  reset role;
+  delete from public.nordschleife_rate_events;
+end $$;
+
+-- laps and runs sent with a player's key are theirs, a device that hasn't
+-- saved its profile yet gets one with the lap's name, a wrong key or a
+-- player_id in the row gets nobody, and a deleted profile leaves its laps
+do $$
+declare
+  me uuid := gen_random_uuid();
+  fresh uuid := gen_random_uuid();
+  key text := repeat('m', 43);
+  lap uuid;
+  ok boolean;
+begin
+  delete from public.nordschleife_rate_events;
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.201"}', true);
+  set local role anon;
+  perform public.racing_save_player(me, key, '{"name": "QA Owner"}');
+  reset role;
+
+  perform set_config('request.headers',
+    json_build_object('sb-forwarded-for', '203.0.113.201', 'x-player-id', me, 'x-player-key', key)::text, true);
+  set local role anon;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id)
+    values ('QA Owner', 400000, 'bmw-e92-m3@v6') returning id into lap;
+  reset role;
+  if (select player_id from public.nordschleife_leaderboard where id = lap) is distinct from me then
+    raise exception 'a lap sent with the key wasn''t the player''s';
+  end if;
+
+  perform set_config('request.headers',
+    json_build_object('sb-forwarded-for', '203.0.113.201', 'x-player-id', me, 'x-player-key', repeat('z', 43))::text, true);
+  set local role anon;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, player_id)
+    values ('QA Imposter', 400001, 'bmw-e92-m3@v6', me) returning id into lap;
+  reset role;
+  if (select player_id from public.nordschleife_leaderboard where id = lap) is not null then
+    raise exception 'a wrong key got the player''s lap';
+  end if;
+
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.201"}', true);
+  set local role anon;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, player_id)
+    values ('QA Forged', 400002, 'bmw-e92-m3@v6', me) returning id into lap;
+  reset role;
+  if (select player_id from public.nordschleife_leaderboard where id = lap) is not null then
+    raise exception 'a player_id in the row stuck';
+  end if;
+
+  perform set_config('request.headers',
+    json_build_object('sb-forwarded-for', '203.0.113.201', 'x-player-id', fresh, 'x-player-key', key)::text, true);
+  set local role anon;
+  insert into public.drift_park_scores (name, score, lap_time_ms, car_id)
+    values ('QA Fresh', 42000, 82000, 'bmw-e92-m3@d1') returning id into lap;
+  reset role;
+  if (select player_id from public.drift_park_scores where id = lap) is distinct from fresh then
+    raise exception 'a fresh device''s run wasn''t theirs';
+  end if;
+  if (select name from public.racing_players where id = fresh) is distinct from 'QA Fresh' then
+    raise exception 'the fresh device''s profile didn''t take the run''s name';
+  end if;
+
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.201"}', true);
+  set local role anon;
+  begin
+    perform public.racing_delete_player(me, repeat('z', 43));
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'another key deleted the profile'; end if;
+  perform public.racing_delete_player(me, key);
+  reset role;
+  if exists (select 1 from public.racing_players where id = me) then raise exception 'the profile stayed'; end if;
+  if not exists (select 1 from public.nordschleife_leaderboard where name = 'QA Owner' and player_id is null) then
+    raise exception 'the lap went with its profile';
+  end if;
+  delete from public.nordschleife_rate_events;
+end $$;
+
+-- 60 profile saves per client per 10 minutes, counted apart from laps
+do $$
+declare
+  me uuid := gen_random_uuid();
+  i int;
+  limited_at int;
+begin
+  delete from public.nordschleife_rate_events;
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.202"}', true);
+  set local role anon;
+  for i in 1 .. 61 loop
+    begin
+      perform public.racing_save_player(me, repeat('r', 43), jsonb_build_object('name', 'QA ' || i));
+    exception when sqlstate '53400' then limited_at := i;
+    end;
+    exit when limited_at is not null;
+  end loop;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('QA busy', 400000, 'bmw-e92-m3@v6');
+  reset role;
+  if limited_at is distinct from 61 then raise exception 'profile saves were limited at %, not the 61st', limited_at; end if;
+  delete from public.nordschleife_rate_events;
+end $$;
+
 -- the sql editor (no request headers) isn't limited
 select set_config('request.headers', '', false);
 insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('Admin', 400000, 'bmw-e92-m3@v3');
