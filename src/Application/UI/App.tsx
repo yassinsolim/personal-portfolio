@@ -978,13 +978,15 @@ const App = () => {
     // and when the garage closes (its setups are on the profile). an
     // unchanged one isn't sent again
     useEffect(() => {
-        if (!raceModeActive || askName || garageOpen) return undefined;
+        if (!raceModeActive || askName || garageOpen || transitionLocked) return undefined;
+        // the first drive's name card comes first
+        if (isDefaultDriverName(playerName)) return undefined;
         const timer = window.setTimeout(
             () => eventBus.dispatch('race:profileSave', profilePayload(playerName, profileDraft, selectedCar)),
             900
         );
         return () => window.clearTimeout(timer);
-    }, [raceModeActive, askName, garageOpen, playerName, profileDraft, selectedCar]);
+    }, [raceModeActive, askName, garageOpen, transitionLocked, playerName, profileDraft, selectedCar]);
 
     const changeProfile = useCallback((draft: ProfileDraft) => {
         setProfileDraft(draft);
