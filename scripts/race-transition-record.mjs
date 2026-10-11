@@ -13,7 +13,7 @@
 //                   how long the pointer rests on the car before the click
 //
 //   node scripts/race-transition-record.mjs --url http://192.168.1.166:5871/ --out .tmp-validation/rec
-//   node scripts/race-transition-record.mjs --url ... --mode timing --runs 3 [--swgl] [--tier low]
+//   node scripts/race-transition-record.mjs --url ... --mode timing --runs 3 [--swgl] [--tier low] [--cpu-throttle 4]
 //   node scripts/race-transition-record.mjs --url ... --browser webkit --reduced-motion
 //   node scripts/race-transition-record.mjs --url ... --look '{"paint":"#d8342c","wheels":"bmw-m8-competition-coupe"}'
 //
@@ -57,6 +57,9 @@ const maxFrames = Number(opt('max-frames', 900));
 const timeoutSeconds = Number(opt('timeout', 20));
 // timing: how long the pointer rests on the car before the click
 const hoverSeconds = Number(opt('hover', 3));
+// timing: a slower cpu (chromium's throttling, from the hover on), for how
+// an everyday laptop does
+const cpuThrottle = Number(opt('cpu-throttle', 1));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 fs.mkdirSync(out, { recursive: true });
 
@@ -400,6 +403,10 @@ const recordTiming = async () => {
     for (let r = 0; r < runs; r++) {
         const browser = await launch();
         const { page, errors } = await prepare(browser);
+        if (cpuThrottle > 1) {
+            const cdp = await page.context().newCDPSession(page);
+            await cdp.send('Emulation.setCPUThrottlingRate', { rate: cpuThrottle });
+        }
         // from before the hover: it builds the race world and prewarms it
         await page.evaluate(() => window.__frames.mark());
         const car = await findCar(page);
@@ -476,6 +483,7 @@ const recordTiming = async () => {
             load,
             preset: log.preset,
             tier: log.tier,
+            cpuThrottle,
             renderer: log.renderer.slice(0, 80),
             seconds: Math.round((log.frames.at(-1)?.[0] ?? 0) / 100) / 10,
             frames: intervals.length,

@@ -14,11 +14,13 @@ const rng = (seed: number) => {
     };
 };
 
-const canvas2d = (width: number, height: number) => {
+// read: the pixels come back with getImageData, which on a gpu canvas waits
+// for the gpu
+const canvas2d = (width: number, height: number, read = false) => {
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', read ? { willReadFrequently: true } : undefined);
     return { canvas, context };
 };
 
@@ -59,13 +61,18 @@ const wrapped = (
 };
 
 // asphalt across the road (u, 16 m) and along it (v, 32 m): fine aggregate,
-// lighter stones, a few repair patches, and darker rubber where the cars run
-export const createAsphaltTextures = () => {
+// lighter stones, a few repair patches, and darker rubber where the cars run.
+// half a million pixels, so it yields every 128 rows (the build slices it)
+export function* createAsphaltTextures(): Generator<
+    string | void,
+    { map: THREE.Texture; roughnessMap: THREE.Texture },
+    void
+> {
     const width = 512;
     const height = 1024;
     const random = rng(1711);
-    const albedo = canvas2d(width, height);
-    const rough = canvas2d(width, height);
+    const albedo = canvas2d(width, height, true);
+    const rough = canvas2d(width, height, true);
     const ctx = albedo.context;
     const rctx = rough.context;
     if (!ctx || !rctx) {
@@ -125,6 +132,7 @@ export const createAsphaltTextures = () => {
         rdata[i * 4] = Math.max(0, Math.min(255, rdata[i * 4] + r));
         rdata[i * 4 + 1] = rdata[i * 4];
         rdata[i * 4 + 2] = rdata[i * 4];
+        if (i % (width * 128) === width * 128 - 1) yield 'asphalt:rows';
     }
     ctx.putImageData(image, 0, 0);
     rctx.putImageData(roughImage, 0, 0);
@@ -148,13 +156,13 @@ export const createAsphaltTextures = () => {
     const map = finish(albedo.canvas as HTMLCanvasElement, true);
     const roughnessMap = finish(rough.canvas as HTMLCanvasElement, false);
     return { map, roughnessMap };
-};
+}
 
 // small grass and soil detail, multiplied over the terrain's vertex colors
 export const createGrassTexture = () => {
     const size = 256;
     const random = rng(733);
-    const { canvas, context } = canvas2d(size, size);
+    const { canvas, context } = canvas2d(size, size, true);
     if (!context) return new THREE.Texture();
     context.fillStyle = '#c4c4c4';
     context.fillRect(0, 0, size, size);

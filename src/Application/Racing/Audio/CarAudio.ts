@@ -83,6 +83,14 @@ const UNLOCK_EVENTS = ['pointerdown', 'touchend', 'keydown', 'mousedown'];
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+// webkit (safari, and every browser on ios) starts audio only inside a
+// gesture. chromium and firefox any time after the page has had one
+const gestureOnlyAudio = () => {
+    if (typeof navigator === 'undefined') return true;
+    const agent = navigator.userAgent;
+    return /iPad|iPhone|iPod/.test(agent) || (/AppleWebKit/.test(agent) && !/Chrome\/|Chromium\//.test(agent));
+};
+
 const stockEngine = (carId: string): EngineSound => {
     const race = carOptionsById[carId]?.race;
     return {
@@ -199,6 +207,11 @@ export default class CarAudio {
     // browsers only let audio start after the user has interacted with the
     // page, and ios wants resume() inside the gesture itself
     unlock() {
+        // making the context stalls the page (170 ms on a mac), and the first
+        // gesture is mostly the click on the room's car, as its transition
+        // starts. where audio can start any time after a gesture, the race
+        // makes it as it starts (setActive), under the transition's still plate
+        if (!this.context && !this.active && !gestureOnlyAudio()) return;
         const context = this.ensureContext(true);
         if (!context || this.offline) return;
         const live = context as AudioContext;

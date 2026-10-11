@@ -961,7 +961,7 @@ export default class NordschleifeTrack {
             1 / ASPHALT_REPEAT_METERS
         );
         yield 'track:roadRibbon';
-        const { map, roughnessMap } = createAsphaltTextures();
+        const { map, roughnessMap } = yield* createAsphaltTextures();
         map.anisotropy = this.getTextureAnisotropy();
         roughnessMap.anisotropy = this.getTextureAnisotropy();
         // the ground under the road is carved well below it, but far away the

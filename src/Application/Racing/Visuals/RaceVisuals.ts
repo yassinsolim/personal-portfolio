@@ -48,6 +48,10 @@ const COMPILE_BATCH = 6;
 
 type RenderMode = 'auto' | 'quality' | 'performance';
 
+// what of the settings is in the race world's programs
+type RenderState = Pick<PresetSettings, 'post' | 'shadows'>;
+const stateKey = (state: RenderState) => `${state.post}-${state.shadows}`;
+
 // auto's governor: the frame times it steps down or up at, and how long
 // they have to hold
 const AUTO_CHECK_MS = 1000;
@@ -133,6 +137,10 @@ export default class RaceVisuals {
     reveal: RaceReveal;
     prewarming: Promise<void> | null = null;
     private prewarmKey = '';
+    // post chain and sun shadow states whose programs are compiled, and the
+    // one compiling for a switch to it
+    private compiledStates = new Set<string>();
+    private switching: string | null = null;
     private uploads: {
         camera: THREE.PerspectiveCamera;
         textures: THREE.Texture[];
@@ -455,12 +463,67 @@ export default class RaceVisuals {
         });
     }
 
-    applyQuality() {
-        const preset = this.getPreset();
-        const settings = withGraphicsOff(
-            settingsFor(preset, this.settingsTier()),
+    // what the mode, tier, auto's steps and the graphics toggles add up to
+    wantedSettings() {
+        return withGraphicsOff(
+            settingsFor(this.getPreset(), this.settingsTier()),
             this.graphicsOff
         );
+    }
+
+    // the post chain and the sun's shadows are in every lit material's
+    // program, so switching either links them all again in one frame (140 ms
+    // on an m5, far longer on the laptops auto steps down on, and right as
+    // the race starts). while racing, the new state compiles in the
+    // background first and is switched to once it's ready
+    private readyFor(settings: PresetSettings) {
+        const key = stateKey(settings);
+        if (!this.active || key === stateKey(this.settings) || this.compiledStates.has(key)) return true;
+        if (this.switching !== key) {
+            this.switching = key;
+            void this.compileState(settings)
+                .catch(() => undefined)
+                .then(() => {
+                    this.compiledStates.add(key);
+                    if (this.switching !== key) return;
+                    this.switching = null;
+                    this.applyQuality();
+                });
+        }
+        return false;
+    }
+
+    private async compileState(state: RenderState) {
+        const camera = this.application.camera.instance;
+        await afterFrame();
+        await this.compileRaceWorld(camera, state);
+        if (state.post) await this.ensurePost().compileAsync(camera, THREE.AgXToneMapping);
+        await slice(this.warmShadows(camera, state));
+        await this.readPrograms();
+    }
+
+    // the first time three draws with a program it reads back its info log
+    // and uniform locations, which stalls, and forty at once made the first
+    // race frame long. a few a frame instead
+    private async readPrograms() {
+        const programs = this.application.renderer.instance.info.programs || [];
+        for (let i = 0; i < programs.length; i += 6) {
+            programs.slice(i, i + 6).forEach((program) => {
+                program.getUniforms();
+                program.getAttributes();
+            });
+            await afterFrame();
+        }
+    }
+
+    applyQuality(now = false) {
+        const preset = this.getPreset();
+        const wanted = this.wantedSettings();
+        // the post chain and the sun's shadows stay as they are until the
+        // new state's programs are ready
+        const settings = now || this.readyFor(wanted)
+            ? wanted
+            : { ...wanted, post: this.settings.post, shadows: this.settings.shadows };
         this.settings = settings;
         this.post?.applyPreset(settings);
         // flipping this recompiles the lit materials, so only on a change
@@ -527,7 +590,8 @@ export default class RaceVisuals {
             () => this.post?.resize(),
             settingsFor(this.getPreset(), this.settingsTier()).maxPixelRatio
         );
-        this.applyQuality();
+        // the prewarm compiled this state (or the first frame does, as ever)
+        this.applyQuality(true);
         this.atmosphere.sun.shadow.intensity = this.reveal.shadows;
         this.skids.clear();
         this.sparks.clear();
@@ -679,9 +743,8 @@ export default class RaceVisuals {
     // bound. three keys programs on exactly these, so compiling in it has
     // the race frames find them ready. the stand-in scene carries the sky
     // and fog, the race root brings its lights (it has to be visible for that)
-    private inRaceState<T>(fn: (stage: THREE.Scene) => T): T {
+    private inRaceState<T>(fn: (stage: THREE.Scene) => T, state: RenderState = this.wantedSettings()): T {
         const gl = this.application.renderer.instance;
-        const settings = settingsFor(this.getPreset(), this.tier);
         const stage = new THREE.Scene();
         stage.environment = this.atmosphere.buildEnvironment(gl);
         stage.environmentIntensity = ENVIRONMENT_INTENSITY;
@@ -696,8 +759,8 @@ export default class RaceVisuals {
         this.raceRoot.visible = true;
         gl.toneMapping = THREE.AgXToneMapping;
         gl.toneMappingExposure = EXPOSURE;
-        this.atmosphere.sun.castShadow = settings.shadows;
-        const target = settings.post
+        this.atmosphere.sun.castShadow = state.shadows;
+        const target = state.post
             ? new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType })
             : null;
         gl.setRenderTarget(target);
@@ -717,7 +780,7 @@ export default class RaceVisuals {
     // them at once queued so much in the gpu process that the room's next
     // frame waited on it (60 ms and more). the rest have no material for
     // the compile, which is how three skips them
-    private async compileRaceWorld(camera: THREE.Camera) {
+    private async compileRaceWorld(camera: THREE.Camera, state?: RenderState) {
         const gl = this.application.renderer.instance;
         const drawn: { material: THREE.Material | THREE.Material[] | null }[] = [];
         const materials = new Set<THREE.Material>();
@@ -740,7 +803,7 @@ export default class RaceVisuals {
             });
             let pending: Promise<unknown>;
             try {
-                pending = this.inRaceState((stage) => gl.compileAsync(this.raceRoot, camera, stage));
+                pending = this.inRaceState((stage) => gl.compileAsync(this.raceRoot, camera, stage), state);
             } finally {
                 drawn.forEach((object, k) => (object.material = kept[k]));
             }
@@ -753,8 +816,8 @@ export default class RaceVisuals {
     // them on the spot (about 60 ms for all of them). so a pass per caster
     // material, around the car's start with the trees there filled in. the
     // lights only compile before each is what sets up the race lights for it
-    private *warmShadows(camera: THREE.Camera): Steps {
-        if (!settingsFor(this.getPreset(), this.tier).shadows) return;
+    private *warmShadows(camera: THREE.Camera, state: RenderState = this.wantedSettings()): Steps {
+        if (!state.shadows) return;
         const gl = this.application.renderer.instance;
         this.atmosphere.follow(this.vehicle.position);
         this.forest.update(camera, this.vehicle.position, 0);
@@ -778,7 +841,7 @@ export default class RaceVisuals {
                 this.inRaceState(() => {
                     gl.compile(lightsOnly, camera, this.raceRoot as THREE.Scene);
                     gl.shadowMap.render([this.atmosphere.sun], this.raceRoot as THREE.Scene, camera);
-                });
+                }, state);
             } finally {
                 casters.forEach((mesh) => (mesh.castShadow = true));
             }
@@ -795,9 +858,12 @@ export default class RaceVisuals {
         // again if the preset moved on since (the room's resolution can drop
         // it to performance) or the car did (the lite car loads late, a
         // garage look adds parts), new programs only
-        const settings = settingsFor(this.getPreset(), this.tier);
+        const settings = this.wantedSettings();
         const car = this.vehicle.carModel;
         const key = `${settings.post}-${settings.shadows}-${car?.uuid}-${JSON.stringify(this.vehicle.look)}`;
+        // the glass draws in one pass in the race, a program of its own. set
+        // before the compile, or the first race frame links it (30 ms)
+        this.singlePassGlass();
         const added = this.prepareReveal();
         if (this.prewarming && this.prewarmKey === key && !added) return this.prewarming;
         this.prewarmKey = key;
@@ -808,22 +874,13 @@ export default class RaceVisuals {
             await frame();
             this.atmosphere.buildEnvironment(gl);
             await frame();
-            await this.compileRaceWorld(camera);
+            await this.compileRaceWorld(camera, settings);
             await (settings.post
                 ? this.ensurePost().compileAsync(camera, THREE.AgXToneMapping)
                 : this.reveal.compileOverlay(gl));
-            await slice(this.warmShadows(camera));
-            // the first time three draws with a program it reads back its
-            // info log and uniform locations, which stalls, and forty at once
-            // made the first race frame long. a few a frame now instead
-            const programs = gl.info.programs || [];
-            for (let i = 0; i < programs.length; i += 6) {
-                programs.slice(i, i + 6).forEach((program) => {
-                    program.getUniforms();
-                    program.getAttributes();
-                });
-                await frame();
-            }
+            await slice(this.warmShadows(camera, settings));
+            this.compiledStates.add(stateKey(settings));
+            await this.readPrograms();
             // and the textures, one a frame while the room is still, not
             // waited for. once the transition streams, it sends the rest
             void (async () => {

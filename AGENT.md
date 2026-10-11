@@ -264,6 +264,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   few a frame, then the textures one a frame); the fly streams the first frames' buffer uploads a
   batch a frame (`streamStep`, layer 6) and switches to the race resolution at its end. Software
   GL skips the hover prewarm and compiles behind the car, where the picture is still.
+- The click itself does nothing heavy. The race audio's `AudioContext` (170 to 700 ms to create
+  on a Mac) is made when the race starts (`CarAudio.setActive`, under the plate) on Chromium and
+  Firefox, which let audio start any time after a gesture; WebKit still makes it in the gesture.
+  The car glass goes single pass (`singlePassGlass`) before the prewarm compiles, or the first
+  race frame links two programs.
+- Switching the post chain or sun shadows while racing (auto's effects drop as the race starts
+  on a slow machine, a step, the menu) recompiles every lit material: `RaceVisuals.readyFor`
+  compiles the new state in the background (batches, shadow passes, program reads) and keeps
+  the old post/shadows until it's ready. Everything else in the preset applies at once.
 - The race world builds a slice a frame (`Racing/slicing.ts`): the heavy constructors take a
   `defer` flag and keep their work in a `pending` generator that yields between pieces (`drain`
   runs it at once, which is what tests and plain `new` get). `World.ensureRaceManager` runs it
@@ -282,8 +291,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   the page. Only drawn objects count for the car click; the hidden race world is in the scene too.
 - `scripts/race-transition-record.mjs` records it at a clean 60 fps (virtual clock) to mp4, webp
   and a frame strip, or times real frames split by the transition's phase marks (`--mode timing`,
-  `--swgl`, `--tier low`, `--browser webkit`, `--reduced-motion`). `scripts/race-transition-check.mjs`
-  checks skip and focus.
+  `--swgl`, `--tier low`, `--cpu-throttle 4`, `--browser webkit`, `--reduced-motion`).
+  `scripts/race-transition-check.mjs` checks skip and focus.
 
 ## Drift Notes (2026-09-28)
 - Sport assists include the drift assist (`VehiclePhysics.updateDrift`): once the rear is out

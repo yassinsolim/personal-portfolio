@@ -103,10 +103,11 @@ const chainLinkTexture = () => {
 };
 
 // 32 graffiti pieces in one atlas: tags in chunky letters, flags, arrows and
-// hearts, each faded and worn like years of paint on tarmac
+// hearts, each faded and worn like years of paint on tarmac. a few cells a
+// step, the wear is thousands of dots
 const ATLAS_COLS = 4;
 const ATLAS_ROWS = 8;
-const graffitiAtlas = () => {
+function* graffitiAtlas(): Generator<string | void, THREE.CanvasTexture, void> {
     const cellW = 512;
     const cellH = 256;
     const canvas = document.createElement('canvas');
@@ -211,11 +212,12 @@ const graffitiAtlas = () => {
             cellH,
         );
         ctx.restore();
+        if (cell % 4 === 3) yield 'graffiti:atlas';
     }
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = 8;
     return texture;
-};
+}
 
 export default class RaceTracksideExtras {
     root: THREE.Group;
@@ -251,7 +253,7 @@ export default class RaceTracksideExtras {
             this.buildLandmarks(track, terrain);
             yield 'extras:landmarks';
         }
-        this.buildGraffiti(track);
+        yield* this.buildGraffiti(track);
         yield 'extras:graffiti';
         parent.add(this.root);
     }
@@ -443,7 +445,7 @@ export default class RaceTracksideExtras {
         this.root.add(mesh);
     }
 
-    buildGraffiti(track: NordschleifeTrack) {
+    *buildGraffiti(track: NordschleifeTrack): Steps {
         const random = rng(1927);
         const parts: THREE.BufferGeometry[] = [];
         let cell = 0;
@@ -488,10 +490,12 @@ export default class RaceTracksideExtras {
             }
         });
         if (!parts.length) return;
+        yield 'graffiti:pieces';
+        const map = yield* graffitiAtlas();
         const mesh = new THREE.Mesh(
             mergeGeometries(parts),
             new THREE.MeshStandardMaterial({
-                map: graffitiAtlas(),
+                map,
                 transparent: true,
                 roughness: 0.75,
                 depthWrite: false,
