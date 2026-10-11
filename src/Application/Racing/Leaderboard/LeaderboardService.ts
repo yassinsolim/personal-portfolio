@@ -6,6 +6,7 @@ import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
 import { SEASON_TAG } from './season';
 import type { RemovedLap } from './removedLaps';
+import { isPlayerId, readIdentity, sanitizeBadge } from '../Profile/profile';
 
 type SupabaseConfig = {
     supabaseUrl: string;
@@ -33,6 +34,26 @@ const MAX_UPLOAD_SAMPLES = 5000;
 const LOCAL_LAP_PREFIX = 'local-';
 // laps taken off the board, and why (supabase/racing.sql)
 const REMOVED_LAPS_TABLE = 'nordschleife_removed_laps';
+// a row and its driver's badge, through player_id. typed as plain strings so
+// supabase's types don't try to parse the embed
+const BADGE = 'player:racing_players(id,name,avatar,color,number)';
+const LAP_COLUMNS: string = `id,name,lap_time_ms,car_id,created_at,player_id,${BADGE}`;
+const DRIFT_COLUMNS: string = `id,name,score,lap_time_ms,car_id,created_at,player_id,${BADGE}`;
+
+export type Board = 'stock' | 'tuned';
+
+// writes go out with this device's player (the database's
+// racing_attribute_player makes the lap theirs), read at the time of each
+// request so a reset profile takes effect at once. reads don't need it
+const withPlayer: typeof fetch = (input, init) => {
+    const identity = readIdentity();
+    const method = (init?.method || 'GET').toUpperCase();
+    if (!identity || method === 'GET' || method === 'HEAD') return fetch(input, init);
+    const headers = new Headers(init?.headers);
+    headers.set('x-player-id', identity.id);
+    headers.set('x-player-key', identity.key);
+    return fetch(input, { ...init, headers });
+};
 
 type RemoteLeaderboardRow = {
     id: string;
@@ -40,6 +61,8 @@ type RemoteLeaderboardRow = {
     lap_time_ms: number;
     car_id: string;
     created_at: string;
+    player_id?: string | null;
+    player?: unknown;
 };
 
 type RemoteGhostReplayRow = {
@@ -66,6 +89,8 @@ type RemoteDriftRow = {
     lap_time_ms: number;
     car_id: string;
     created_at: string;
+    player_id?: string | null;
+    player?: unknown;
 };
 
 export default class LeaderboardService {
@@ -152,6 +177,7 @@ export default class LeaderboardService {
                         persistSession: false,
                         autoRefreshToken: false,
                     },
+                    global: { fetch: withPlayer },
                 }
             );
             this.subscribeToTableChanges();
@@ -170,10 +196,26 @@ export default class LeaderboardService {
         );
     }
 
-    // stock laps end in the season tag, tuned ones carry ~t<tune code> after it.
+    // the database once its config is in, null when the board is local only
+    async client() {
+        await this.initialize();
+        return this.supabase;
+    }
+
+    // the car_id filter of a board: stock laps end in the season tag, tuned
+    // ones carry ~t<tune code> after it, and a car narrows it to that car's
+    boardFilter(board: Board, carId?: string | null): ['like' | 'eq', string] {
+        const car = carId && carOptionsById[carId] ? carId : '';
+        if (!car) return ['like', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`];
+        return board === 'tuned' ? ['like', `${car}${SEASON_TAG}${TUNE_TAG}%`] : ['eq', `${car}${SEASON_TAG}`];
+    }
+
     // a lap shows once the database has checked its ghost drove the whole ring
-    async getLeaderboard(limit = 10, board: 'stock' | 'tuned' = 'stock') {
-        const localEntries = this.local.getTop(limit, board);
+    async getLeaderboard(limit = 10, board: Board = 'stock', carId?: string | null) {
+        const localEntries = this.local
+            .getTop(64, board)
+            .filter((entry) => !carId || entry.carId === carId)
+            .slice(0, limit);
         await this.initialize();
 
         if (!this.supabase) {
@@ -183,8 +225,8 @@ export default class LeaderboardService {
         try {
             const { data, error } = await this.supabase
                 .from(this.tableName)
-                .select('id,name,lap_time_ms,car_id,created_at')
-                .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
+                .select(LAP_COLUMNS)
+                .filter('car_id', ...this.boardFilter(board, carId))
                 .eq('verified', true)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
@@ -193,13 +235,89 @@ export default class LeaderboardService {
                 return localEntries;
             }
 
-            const remoteEntries = (data as RemoteLeaderboardRow[]).map((entry) =>
+            const remoteEntries = (data as unknown as RemoteLeaderboardRow[]).map((entry) =>
                 this.fromLapRow(entry)
             );
 
             return this.mergeEntries(remoteEntries, localEntries).slice(0, limit);
         } catch (error) {
             return localEntries;
+        }
+    }
+
+    // where a time would be on a board: one more than the laps faster. 0 when
+    // that can't be told
+    async getRankOf(lapTimeMs: number, board: Board, carId?: string | null) {
+        await this.initialize();
+        if (!this.supabase) return 0;
+        try {
+            const { count, error } = await this.supabase
+                .from(this.tableName)
+                .select('id', { count: 'exact', head: true })
+                .filter('car_id', ...this.boardFilter(board, carId))
+                .eq('verified', true)
+                .lt('lap_time_ms', Math.floor(lapTimeMs));
+            return error || count === null ? 0 : count + 1;
+        } catch {
+            return 0;
+        }
+    }
+
+    // a player's best lap on a board
+    async getPlayerBest(playerId: string, board: Board, carId?: string | null) {
+        await this.initialize();
+        if (!this.supabase) return null;
+        try {
+            const { data, error } = await this.supabase
+                .from(this.tableName)
+                .select(LAP_COLUMNS)
+                .filter('car_id', ...this.boardFilter(board, carId))
+                .eq('verified', true)
+                .eq('player_id', playerId)
+                .order('lap_time_ms', { ascending: true })
+                .limit(1);
+            if (error || !data?.length) return null;
+            return this.fromLapRow((data as unknown as RemoteLeaderboardRow[])[0]);
+        } catch {
+            return null;
+        }
+    }
+
+    // a player's fastest laps this season, both boards
+    async getPlayerLaps(playerId: string, limit = 12) {
+        await this.initialize();
+        if (!this.supabase) return [];
+        try {
+            const { data, error } = await this.supabase
+                .from(this.tableName)
+                .select(LAP_COLUMNS)
+                .eq('player_id', playerId)
+                .eq('verified', true)
+                .like('car_id', `%${SEASON_TAG}%`)
+                .order('lap_time_ms', { ascending: true })
+                .limit(limit);
+            if (error || !data) return [];
+            return (data as unknown as RemoteLeaderboardRow[]).map((row) => this.fromLapRow(row));
+        } catch {
+            return [];
+        }
+    }
+
+    async getPlayerDriftBest(playerId: string) {
+        await this.initialize();
+        if (!this.supabase) return null;
+        try {
+            const { data, error } = await this.supabase
+                .from(this.driftTableName)
+                .select(DRIFT_COLUMNS)
+                .eq('player_id', playerId)
+                .like('car_id', `%${DRIFT_TAG}%`)
+                .order('score', { ascending: false })
+                .limit(1);
+            if (error || !data?.length) return null;
+            return this.fromDriftRow((data as unknown as RemoteDriftRow[])[0]);
+        } catch {
+            return null;
         }
     }
 
@@ -219,14 +337,14 @@ export default class LeaderboardService {
         try {
             const { data, error } = await this.supabase
                 .from(this.tableName)
-                .select('id,name,lap_time_ms,car_id,created_at')
-                .like('car_id', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`)
+                .select(LAP_COLUMNS)
+                .filter('car_id', ...this.boardFilter(board))
                 .eq('verified', true)
                 .lt('lap_time_ms', Math.floor(lapTimeMs))
                 .order('lap_time_ms', { ascending: false })
                 .limit(limit);
             if (error || !data) return localEntries;
-            const remoteEntries = (data as RemoteLeaderboardRow[]).map((row) =>
+            const remoteEntries = (data as unknown as RemoteLeaderboardRow[]).map((row) =>
                 this.fromLapRow(row)
             );
             return this.mergeEntries(remoteEntries, localEntries)
@@ -248,13 +366,13 @@ export default class LeaderboardService {
             try {
                 const { data, error } = await this.supabase
                     .from(this.tableName)
-                    .select('id,name,lap_time_ms,car_id,created_at')
+                    .select(LAP_COLUMNS)
                     .like('car_id', `${carId}${SEASON_TAG}${TUNE_TAG}%`)
                     .eq('verified', true)
                     .order('lap_time_ms', { ascending: true })
                     .limit(limit * 4);
                 if (!error && data) {
-                    remoteEntries = (data as RemoteLeaderboardRow[]).map((row) =>
+                    remoteEntries = (data as unknown as RemoteLeaderboardRow[]).map((row) =>
                         this.fromLapRow(row)
                     );
                 }
@@ -273,6 +391,7 @@ export default class LeaderboardService {
     }
 
     fromLapRow(row: RemoteLeaderboardRow): LeaderboardEntry {
+        const player = sanitizeBadge(row.player);
         return {
             id: String(row.id || '').slice(0, 80),
             name: this.sanitizeName(row.name),
@@ -281,6 +400,8 @@ export default class LeaderboardService {
             createdAt: row.created_at || new Date().toISOString(),
             source: 'remote',
             tune: this.readTune(row.car_id),
+            playerId: player?.id || (isPlayerId(row.player_id) ? row.player_id : null),
+            player,
         };
     }
 
@@ -325,14 +446,14 @@ export default class LeaderboardService {
                     lap_time_ms: safeLapTimeMs,
                     car_id: `${safeCarId}${tag}`,
                 })
-                .select('id,name,lap_time_ms,car_id,created_at')
+                .select('id,name,lap_time_ms,car_id,created_at,player_id')
                 .single();
 
             if (error || !data) {
                 return localEntry;
             }
 
-            const row = data as RemoteLeaderboardRow;
+            const row = data as unknown as RemoteLeaderboardRow;
             const entry = {
                 id: String(row.id || '').slice(0, 80),
                 name: this.sanitizeName(row.name),
@@ -341,6 +462,7 @@ export default class LeaderboardService {
                 createdAt: row.created_at || new Date().toISOString(),
                 source: 'remote' as const,
                 tune: safeTune,
+                playerId: isPlayerId(row.player_id) ? row.player_id : null,
             };
             if (safeReplay) {
                 await this.submitGhostReplay(entry.id, safeReplay, tag);
@@ -723,6 +845,7 @@ export default class LeaderboardService {
 
     fromDriftRow(row: RemoteDriftRow): DriftEntry {
         const safe = this.sanitizeDrift(row.score, row.lap_time_ms);
+        const player = sanitizeBadge(row.player);
         return {
             id: String(row.id || '').slice(0, 80),
             name: this.sanitizeName(row.name),
@@ -731,6 +854,8 @@ export default class LeaderboardService {
             carId: this.sanitizeCarId(row.car_id),
             createdAt: row.created_at || new Date().toISOString(),
             source: 'remote',
+            playerId: player?.id || (isPlayerId(row.player_id) ? row.player_id : null),
+            player,
         };
     }
 
@@ -742,12 +867,12 @@ export default class LeaderboardService {
         try {
             const { data, error } = await this.supabase
                 .from(this.driftTableName)
-                .select('id,name,score,lap_time_ms,car_id,created_at')
+                .select(DRIFT_COLUMNS)
                 .like('car_id', `%${DRIFT_TAG}%`)
                 .order('score', { ascending: false })
                 .limit(limit);
             if (error || !data) return localEntries;
-            const remote = (data as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));
+            const remote = (data as unknown as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));
             const seen = new Set(remote.map((e) => `${e.name}:${e.score}:${e.lapTimeMs}`));
             return [
                 ...remote,
@@ -782,10 +907,10 @@ export default class LeaderboardService {
                     lap_time_ms: safe.lapTimeMs,
                     car_id: `${safeCarId}${DRIFT_TAG}${safeTune ? TUNE_TAG + safeTune : ''}`,
                 })
-                .select('id,name,score,lap_time_ms,car_id,created_at')
+                .select('id,name,score,lap_time_ms,car_id,created_at,player_id')
                 .single();
             if (error || !data) return localEntry;
-            return this.fromDriftRow(data as RemoteDriftRow);
+            return this.fromDriftRow(data as unknown as RemoteDriftRow);
         } catch {
             return localEntry;
         }

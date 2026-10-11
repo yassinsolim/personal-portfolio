@@ -1,4 +1,5 @@
 import { randomInt } from '../../Utils/Random';
+import type { PlayerBadge } from '../Profile/profile';
 
 export type LeaderboardEntry = {
     id: string;
@@ -9,6 +10,9 @@ export type LeaderboardEntry = {
     source: 'local' | 'remote';
     // the garage tune code when the lap was set on a tuned car
     tune?: string;
+    // whose lap it is on the board, and their badge
+    playerId?: string | null;
+    player?: PlayerBadge | null;
 };
 
 const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v6';

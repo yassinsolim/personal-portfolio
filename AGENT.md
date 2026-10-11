@@ -237,6 +237,27 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - `.tmp-validation/mptest.mjs`-style testing: two browsers in one lobby, one parked on Döttinger
   Höhe, the other rolled into it. Expect shared momentum, not one car stopping dead.
 
+## Profile Notes (2026-10-10)
+- A device is a player: `Racing/Profile/profile.ts` keeps an id and a random key in localStorage
+  (`yassinverse:player:v1`), made the first time it's needed. The key's sha256 is in
+  `racing_players`; saves go through `racing_save_player` (supabase/racing.sql), and every
+  write the supabase client sends carries `x-player-id`/`x-player-key`
+  (`LeaderboardService` `withPlayer` fetch), so new laps and drift runs get `player_id`. Laps
+  from before profiles have no player and can't be claimed.
+- The profile tab edits a draft (`yassinverse:profile:v1`: badge, color, number, bio, the car
+  shown off) plus the driver name. App sends it 0.9 s after a change, as a race starts and when
+  the garage closes; `ProfileService` sends one save at a time and skips one identical to the
+  last sent. The garage goes as codes per car (`encodeLook`, `tuneCode`), about 50 bytes each.
+- Esc opens the pause menu on the Leaderboard tab (`BoardTab`): top 50 verified laps with their
+  drivers' badges in one query (PostgREST embed `player:racing_players(...)`), a car filter,
+  the drift park's runs, and your best under the list with its rank (a count query). A name
+  opens `PlayerCard` (their profile, car look and setup, garage, fastest laps), a lap opens
+  `LapCard`, which can sit over the player's card. Everything read back is sanitized in
+  `profile.ts`. Badges are SVG glyphs in `PlayerBadge.tsx`; colors are hex only.
+- `.tmp-validation/profiles.mjs` and `playercard.mjs` check it in a browser. With the live
+  config they save a real test profile: delete it after with
+  `delete from racing_players where id = '<id>'`.
+
 ## Transition Notes (2026-09-28)
 - `World/RaceTransition.ts` (main bundle): click the room car (hover shows a pointer, builds the
   race world, then prewarms it). The car rocks and the camera swings round it, landing exactly on

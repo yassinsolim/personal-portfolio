@@ -6,6 +6,7 @@ import { formatTime } from './RaceHudGauges';
 import { decodeTune, STOCK_BRAKE_BIAS } from '../../Racing/Garage/garage';
 import { ENGINES } from '../../Racing/Garage/engines';
 import type { ReplaySummary } from '../../Racing/Ghost/replayStats';
+import type { PlayerBadge } from '../../Racing/Profile/profile';
 import {
     BRAKES,
     EXHAUSTS,
@@ -27,6 +28,8 @@ export type LapEntry = {
     createdAt: string;
     source: 'local' | 'remote';
     tune?: string;
+    playerId?: string | null;
+    player?: PlayerBadge | null;
 };
 
 // what RaceManager works out for the card: the setup's numbers (the index

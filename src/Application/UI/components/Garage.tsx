@@ -125,7 +125,7 @@ const CALIPERS = [
     '#111214',
     '#ff5a1f',
 ];
-const FINISHES: Array<[PaintFinish, string]> = [
+export const FINISHES: Array<[PaintFinish, string]> = [
     ['stock', 'Factory'],
     ['gloss', 'Gloss'],
     ['metallic', 'Metallic'],
