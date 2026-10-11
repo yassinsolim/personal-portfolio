@@ -816,15 +816,15 @@ export default class LeaderboardService {
         }
     }
 
+    // this device's copy of a board lap is the same lap even when the board
+    // renamed it (a friend's lap set on your computer)
     mergeEntries(remote: LeaderboardEntry[], local: LeaderboardEntry[]) {
         const merged = [...remote];
-        const existingKeys = new Set(
-            merged.map((entry) => `${entry.name}:${entry.lapTimeMs}:${entry.carId}`)
-        );
+        const keyOf = (entry: LeaderboardEntry) => `${entry.lapTimeMs}:${entry.carId}:${entry.tune || ''}`;
+        const existingKeys = new Set(merged.map(keyOf));
 
         for (const localEntry of local) {
-            const key = `${localEntry.name}:${localEntry.lapTimeMs}:${localEntry.carId}`;
-            if (!existingKeys.has(key)) {
+            if (!existingKeys.has(keyOf(localEntry))) {
                 merged.push(localEntry);
             }
         }

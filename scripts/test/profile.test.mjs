@@ -143,6 +143,21 @@ test('board rows carry their driver, and the board filter picks a car', () => {
     assert.deepEqual(service.boardFilter('stock', 'gt3rs'), ['like', '%@v6']);
 });
 
+test("a lap renamed on the board isn't shown twice on the device that set it", () => {
+    const service = new LeaderboardService(new LocalLeaderboard());
+    const lap = { lapTimeMs: 447157, carId: 'bugatti-chiron-super-sport', createdAt: '' };
+    const remote = [{ ...lap, id: 'lap-1', name: 'Ajmal', source: 'remote' }];
+    const local = [
+        { ...lap, id: 'local-1', name: 'yassin', source: 'local' },
+        { ...lap, id: 'local-2', name: 'yassin', source: 'local', tune: '0a1b2c3d4e' },
+        { ...lap, id: 'local-3', name: 'yassin', source: 'local', lapTimeMs: 459603 },
+    ];
+    assert.deepEqual(
+        service.mergeEntries(remote, local).map((entry) => entry.id),
+        ['lap-1', 'local-2', 'local-3']
+    );
+});
+
 test("the menu's board query only takes what it knows", () => {
     assert.deepEqual(sanitizeBoardQuery({ track: 'drift', board: 'tuned', carId: 'amg-one' }), {
         track: 'drift',
