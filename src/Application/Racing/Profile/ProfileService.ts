@@ -18,7 +18,7 @@ export type PasswordStatus = 'set' | 'short' | 'limited' | 'error';
 
 export type SignInResult =
     | { status: 'in'; player: PlayerProfile }
-    | { status: 'wrong' | 'limited' | 'offline' | 'error' };
+    | { status: 'wrong' | 'limited' | 'offline' | 'storage' | 'error' };
 
 const PLAYER_COLUMNS = 'id,name,avatar,color,number,bio,car,garage,created_at';
 // a profile read is good for a minute. the board's badges come with its rows
@@ -56,6 +56,8 @@ export default class ProfileService {
     // signing in or out: saves wait, and what was queued for the player
     // before is dropped once the device has another
     switching = false;
+    // the switch running, so the next waits for it
+    switchQueue: Promise<unknown> = Promise.resolve();
 
     constructor(client: () => Promise<SupabaseClient | null>, onStatus: (status: SaveStatus) => void) {
         this.client = client;
@@ -100,16 +102,20 @@ export default class ProfileService {
     // a change of player with saves held. switched says it happened, so
     // what was queued meanwhile was the old player's
     async switchPlayer<T>(change: () => Promise<T>, switched: (result: T) => boolean) {
-        this.switching = true;
-        await this.settle();
-        try {
-            const result = await change();
-            if (switched(result)) this.pending = null;
-            return result;
-        } finally {
-            this.switching = false;
-            void this.flush();
-        }
+        const run = this.switchQueue.then(async () => {
+            this.switching = true;
+            await this.settle();
+            try {
+                const result = await change();
+                if (switched(result)) this.pending = null;
+                return result;
+            } finally {
+                this.switching = false;
+                void this.flush();
+            }
+        });
+        this.switchQueue = run.catch(() => undefined);
+        return run;
     }
 
     async send(payload: ProfilePayload): Promise<SaveStatus> {
@@ -239,7 +245,8 @@ export default class ProfileService {
                     const result = (data || {}) as { signed_in?: unknown; player?: unknown };
                     const player = result.signed_in === true ? sanitizePlayer(result.player) : null;
                     if (!player) return { status: 'wrong' };
-                    writeIdentity({ id: player.id, key });
+                    // a browser that won't keep the key can't stay signed in
+                    if (!writeIdentity({ id: player.id, key })) return { status: 'storage' };
                     writeSent('');
                     this.cache.delete(player.id);
                     return { status: 'in', player };

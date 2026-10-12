@@ -238,12 +238,15 @@ const newKey = () =>
 // a key for this device alone, when it signs in to a player
 export const newDeviceKey = newKey;
 
+// false when the browser won't keep it
 export const writeIdentity = (identity: Identity) => {
     try {
         storage()?.setItem(IDENTITY_KEY, JSON.stringify(identity));
     } catch {
-        // signed in for this visit only
+        return false;
     }
+    const kept = readIdentity();
+    return kept?.id === identity.id && kept.key === identity.key;
 };
 
 // this device's player, made the first time it's needed. without storage

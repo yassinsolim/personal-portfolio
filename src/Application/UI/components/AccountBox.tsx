@@ -7,15 +7,20 @@ const SIGN_IN_ERROR: Record<Exclude<SignInResult['status'], 'in'>, string> = {
     wrong: 'No profile with that name and password.',
     limited: 'Too many tries. Wait a few minutes, then try again.',
     offline: 'The board is offline, so signing in has to wait.',
+    storage: 'This browser won’t keep a sign in (private mode or blocked storage).',
     error: 'Couldn’t sign in. Try again.',
 };
 
 const PASSWORD_NOTE: Record<PasswordStatus, string> = {
     set: 'Password saved.',
-    short: 'Use 8 to 72 characters.',
+    short: 'Use at least 8 characters, and at most 72 bytes (emoji take up to 4).',
     limited: 'That was a lot of changes. Try again in a minute.',
     error: 'Couldn’t save the password. Try again.',
 };
+
+// what the database checks: bcrypt reads 72 bytes
+const passwordFits = (password: string) =>
+    password.length >= 8 && new TextEncoder().encode(password).length <= 72;
 
 // a driver's name and password, to race as them on this device. bring moves
 // this device's own profile and its laps into theirs
@@ -125,6 +130,10 @@ export const AccountBox = ({
     const savePassword = async (event: React.FormEvent) => {
         event.preventDefault();
         if (busy) return;
+        if (!passwordFits(password)) {
+            setNote(PASSWORD_NOTE.short);
+            return;
+        }
         setBusy(true);
         const status = await ask<PasswordStatus>('race:setPassword', { password });
         setBusy(false);
@@ -192,7 +201,6 @@ export const AccountBox = ({
                             type="password"
                             value={password}
                             minLength={8}
-                            maxLength={72}
                             placeholder="8 or more characters"
                             aria-label="New password"
                             autoComplete="new-password"

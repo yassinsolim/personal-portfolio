@@ -351,7 +351,8 @@ end;
 $$;
 
 -- at most p_per_client of a kind per client and p_total from everyone (a
--- backstop if addresses are rotated) per 10 minutes. 53400 past either
+-- backstop if addresses are rotated) per 10 minutes. 53400 past either. a
+-- kind's tries wait on each other, so parallel ones can't all pass the count
 create or replace function public.racing_rate_limit(p_kind text, p_per_client integer, p_total integer)
 returns void
 language plpgsql
@@ -367,6 +368,7 @@ begin
   if v_net is null then
     return;
   end if;
+  perform pg_advisory_xact_lock(hashtext('racing_rate_limit:' || p_kind));
   v_bucket := md5(p_kind || ':' || v_net);
   if random() < 0.02 then
     delete from nordschleife_rate_events where at < clock_timestamp() - interval '1 day';
@@ -822,6 +824,7 @@ declare
   v_headers json;
   v_id uuid;
   v_key text;
+  v_try integer;
 begin
   begin
     v_headers := nullif(current_setting('request.headers', true), '')::json;
@@ -839,7 +842,10 @@ begin
     v_id := null;
   end;
   if v_id is not null and v_key ~ '^[A-Za-z0-9_-]{32,128}$' then
-    if not exists (select 1 from racing_players where id = v_id) then
+    -- another fresh device can take the same free name at the same moment:
+    -- the next try sees it and takes the one after
+    for v_try in 1 .. 3 loop
+      exit when exists (select 1 from racing_players where id = v_id);
       begin
         insert into racing_players (id, key_hash, name)
           values (v_id, encode(sha256(convert_to(v_key, 'UTF8')), 'hex'),
@@ -848,7 +854,7 @@ begin
       exception when unique_violation then
         null;
       end;
-    end if;
+    end loop;
     if racing_key_opens(v_id, v_key) then
       new.player_id := v_id;
       return new;

@@ -158,6 +158,43 @@ test('signing out forgets the player, and a name check says free when it cannot 
     assert.equal(await serviceWith(null).service.nameFree('Becklandxd'), true);
 });
 
+test('signing out while a sign in is out waits for it, and a browser that keeps nothing is told', async () => {
+    store.clear();
+    profile.ensureIdentity();
+    let release;
+    const order = [];
+    const { client } = fakeClient((fn) => {
+        order.push(fn);
+        if (fn !== 'racing_sign_in') return { data: null, error: null };
+        return new Promise((resolve) => {
+            release = () => resolve({ data: { signed_in: true, player: accountRow }, error: null });
+        });
+    });
+    const { service } = serviceWith(client);
+    const signing = service.signIn('yass', 'correct horse', false);
+    const leaving = service.signOut();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(order, ['racing_sign_in']);
+    release();
+    assert.equal((await signing).status, 'in');
+    assert.equal(await leaving, 'out');
+    assert.deepEqual(order, ['racing_sign_in', 'racing_sign_out']);
+    assert.equal(profile.readIdentity(), null);
+
+    const setItem = window.localStorage.setItem;
+    window.localStorage.setItem = () => {
+        throw new Error('quota');
+    };
+    try {
+        const ok = fakeClient(() => ({ data: { signed_in: true, player: accountRow }, error: null }));
+        assert.deepEqual(await serviceWith(ok.client).service.signIn('yass', 'correct horse', false), {
+            status: 'storage',
+        });
+    } finally {
+        window.localStorage.setItem = setItem;
+    }
+});
+
 test("a signed in profile's setups go on the device, its other cars keep theirs", () => {
     store.clear();
     const mine = { ...STOCK_TUNE, power: 1.05 };
