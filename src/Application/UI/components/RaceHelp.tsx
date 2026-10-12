@@ -145,6 +145,10 @@ const RaceHelp = ({
                                 'Boards',
                                 'Each driver is on a board once, with their best (PB). Any garage change puts your laps on the tuned board instead of stock; after a lap you see which, and how it did against your PB. A lap or driver card can put their setup on your car, and the garage lists tunes from the board too.',
                             ],
+                            [
+                                'Profile',
+                                'A name is one driver’s. Set a password under Esc, Profile, then sign in with your name and password on your phone or another computer to race as the same driver there.',
+                            ],
                         ]}
                     />
                 )}

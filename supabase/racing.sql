@@ -18,6 +18,8 @@
 --   - a driver's profile is public to read except its key's hash, and only
 --     changes through racing_save_player with the device's key. laps and
 --     runs sent with that key (x-player-id, x-player-key) are the player's
+--   - one player to a name, in any case. a player with a password can be
+--     signed in to from other devices (racing_sign_in), each with its own key
 --   - the boards are each driver's best (nordschleife_board, drift_park_board),
 --     read through functions that run as the caller
 
@@ -349,7 +351,8 @@ end;
 $$;
 
 -- at most p_per_client of a kind per client and p_total from everyone (a
--- backstop if addresses are rotated) per 10 minutes. 53400 past either
+-- backstop if addresses are rotated) per 10 minutes. 53400 past either. a
+-- kind's tries wait on each other, so parallel ones can't all pass the count
 create or replace function public.racing_rate_limit(p_kind text, p_per_client integer, p_total integer)
 returns void
 language plpgsql
@@ -365,6 +368,7 @@ begin
   if v_net is null then
     return;
   end if;
+  perform pg_advisory_xact_lock(hashtext('racing_rate_limit:' || p_kind));
   v_bucket := md5(p_kind || ':' || v_net);
   if random() < 0.02 then
     delete from nordschleife_rate_events where at < clock_timestamp() - interval '1 day';
@@ -486,6 +490,91 @@ create policy "public read players"
   to anon, authenticated
   using (true);
 
+-- a password for signing in on other devices (racing_sign_in), as bcrypt.
+-- the api can't read it (the column grants leave it out)
+alter table public.racing_players add column if not exists password_hash text;
+
+-- the keys of devices signed in to a player, besides the one it was made
+-- with (key_hash). private, like the rate table
+create table if not exists public.racing_player_keys (
+  player_id uuid not null references public.racing_players (id) on delete cascade,
+  key_hash text not null check (key_hash ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  primary key (player_id, key_hash)
+);
+alter table public.racing_player_keys enable row level security;
+
+-- a device's key opens a player: the one it was made with, or one a sign in added
+create or replace function public.racing_key_opens(p_id uuid, p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with k as (select encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex') as hash)
+  select exists (select 1 from racing_players p, k where p.id = p_id and p.key_hash = k.hash)
+    or exists (select 1 from racing_player_keys pk, k where pk.player_id = p_id and pk.key_hash = k.hash);
+$$;
+
+-- one player to a name, in any case: the name, or the first of "name 2" to
+-- "name 99" nobody else has (null past that)
+create or replace function public.racing_free_name(p_name text, p_id uuid)
+returns text
+language plpgsql
+stable
+set search_path = public
+as $$
+declare
+  v_base text := btrim(p_name);
+  v_try text := btrim(p_name);
+  v_n integer := 1;
+begin
+  while exists (
+    select 1 from racing_players where lower(btrim(name)) = lower(v_try) and id is distinct from p_id
+  ) loop
+    v_n := v_n + 1;
+    if v_n > 99 then
+      return null;
+    end if;
+    v_try := btrim(left(v_base, 16 - char_length(' ' || v_n))) || ' ' || v_n;
+  end loop;
+  return v_try;
+end;
+$$;
+
+-- players that shared a name before names were unique: the first keeps it
+do $$
+declare
+  v_dupe record;
+begin
+  for v_dupe in
+    select id, name from (
+      select id, name, row_number() over (partition by lower(btrim(name)) order by created_at, id) as nth
+      from public.racing_players
+    ) ranked
+    where nth > 1
+  loop
+    update public.racing_players
+      set name = coalesce(public.racing_free_name(v_dupe.name, v_dupe.id), 'Driver ' || left(v_dupe.id::text, 8)),
+        updated_at = now()
+      where id = v_dupe.id;
+  end loop;
+end $$;
+create unique index if not exists racing_players_name_key on public.racing_players (lower(btrim(name)));
+
+-- whether nobody else has a name, for the game to say before it saves
+create or replace function public.racing_name_free(p_name text, p_id uuid default null)
+returns boolean
+language sql
+stable
+as $$
+  select not exists (
+    select 1 from public.racing_players
+    where lower(btrim(name)) = lower(btrim(coalesce(p_name, ''))) and id is distinct from p_id
+  );
+$$;
+
 -- names and bios: no control characters, nor the invisible ones that flip or
 -- hide text
 create or replace function public.racing_clean_text(p_text text)
@@ -517,8 +606,9 @@ as $$
     );
 $$;
 
--- makes the profile, or changes it with the key it was made with. a field the
--- game can't make is 22023, another device's player 42501, too many saves 53400
+-- makes the profile, or changes it with a key that opens it. a field the game
+-- can't make is 22023, a name another player has 23505, another device's
+-- player 42501, too many saves 53400
 create or replace function public.racing_save_player(p_id uuid, p_key text, p_profile jsonb)
 returns void
 language plpgsql
@@ -567,6 +657,9 @@ begin
   if not racing_valid_garage(v_garage) then
     raise exception 'bad garage' using errcode = '22023';
   end if;
+  if exists (select 1 from racing_players where lower(btrim(name)) = lower(v_name) and id <> p_id) then
+    raise exception 'that name is taken' using errcode = '23505';
+  end if;
   perform racing_rate_limit('player', 60, 1200);
   insert into racing_players as p (id, key_hash, name, avatar, color, number, bio, car, garage)
     values (p_id, encode(sha256(convert_to(p_key, 'UTF8')), 'hex'), v_name, v_avatar, v_color,
@@ -580,7 +673,7 @@ begin
       car = excluded.car,
       garage = excluded.garage,
       updated_at = now()
-    where p.key_hash = excluded.key_hash;
+    where racing_key_opens(p.id, p_key);
   get diagnostics v_rows = row_count;
   if v_rows = 0 then
     raise exception 'that player belongs to another device' using errcode = '42501';
@@ -588,7 +681,7 @@ begin
 end;
 $$;
 
--- a device's own profile, gone. its laps stay on the board under their names
+-- the profile, gone from every device. its laps stay on the board under their names
 create or replace function public.racing_delete_player(p_id uuid, p_key text)
 returns void
 language plpgsql
@@ -597,12 +690,113 @@ set search_path = public
 as $$
 begin
   perform racing_rate_limit('player', 60, 1200);
-  delete from racing_players
-    where id = p_id and key_hash = encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex');
+  delete from racing_players where id = p_id and racing_key_opens(p_id, p_key);
   if not found then
     raise exception 'no player with that key' using errcode = '42501';
   end if;
 end;
+$$;
+
+-- a password for signing in to the player on other devices: 8 to 72
+-- characters (bcrypt reads 72 bytes)
+create or replace function public.racing_set_password(p_id uuid, p_key text, p_password text)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if char_length(coalesce(p_password, '')) < 8 or octet_length(p_password) > 72 then
+    raise exception 'a password is 8 to 72 characters' using errcode = '22023';
+  end if;
+  perform racing_rate_limit('player', 60, 1200);
+  update racing_players set password_hash = crypt(p_password, gen_salt('bf', 10)), updated_at = now()
+    where id = p_id and racing_key_opens(p_id, p_key);
+  if not found then
+    raise exception 'no player with that key' using errcode = '42501';
+  end if;
+end;
+$$;
+
+-- another device signs in with the player's name and password, and its new
+-- key opens the player from then on. given the device's player before (with
+-- its key), that one's laps and runs move over and it goes. a wrong name or
+-- password returns signed_in false instead of raising, so the try is still
+-- counted: 30 a client, and 10 a client and 20 in all on one player, per 10
+-- minutes, then 53400
+create or replace function public.racing_sign_in(p_name text, p_password text, p_key text,
+  p_from_id uuid default null, p_from_key text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_player racing_players%rowtype;
+  v_known boolean;
+begin
+  if coalesce(p_key, '') !~ '^[A-Za-z0-9_-]{32,128}$' then
+    raise exception 'a device key is needed' using errcode = '22023';
+  end if;
+  perform racing_rate_limit('signin', 30, 600);
+  select * into v_player from racing_players where lower(btrim(name)) = lower(btrim(coalesce(p_name, '')));
+  v_known := found;
+  if v_known then
+    perform racing_rate_limit('signin:' || v_player.id, 10, 20);
+  end if;
+  if not v_known or v_player.password_hash is null
+     or crypt(coalesce(p_password, ''), v_player.password_hash) <> v_player.password_hash then
+    return jsonb_build_object('signed_in', false);
+  end if;
+  insert into racing_player_keys (player_id, key_hash)
+    values (v_player.id, encode(sha256(convert_to(p_key, 'UTF8')), 'hex'))
+    on conflict do nothing;
+  if p_from_id is not null and p_from_id <> v_player.id and racing_key_opens(p_from_id, p_from_key) then
+    update nordschleife_leaderboard set player_id = v_player.id where player_id = p_from_id;
+    update drift_park_scores set player_id = v_player.id where player_id = p_from_id;
+    delete from racing_players where id = p_from_id;
+  end if;
+  return jsonb_build_object('signed_in', true, 'player', jsonb_build_object(
+    'id', v_player.id, 'name', v_player.name, 'avatar', v_player.avatar, 'color', v_player.color,
+    'number', v_player.number, 'bio', v_player.bio, 'car', v_player.car, 'garage', v_player.garage,
+    'created_at', v_player.created_at));
+end;
+$$;
+
+-- this device's key stops opening the player. the key it was made with
+-- can't leave its row, so the row gets a hash no key has
+create or replace function public.racing_sign_out(p_id uuid, p_key text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_hash text := encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex');
+begin
+  perform racing_rate_limit('player', 60, 1200);
+  if not racing_key_opens(p_id, p_key) then
+    raise exception 'no player with that key' using errcode = '42501';
+  end if;
+  delete from racing_player_keys where player_id = p_id and key_hash = v_hash;
+  update racing_players
+    set key_hash = encode(sha256(convert_to(gen_random_uuid()::text || gen_random_uuid()::text, 'UTF8')), 'hex')
+    where id = p_id and key_hash = v_hash;
+end;
+$$;
+
+-- whether this device's player has a password to sign in elsewhere with.
+-- null for a key that doesn't open it
+create or replace function public.racing_account(p_id uuid, p_key text)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select jsonb_build_object('password', password_hash is not null)
+  from racing_players
+  where id = p_id and racing_key_opens(p_id, p_key);
 $$;
 
 -- whose lap or run it is
@@ -617,8 +811,9 @@ create index if not exists idx_drift_park_scores_player
 
 -- a lap or run sent with a player's id and key (x-player-id, x-player-key) is
 -- theirs, and a device that hasn't saved its profile yet gets one with the
--- lap's name. anything else through the api is nobody's, whatever the row
--- said. the sql editor (no request headers) keeps what it's given
+-- lap's name (or the first free one after it). anything else through the api
+-- is nobody's, whatever the row said, and can't carry a player's name
+-- (23505). the sql editor (no request headers) keeps what it's given
 create or replace function public.racing_attribute_player()
 returns trigger
 language plpgsql
@@ -628,7 +823,8 @@ as $$
 declare
   v_headers json;
   v_id uuid;
-  v_hash text;
+  v_key text;
+  v_try integer;
 begin
   begin
     v_headers := nullif(current_setting('request.headers', true), '')::json;
@@ -639,22 +835,33 @@ begin
     return new;
   end if;
   new.player_id := null;
-  if coalesce(v_headers ->> 'x-player-key', '') !~ '^[A-Za-z0-9_-]{32,128}$' then
-    return new;
-  end if;
+  v_key := coalesce(v_headers ->> 'x-player-key', '');
   begin
     v_id := (v_headers ->> 'x-player-id')::uuid;
   exception when others then
-    return new;
+    v_id := null;
   end;
-  if v_id is null then
-    return new;
+  if v_id is not null and v_key ~ '^[A-Za-z0-9_-]{32,128}$' then
+    -- another fresh device can take the same free name at the same moment:
+    -- the next try sees it and takes the one after
+    for v_try in 1 .. 3 loop
+      exit when exists (select 1 from racing_players where id = v_id);
+      begin
+        insert into racing_players (id, key_hash, name)
+          values (v_id, encode(sha256(convert_to(v_key, 'UTF8')), 'hex'),
+            coalesce(racing_free_name(new.name, v_id), 'Driver ' || left(v_id::text, 8)))
+          on conflict (id) do nothing;
+      exception when unique_violation then
+        null;
+      end;
+    end loop;
+    if racing_key_opens(v_id, v_key) then
+      new.player_id := v_id;
+      return new;
+    end if;
   end if;
-  v_hash := encode(sha256(convert_to(v_headers ->> 'x-player-key', 'UTF8')), 'hex');
-  insert into racing_players (id, key_hash, name) values (v_id, v_hash, btrim(new.name))
-    on conflict (id) do nothing;
-  if exists (select 1 from racing_players where id = v_id and key_hash = v_hash) then
-    new.player_id := v_id;
+  if exists (select 1 from racing_players where lower(btrim(name)) = lower(btrim(new.name))) then
+    raise exception 'that name is taken' using errcode = '23505';
   end if;
   return new;
 end;
@@ -786,6 +993,7 @@ grant select on public.nordschleife_removed_laps to anon, authenticated;
 revoke all on public.racing_players from anon, authenticated;
 grant select (id, name, avatar, color, number, bio, car, garage, created_at, updated_at)
   on public.racing_players to anon, authenticated;
+revoke all on public.racing_player_keys from anon, authenticated;
 
 revoke all on function public.nordschleife_limit_lap_inserts() from public, anon, authenticated;
 revoke all on function public.racing_client_net() from public, anon, authenticated;
@@ -797,6 +1005,18 @@ revoke all on function public.racing_save_player(uuid, text, jsonb) from public;
 grant execute on function public.racing_save_player(uuid, text, jsonb) to anon, authenticated;
 revoke all on function public.racing_delete_player(uuid, text) from public;
 grant execute on function public.racing_delete_player(uuid, text) to anon, authenticated;
+revoke all on function public.racing_key_opens(uuid, text) from public, anon, authenticated;
+revoke all on function public.racing_free_name(text, uuid) from public, anon, authenticated;
+revoke all on function public.racing_name_free(text, uuid) from public;
+grant execute on function public.racing_name_free(text, uuid) to anon, authenticated;
+revoke all on function public.racing_set_password(uuid, text, text) from public;
+grant execute on function public.racing_set_password(uuid, text, text) to anon, authenticated;
+revoke all on function public.racing_sign_in(text, text, text, uuid, text) from public;
+grant execute on function public.racing_sign_in(text, text, text, uuid, text) to anon, authenticated;
+revoke all on function public.racing_sign_out(uuid, text) from public;
+grant execute on function public.racing_sign_out(uuid, text) to anon, authenticated;
+revoke all on function public.racing_account(uuid, text) from public;
+grant execute on function public.racing_account(uuid, text) to anon, authenticated;
 revoke all on function public.racing_driver(text, text) from public;
 grant execute on function public.racing_driver(text, text) to anon, authenticated;
 revoke all on function public.nordschleife_board(text, boolean, text) from public;

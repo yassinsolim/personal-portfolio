@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { carOptions, carOptionsById } from '../../carOptions';
 import { carThumb } from './CarPicker';
 import PlayerBadge from './PlayerBadge';
+import { AccountBox } from './AccountBox';
+import { ask } from '../ask';
 import { MAX_DRIVER_NAME } from '../../Racing/Multiplayer/driverName';
 import {
     AVATARS,
@@ -11,6 +13,7 @@ import {
     deviceGarage,
     sanitizeColor,
     sanitizeNumber,
+    type PlayerProfile,
     type ProfileDraft,
 } from '../../Racing/Profile/profile';
 import type { SaveStatus } from '../../Racing/Profile/ProfileService';
@@ -22,10 +25,12 @@ type Props = {
     onDraft: (draft: ProfileDraft) => void;
     status: SaveStatus | null;
     drivenCar: string;
-    // this device has a player to show
-    canView: boolean;
+    // this device's player, when it has one to show
+    playerId: string | null;
     onView: () => void;
     onRemove: () => void;
+    onSignedIn: (player: PlayerProfile) => void;
+    onSignedOut: () => void;
 };
 
 const AVATAR_LABEL: Record<string, string> = {
@@ -40,18 +45,53 @@ const STATUS: Record<SaveStatus, string> = {
     limited: 'That was a lot of changes. Saving again in a minute.',
     error: "Couldn't save. Trying again shortly.",
     removed: 'Profile reset. Your old laps stay on the board under their names.',
+    taken: 'Someone else races under that name. Pick another, or sign in if that profile is yours.',
 };
 
 const CARS = [...carOptions].sort((a, b) => a.label.localeCompare(b.label));
 
 // the profile tab: how you show up on the board (the badge, name, number and
-// bio, and the car you show off), saved as you change it
-const ProfileTab = ({ name, onName, draft, onDraft, status, drivenCar, canView, onView, onRemove }: Props) => {
+// bio, and the car you show off), saved as you change it, and racing as it
+// on your other devices
+const ProfileTab = ({
+    name,
+    onName,
+    draft,
+    onDraft,
+    status,
+    drivenCar,
+    playerId,
+    onView,
+    onRemove,
+    onSignedIn,
+    onSignedOut,
+}: Props) => {
     const [confirming, setConfirming] = useState(false);
+    // a name someone else races under, worked out a moment after typing
+    const [taken, setTaken] = useState<string | null>(null);
     const modded = useMemo(() => new Set(Object.keys(deviceGarage(null))), []);
     const car = draft.car || drivenCar;
     const shownName = cleanText(name, MAX_DRIVER_NAME) || 'Driver';
+    const canView = Boolean(playerId);
     const set = (change: Partial<ProfileDraft>) => onDraft({ ...draft, ...change });
+
+    useEffect(() => {
+        const typed = name.trim();
+        if (!typed) {
+            setTaken(null);
+            return undefined;
+        }
+        let live = true;
+        const timer = window.setTimeout(() => {
+            void ask<boolean>('race:nameFree', { name: typed }).then((free) => {
+                if (live) setTaken(free ? null : typed);
+            });
+        }, 400);
+        return () => {
+            live = false;
+            window.clearTimeout(timer);
+        };
+    }, [name, playerId]);
 
     return (
         <div className="pmp">
@@ -111,10 +151,17 @@ const ProfileTab = ({ name, onName, draft, onDraft, status, drivenCar, canView, 
                 </div>
                 {confirming && (
                     <p className="pm-note">
-                        Your profile comes off the board and starts over. Your old laps stay, under the names
-                        they were set with.
+                        Your profile comes off the board, on every device signed in to it, and starts over. Your old
+                        laps stay, under the names they were set with.
                     </p>
                 )}
+                <AccountBox
+                    key={playerId || 'none'}
+                    name={shownName}
+                    saved={canView}
+                    onSignedIn={onSignedIn}
+                    onSignedOut={onSignedOut}
+                />
             </section>
 
             <section className="pmp-form">
@@ -125,9 +172,15 @@ const ProfileTab = ({ name, onName, draft, onDraft, status, drivenCar, canView, 
                     maxLength={MAX_DRIVER_NAME}
                     placeholder="Your name"
                     aria-label="Driver name"
+                    aria-invalid={Boolean(taken)}
                     spellCheck={false}
                     onChange={(event) => onName(event.target.value.slice(0, MAX_DRIVER_NAME))}
                 />
+                {taken && (
+                    <p className="pm-note pmp-taken" role="alert">
+                        Someone else races as {taken}. Names are one per driver.
+                    </p>
+                )}
 
                 <h4>Badge</h4>
                 <div className="pmp-avatars" role="radiogroup" aria-label="Badge">

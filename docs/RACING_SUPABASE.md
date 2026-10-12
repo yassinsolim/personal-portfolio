@@ -84,15 +84,29 @@ Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, 
   `racing_rate_limit`.
 - `racing_players`: driver profiles (name, badge, color, race number, bio, the car shown off,
   and a `garage` of each set up car's look and tune codes). Public to read except `key_hash`
-  (column grants, so the api has to name the columns it reads). The browser can't write the
-  table: `racing_save_player(id, key, profile)` makes a profile, or changes one with the key it
-  was made with (only the key's sha256 is stored), checking every field and capping saves at 60
-  per 10 minutes per client. `racing_delete_player(id, key)` takes one off; its laps stay with
-  `player_id` cleared.
+  and `password_hash` (column grants, so the api has to name the columns it reads). The
+  browser can't write the table: `racing_save_player(id, key, profile)` makes a profile, or
+  changes one with a key that opens it (only keys' sha256 are stored), checking every field and
+  capping saves at 60 per 10 minutes per client. `racing_delete_player(id, key)` takes one off;
+  its laps stay with `player_id` cleared.
+- One player to a name, in any case (a unique index on `lower(btrim(name))`).
+  `racing_name_free(name, id)` tells the game before it saves, a save with another's name is
+  23505, and players that shared a name before keep it for the first one and get the next free
+  one ("yass 2") otherwise.
+- Signing in on other devices: `racing_set_password(id, key, password)` keeps a bcrypt hash
+  (pgcrypto, 8 to 72 characters). `racing_sign_in(name, password, key, from id, from key)`
+  adds the device's own key to `racing_player_keys` (private) and, given the device's player
+  before with its key, moves that one's laps and runs over and deletes it. A wrong name or
+  password returns `signed_in` false rather than raising, so the try stays counted: 30 per
+  client, and 10 per client and 20 in all on one player, per 10 minutes. `racing_sign_out(id,
+  key)` stops that device's key opening the player, and `racing_account(id, key)` says whether
+  it has a password. There's no email, so a forgotten password is changed from a device that's
+  still signed in.
 - `player_id` on laps and drift runs: a trigger sets it from the `x-player-id` and
-  `x-player-key` request headers when the key matches (a device that hasn't saved its profile
-  yet gets one with the lap's name), and clears whatever the row said otherwise. The SQL
-  editor sends no headers and keeps what it's given. Old laps have no player.
+  `x-player-key` request headers when the key opens the player (a device that hasn't saved its
+  profile yet gets one with the lap's name, or the next free one), and clears whatever the row
+  said otherwise. A lap without a player can't carry a player's name (23505). The SQL editor
+  sends no headers and keeps what it's given. Old laps have no player.
 - The boards are each driver's best: `nordschleife_board(season, tuned, car)` returns the
   fastest verified lap per driver (stock or tuned, every car or one) for the api to order and
   page, and `drift_park_board(season)` the best run per driver. A driver is their profile's

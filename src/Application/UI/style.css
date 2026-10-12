@@ -2741,6 +2741,112 @@ button:hover:not(:disabled) > .track-map {
     color: var(--ui-warn);
 }
 
+.race-menu-panel .pm-note.pmp-taken {
+    margin: 6px 0 0;
+    color: var(--ui-warn);
+}
+
+/* racing as your profile on other devices: its box in the profile tab, and
+   signing in there and on the name card */
+.pmp-account {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+    padding: 12px 14px 14px;
+    border: 1px solid var(--ui-line);
+    border-radius: 12px;
+}
+
+.race-menu-panel .pmp-account h4,
+.race-menu-panel .pmp-account .pm-note {
+    margin: 0;
+}
+
+.race-menu-panel .pmp-account .pm-note strong {
+    color: #fff;
+}
+
+.acct-signin,
+.acct-password {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.acct-signin input:not([type='checkbox']) {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid var(--ui-line);
+    border-radius: 9px;
+    background: var(--ui-fill);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+}
+
+.acct-signin input:not([type='checkbox']):focus {
+    border-color: var(--ui-accent);
+}
+
+.race-name-card .acct-signin input:not([type='checkbox']) {
+    height: 42px;
+    border-color: var(--ui-line-strong);
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+.acct-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+
+.acct-check input {
+    accent-color: var(--ui-accent);
+}
+
+.race-menu-panel .acct-error,
+.race-name-card .acct-error {
+    margin: 0;
+    color: var(--ui-warn);
+    font-size: 12.5px;
+}
+
+.acct-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.race-name-card .acct-actions button {
+    flex: 1;
+}
+
+.race-menu-panel .acct-link,
+.race-name-card .acct-link {
+    align-self: flex-start;
+    height: auto;
+    padding: 2px 0;
+    border: 0;
+    background: none;
+    color: var(--ui-muted);
+    font-size: 12.5px;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+}
+
+.race-menu-panel .acct-link:hover:not(:disabled),
+.race-name-card .acct-link:hover {
+    border: 0;
+    background: none;
+    color: #fff;
+}
+
 /* a driver's card, over the menu like a lap's (which can open over it) */
 .player-card.covered {
     opacity: 0.15;

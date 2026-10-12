@@ -31,6 +31,8 @@ import DriftScore, { type DriftEvent } from './Lap/DriftScore';
 import {
     decodeTune,
     isStockSetup,
+    loadLook,
+    loadTune,
     sanitizeLook,
     sanitizeTune,
     STOCK_LOOK,
@@ -44,7 +46,7 @@ import LeaderboardService from './Leaderboard/LeaderboardService';
 import { addRemovedNotices } from './Leaderboard/removedLaps';
 import { BOARD_SIZE, sanitizeBoardQuery, type BoardQuery } from './Leaderboard/boardQuery';
 import ProfileService from './Profile/ProfileService';
-import { isPlayerId, readIdentity, sanitizePayload } from './Profile/profile';
+import { importGarage, isPlayerId, readIdentity, sanitizePayload } from './Profile/profile';
 import RaceEngineAudio from './Audio/RaceEngineAudio';
 import type { RemoteCarAudioState } from './Audio/CarAudio';
 import GhostReplay, { type GhostLapReplay } from './Ghost/GhostReplay';
@@ -711,6 +713,28 @@ export default class RaceManager {
         UIEventBus.on('race:buildOpen', (state: unknown) => void this.openBuild(state));
         UIEventBus.on('race:applySetup', (state: unknown) => this.applySetup(state));
         UIEventBus.on('race:profileSave', (payload: unknown) => this.profiles.save(sanitizePayload(payload)));
+        // the profile tab's and the name card's questions, each answered with its id
+        const answer = (request: string, handle: (state: Record<string, unknown>) => Promise<unknown>) =>
+            UIEventBus.on(request, async (state: Record<string, unknown> | undefined) => {
+                const result = await handle(state || {});
+                UIEventBus.dispatch(`${request}:done`, { id: state?.id, result });
+            });
+        answer('race:nameFree', (state) => this.profiles.nameFree(String(state.name || '')));
+        answer('race:account', () => this.profiles.account());
+        answer('race:setPassword', (state) => this.profiles.setPassword(String(state.password || '')));
+        answer('race:signOut', () => this.profiles.signOut());
+        answer('race:signIn', async (state) => {
+            const result = await this.profiles.signIn(
+                String(state.name || ''),
+                String(state.password || ''),
+                state.bring === true
+            );
+            if (result.status === 'in') {
+                importGarage(result.player.garage);
+                this.reloadGarage();
+            }
+            return result;
+        });
         UIEventBus.on('race:profileRemove', async () => {
             const status = await this.profiles.remove();
             UIEventBus.dispatch('race:profileStatus', { status });
@@ -1406,6 +1430,20 @@ export default class RaceManager {
         this.publishGarage();
         this.applyLine();
         this.startLapTimer();
+    }
+
+    // the device's setups changed under the car (signed in to a player with
+    // its own): it takes its setup again, and a changed one starts the lap over
+    reloadGarage() {
+        const carId = this.vehicle.currentCarId;
+        const before = JSON.stringify([this.vehicle.look, this.vehicle.tune]);
+        this.vehicle.setGarage(loadLook(carId), loadTune(carId), false);
+        this.publishGarage();
+        this.applyLine();
+        if (this.garageOpen) this.dispatchGarage();
+        if (this.active && before !== JSON.stringify([this.vehicle.look, this.vehicle.tune])) {
+            this.startLapTimer();
+        }
     }
 
     // a board lap picked from its card: the ghost races you on it from now on

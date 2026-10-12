@@ -1,11 +1,16 @@
 import { carOptions, carOptionsById } from '../../carOptions';
 import {
+    decodeLook,
+    decodeTune,
     encodeLook,
     isStockSetup,
     loadLook,
     loadTune,
     sameLook,
+    saveLook,
+    saveTune,
     STOCK_LOOK,
+    STOCK_TUNE,
     tuneCode,
 } from '../Garage/garage';
 
@@ -230,6 +235,20 @@ const newKey = () =>
         .replace(/\//g, '_')
         .replace(/=+$/, '');
 
+// a key for this device alone, when it signs in to a player
+export const newDeviceKey = newKey;
+
+// false when the browser won't keep it
+export const writeIdentity = (identity: Identity) => {
+    try {
+        storage()?.setItem(IDENTITY_KEY, JSON.stringify(identity));
+    } catch {
+        return false;
+    }
+    const kept = readIdentity();
+    return kept?.id === identity.id && kept.key === identity.key;
+};
+
 // this device's player, made the first time it's needed. without storage
 // there's no lasting player, so none
 export const ensureIdentity = (): Identity | null => {
@@ -282,6 +301,15 @@ export const deviceGarage = (featured: string | null): GarageCodes => {
         if (entry.look || entry.tune || id === featured) garage[id] = entry;
     });
     return garage;
+};
+
+// a signed in player's setups on this device, car by car. the device's
+// other cars keep theirs
+export const importGarage = (garage: GarageCodes) => {
+    Object.entries(sanitizeGarage(garage)).forEach(([carId, codes]) => {
+        saveLook(carId, decodeLook(codes.look));
+        saveTune(carId, decodeTune(codes.tune)?.tune || STOCK_TUNE);
+    });
 };
 
 // what goes to the database: the draft, the driver name, the car shown off

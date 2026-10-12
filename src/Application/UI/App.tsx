@@ -42,10 +42,12 @@ import TrackMap from './components/TrackMap';
 import NameCard from './components/NameCard';
 import { isDefaultDriverName } from '../Racing/Multiplayer/driverName';
 import {
+    DEFAULT_DRAFT,
     profilePayload,
     readDraft,
     readIdentity,
     writeDraft,
+    type PlayerProfile,
     type ProfileDraft,
 } from '../Racing/Profile/profile';
 import type { SaveStatus } from '../Racing/Profile/ProfileService';
@@ -382,6 +384,8 @@ const App = () => {
     const [profileDraft, setProfileDraft] = useState<ProfileDraft>(() => readDraft());
     const [profileStatus, setProfileStatus] = useState<SaveStatus | null>(null);
     const [myId, setMyId] = useState<string | null>(() => readIdentity()?.id || null);
+    // the saved name turned out to be another driver's
+    const [nameTaken, setNameTaken] = useState(false);
     const stopWatching = useCallback(() => eventBus.dispatch('race:watchStop', {}), []);
     // this device's laps taken off the board, waiting to be explained
     const [removedLaps, setRemovedLaps] = useState<RemovedLap[]>(() => readRemovedNotices());
@@ -523,6 +527,9 @@ const App = () => {
         eventBus.on('race:profileStatus', (state: { status?: SaveStatus } | undefined) => {
             setProfileStatus(state?.status || null);
             setMyId(readIdentity()?.id || null);
+            // someone else has the name: the name card asks for another
+            if (state?.status === 'taken') setNameTaken(true);
+            else if (state?.status === 'saved') setNameTaken(false);
         });
 
         eventBus.on('race:watchState', (state: { on?: boolean; durationMs?: number } | undefined) => {
@@ -980,13 +987,14 @@ const App = () => {
         return () => window.removeEventListener('keydown', onKey);
     }, [raceModeActive, garageOpen, racePaused, inLobbyRace, openGarageFromRace]);
 
-    // the first drive on a device asks for a name, once the car is on the road
+    // the first drive on a device asks for a name, once the car is on the
+    // road, and so does a name that turned out to be someone else's
     useEffect(() => {
         if (!raceModeActive) setAskName(false);
-        else if (!racePaused && !garageOpen && !transitionLocked && needsDriverName()) {
+        else if (!racePaused && !garageOpen && !transitionLocked && (nameTaken || needsDriverName())) {
             setAskName(true);
         }
-    }, [raceModeActive, racePaused, garageOpen, transitionLocked]);
+    }, [raceModeActive, racePaused, garageOpen, transitionLocked, nameTaken]);
 
     // the profile goes out a moment after the last change, as a race starts
     // and when the garage closes or a card's setup goes on (its setups are on
@@ -1006,6 +1014,31 @@ const App = () => {
         setProfileDraft(draft);
         writeDraft(draft);
     }, []);
+
+    // this device signed in to a profile from another: its name and badge
+    // here too (its setups are on the car already)
+    const signedIn = (player: PlayerProfile) => {
+        savePlayerName(player.name);
+        changeProfile({
+            avatar: player.avatar,
+            color: player.color,
+            number: player.number,
+            bio: player.bio,
+            car: player.car,
+        });
+        setMyId(player.id);
+        setProfileStatus(null);
+        setNameTaken(false);
+        setAskName(false);
+    };
+
+    // signed out: a new driver, asked for a name on the next drive
+    const signedOut = () => {
+        savePlayerName('');
+        changeProfile({ ...DEFAULT_DRAFT });
+        setMyId(null);
+        setProfileStatus(null);
+    };
 
     // your own card falls back on what's on this device
     const localPlayer = useMemo(
@@ -1626,6 +1659,8 @@ const App = () => {
                     onProfileDraft={changeProfile}
                     profileStatus={profileStatus}
                     onRemoveProfile={() => eventBus.dispatch('race:profileRemove', {})}
+                    onSignedIn={signedIn}
+                    onSignedOut={signedOut}
                     lineMode={lineMode}
                     steering={steering}
                     onResume={handleResumeRace}
@@ -1708,10 +1743,14 @@ const App = () => {
             )}
             {raceModeActive && askName && (
                 <NameCard
+                    taken={nameTaken ? playerName || null : null}
+                    canBring={Boolean(myId)}
                     onDone={(name) => {
                         savePlayerName(name);
+                        setNameTaken(false);
                         setAskName(false);
                     }}
+                    onSignedIn={signedIn}
                 />
             )}
             {raceModeActive && !askName && !sceneOnly && removedLaps[0] && (

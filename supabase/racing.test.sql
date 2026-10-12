@@ -541,6 +541,169 @@ end $$;
 select set_config('request.headers', '', false);
 insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('Admin', 400000, 'bmw-e92-m3@v3');
 
+-- one player to a name in any case: a save can't take another's, a lap
+-- without a player can't carry one, and a fresh device's lap gets the next
+-- free name
+do $$
+declare
+  ann uuid := gen_random_uuid();
+  fresh uuid := gen_random_uuid();
+  key text := repeat('u', 43);
+  lap uuid;
+  ok boolean;
+begin
+  delete from public.nordschleife_rate_events;
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.210"}', true);
+  set local role anon;
+  perform public.racing_save_player(ann, key, '{"name": "QA Unique"}');
+  begin
+    perform public.racing_save_player(gen_random_uuid(), repeat('v', 43), '{"name": " qa UNIQUE "}');
+    ok := true;
+  exception when unique_violation then ok := false;
+  end;
+  if ok then raise exception 'a second player took a name'; end if;
+  perform public.racing_save_player(ann, key, '{"name": "QA UNIQUE"}');
+  if public.racing_name_free('qa unique') or not public.racing_name_free('qa unique', ann)
+     or not public.racing_name_free('QA Nobody') then
+    raise exception 'racing_name_free got a name wrong';
+  end if;
+  begin
+    insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('qa unique', 400000, 'bmw-e92-m3@v6');
+    ok := true;
+  exception when unique_violation then ok := false;
+  end;
+  if ok then raise exception 'a lap without a player took a name'; end if;
+  reset role;
+
+  perform set_config('request.headers',
+    json_build_object('sb-forwarded-for', '203.0.113.210', 'x-player-id', fresh, 'x-player-key', repeat('w', 43))::text, true);
+  set local role anon;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id)
+    values ('QA Unique', 400000, 'bmw-e92-m3@v6') returning id into lap;
+  reset role;
+  if (select name from public.racing_players where id = fresh) is distinct from 'QA Unique 2'
+     or (select player_id from public.nordschleife_leaderboard where id = lap) is distinct from fresh then
+    raise exception 'a fresh device''s lap with a taken name didn''t get the next one';
+  end if;
+  if public.racing_free_name('abcdefghijklmnop', null) <> 'abcdefghijklmnop' then
+    raise exception 'a free name changed';
+  end if;
+  insert into public.racing_players (id, key_hash, name) values (gen_random_uuid(), repeat('0', 64), 'ABCDEFGHIJKLMNOP');
+  if public.racing_free_name('abcdefghijklmnop', null) <> 'abcdefghijklmn 2' then
+    raise exception 'a long taken name wasn''t cut for its number: %', public.racing_free_name('abcdefghijklmnop', null);
+  end if;
+  delete from public.nordschleife_leaderboard where id = lap;
+  delete from public.racing_players where id in (ann, fresh) or name = 'ABCDEFGHIJKLMNOP';
+  delete from public.nordschleife_rate_events;
+end $$;
+
+-- a password lets another device sign in with its own key, bringing the
+-- laps of the player it had. a wrong one is counted and then limited, a
+-- device signs out on its own, and the api can't read hashes or keys
+do $$
+declare
+  me uuid := gen_random_uuid();
+  phone uuid := gen_random_uuid();
+  key text := repeat('p', 43);
+  phone_key text := repeat('q', 43);
+  new_key text := repeat('n', 43);
+  lap uuid;
+  ok boolean;
+  result jsonb;
+  i int;
+begin
+  delete from public.nordschleife_rate_events;
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.220"}', true);
+  set local role anon;
+  perform public.racing_save_player(me, key, '{"name": "QA Account", "bio": "both devices"}');
+  perform public.racing_save_player(phone, phone_key, '{"name": "QA Phone"}');
+  if public.racing_account(me, key) <> '{"password": false}'::jsonb or public.racing_account(me, phone_key) is not null then
+    raise exception 'racing_account answered wrong before a password';
+  end if;
+  begin
+    perform public.racing_set_password(me, key, 'short');
+    ok := true;
+  exception when invalid_parameter_value then ok := false;
+  end;
+  if ok then raise exception 'a short password was taken'; end if;
+  begin
+    perform public.racing_set_password(me, phone_key, 'correct horse');
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'another device set the password'; end if;
+  perform public.racing_set_password(me, key, 'correct horse');
+  if public.racing_account(me, key) <> '{"password": true}'::jsonb then
+    raise exception 'the password didn''t take';
+  end if;
+  reset role;
+
+  perform set_config('request.headers',
+    json_build_object('sb-forwarded-for', '203.0.113.221', 'x-player-id', phone, 'x-player-key', phone_key)::text, true);
+  set local role anon;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id)
+    values ('QA Phone', 400000, 'amg-one@v6') returning id into lap;
+  result := public.racing_sign_in('qa account', 'wrong horse', new_key, phone, phone_key);
+  if result <> '{"signed_in": false}'::jsonb then raise exception 'a wrong password signed in: %', result; end if;
+  result := public.racing_sign_in('QA Nobody', 'correct horse', new_key);
+  if result <> '{"signed_in": false}'::jsonb then raise exception 'a name nobody has signed in'; end if;
+  result := public.racing_sign_in(' QA ACCOUNT', 'correct horse', new_key, phone, phone_key);
+  if not (result ->> 'signed_in')::boolean or result -> 'player' ->> 'id' <> me::text
+     or result -> 'player' ->> 'bio' <> 'both devices' or result -> 'player' ? 'password_hash' then
+    raise exception 'signing in went wrong: %', result;
+  end if;
+  perform public.racing_save_player(me, new_key, '{"name": "QA Account", "bio": "from the phone"}');
+  reset role;
+  if (select player_id from public.nordschleife_leaderboard where id = lap) is distinct from me
+     or exists (select 1 from public.racing_players where id = phone) then
+    raise exception 'the phone''s laps didn''t come over';
+  end if;
+
+  set local role anon;
+  begin perform password_hash from public.racing_players; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon read a password hash'; end if;
+  begin perform key_hash from public.racing_player_keys; ok := true; exception when insufficient_privilege then ok := false; end;
+  if ok then raise exception 'anon read the device keys'; end if;
+  begin
+    perform public.racing_key_opens(me, key);
+    ok := true;
+  exception when insufficient_privilege then ok := false;
+  end;
+  if ok then raise exception 'anon can try keys'; end if;
+
+  perform public.racing_sign_out(me, new_key);
+  if public.racing_account(me, new_key) is not null or public.racing_account(me, key) is null then
+    raise exception 'signing out took the wrong device off';
+  end if;
+  perform public.racing_sign_out(me, key);
+  if public.racing_account(me, key) is not null then
+    raise exception 'the first device stayed signed in';
+  end if;
+  result := public.racing_sign_in('QA Account', 'correct horse', key);
+  if not (result ->> 'signed_in')::boolean or public.racing_account(me, key) is null then
+    raise exception 'the first device couldn''t sign back in';
+  end if;
+  reset role;
+
+  delete from public.nordschleife_rate_events;
+  perform set_config('request.headers', '{"sb-forwarded-for": "203.0.113.222"}', true);
+  set local role anon;
+  for i in 1 .. 10 loop
+    result := public.racing_sign_in('QA Account', 'guess ' || i, new_key);
+  end loop;
+  begin
+    result := public.racing_sign_in('QA Account', 'correct horse', new_key);
+    ok := true;
+  exception when sqlstate '53400' then ok := false;
+  end;
+  if ok then raise exception 'ten wrong passwords weren''t limited'; end if;
+  reset role;
+
+  delete from public.nordschleife_leaderboard where id = lap;
+  delete from public.racing_players where id = me;
+  delete from public.nordschleife_rate_events;
+end $$;
+
 -- the boards are each driver's best: a driver is their profile's name or the
 -- lap's, in any case. unverified laps, other seasons and the other board
 -- don't count, and a lap says how it stands
