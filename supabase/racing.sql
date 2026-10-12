@@ -742,7 +742,8 @@ as $$
   from cur;
 $$;
 
--- the drift park's board: each driver's best run of a season ("@d1")
+-- the drift park's board: each driver's best run of a season ("@d1"), the
+-- quicker lap on a tied score as on the device's own board
 create or replace function public.drift_park_board(p_season text)
 returns setof public.drift_park_scores
 language sql
@@ -753,7 +754,7 @@ as $$
   left join public.racing_players p on p.id = s.player_id
   where p_season ~ '^@d[0-9]{1,3}$'
     and (s.car_id like '%' || p_season or s.car_id like '%' || p_season || '~t%')
-  order by public.racing_driver(p.name, s.name), s.score desc, s.created_at;
+  order by public.racing_driver(p.name, s.name), s.score desc, s.lap_time_ms, s.created_at;
 $$;
 
 -- ---------------------------------------------------------------- realtime

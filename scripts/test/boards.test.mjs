@@ -110,6 +110,7 @@ test("the drift park's board is each driver's best run", async () => {
     assert.deepEqual(calls[0].args, { p_season: '@d1' });
     assert.deepEqual(calls[0].chain.slice(1), [
         ['order', 'score', { ascending: false }],
+        ['order', 'lap_time_ms', { ascending: true }],
         ['limit', 10],
     ]);
 });

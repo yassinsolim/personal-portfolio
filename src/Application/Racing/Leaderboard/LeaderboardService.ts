@@ -918,6 +918,7 @@ export default class LeaderboardService {
                 .rpc('drift_park_board', { p_season: DRIFT_TAG }, { get: true })
                 .select(DRIFT_COLUMNS)
                 .order('score', { ascending: false })
+                .order('lap_time_ms', { ascending: true })
                 .limit(limit);
             if (error || !data) return localEntries;
             return (data as unknown as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));

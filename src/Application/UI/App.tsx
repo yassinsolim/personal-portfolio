@@ -1372,7 +1372,9 @@ const App = () => {
             {raceModeActive && !garageOpen && !sceneOnly && hud.track === 'drift' && hud.drift && (
                 <DriftHud drift={hud.drift} best={driftBoard[0]?.score || 0} />
             )}
-            {raceModeActive && trackState.track === 'ring' && !sceneOnly && !garageOpen && <LapResultBanner />}
+            {raceModeActive && (
+                <LapResultBanner hidden={trackState.track !== 'ring' || sceneOnly || garageOpen} />
+            )}
             {raceModeActive && trackState.building && (
                 <div className="drift-building" data-prevent-click>
                     Building the drift park

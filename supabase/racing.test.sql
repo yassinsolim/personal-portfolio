@@ -622,11 +622,13 @@ begin
     ('QA Ann', 50000, 82000, 'bmw-e92-m3@d99'),
     ('qa ann', 60000, 82000, 'amg-one@d99~tx'),
     ('QA Bob', 55000, 82000, 'bmw-e92-m3@d99'),
-    ('QA Bob', 99999, 82000, 'bmw-e92-m3@d999');
+    ('QA Bob', 99999, 82000, 'bmw-e92-m3@d999'),
+    ('QA Dee', 52000, 90000, 'bmw-e92-m3@d99'),
+    ('QA Dee', 52000, 85000, 'bmw-e92-m3@d99');
   set local role anon;
-  select string_agg(name || ' ' || score, ', ' order by score desc) into got
+  select string_agg(name || ' ' || score || ' ' || lap_time_ms, ', ' order by score desc) into got
     from public.drift_park_board('@d99');
-  if got is distinct from 'qa ann 60000, QA Bob 55000' then
+  if got is distinct from 'qa ann 60000 82000, QA Bob 55000 82000, QA Dee 52000 85000' then
     raise exception 'the drift board was %', got;
   end if;
   reset role;

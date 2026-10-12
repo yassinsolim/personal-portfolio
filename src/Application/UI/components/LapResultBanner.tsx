@@ -7,8 +7,10 @@ import { lapVerdict, type LapResult } from '../../Racing/Leaderboard/lapResult';
 const SHOW_MS = 7000;
 
 // a lap's result once it's in, top middle: its time, a new best or how far
-// off yours, and where your best is on the board it went on
-const LapResultBanner = () => {
+// off yours, and where your best is on the board it went on. it keeps
+// listening while hidden (the garage, photo mode), so a result that lands
+// then still shows after
+const LapResultBanner = ({ hidden }: { hidden: boolean }) => {
     const [result, setResult] = useState<LapResult | null>(null);
 
     useEffect(() => {
@@ -25,7 +27,7 @@ const LapResultBanner = () => {
         return () => window.clearTimeout(timer);
     }, [result]);
 
-    if (!result) return null;
+    if (!result || hidden) return null;
     const verdict = lapVerdict(result, formatTime);
     return (
         <div className={`lap-result ${verdict.tone}`} role="status" key={result.id} data-prevent-click>

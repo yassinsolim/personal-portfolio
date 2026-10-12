@@ -298,7 +298,7 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, canUse, onUse,
                 <button type="button" disabled={!replay || racing} onClick={onRace}>
                     {racing ? 'Racing this ghost' : 'Race this ghost'}
                 </button>
-                {entry.tune ? (
+                {lines.length > 0 && (
                     <button
                         type="button"
                         disabled={!canUse || used}
@@ -310,7 +310,7 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, canUse, onUse,
                     >
                         {used ? 'Setup loaded' : 'Use this setup'}
                     </button>
-                ) : null}
+                )}
                 <button type="button" onClick={onClose}>
                     Close <kbd>Esc</kbd>
                 </button>
