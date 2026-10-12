@@ -541,4 +541,101 @@ end $$;
 select set_config('request.headers', '', false);
 insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id) values ('Admin', 400000, 'bmw-e92-m3@v3');
 
+-- the boards are each driver's best: a driver is their profile's name or the
+-- lap's, in any case. unverified laps, other seasons and the other board
+-- don't count, and a lap says how it stands
+do $$
+declare
+  pro uuid := gen_random_uuid();
+  ann_first uuid;
+  ann_best uuid;
+  ann_unverified uuid;
+  pro_slow uuid;
+  cat_tuned uuid;
+  got text;
+  standing record;
+begin
+  insert into public.racing_players (id, key_hash, name) values (pro, repeat('0', 64), 'QA Pro');
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+    values ('QA Ann', 400000, 'bmw-e92-m3@v99', true) returning id into ann_first;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+    values ('qa ann ', 390000, 'amg-one@v99', true) returning id into ann_best;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+    values ('QA Ann', 380000, 'amg-one@v99', false) returning id into ann_unverified;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified, player_id)
+    values ('QA Old Name', 385000, 'bmw-e92-m3@v99', true, pro);
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+    values ('QA Pro', 405000, 'amg-one@v99', true) returning id into pro_slow;
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified) values
+    ('QA Bob', 395000, 'bmw-e92-m3@v99', true),
+    ('QA Bob', 370000, 'bmw-e92-m3@v99~tabc', true),
+    ('QA Ann', 360000, 'amg-one@v99~tzz', true),
+    ('QA Bob', 300000, 'bmw-e92-m3@v9', true),
+    ('QA Bob', 300000, 'bmw-e92-m3@v999', true);
+  insert into public.nordschleife_leaderboard (name, lap_time_ms, car_id, verified)
+    values ('QA Cat', 365000, 'bmw-e92-m3@v99~tq1', true) returning id into cat_tuned;
+
+  set local role anon;
+  select string_agg(name || ' ' || lap_time_ms, ', ' order by lap_time_ms) into got
+    from public.nordschleife_board('@v99');
+  if got is distinct from 'QA Old Name 385000, qa ann  390000, QA Bob 395000' then
+    raise exception 'the stock board was %', got;
+  end if;
+  select string_agg(name || ' ' || lap_time_ms, ', ' order by lap_time_ms) into got
+    from public.nordschleife_board('@v99', false, 'amg-one');
+  if got is distinct from 'qa ann  390000, QA Pro 405000' then
+    raise exception 'the stock board with one car was %', got;
+  end if;
+  select string_agg(name || ' ' || lap_time_ms, ', ' order by lap_time_ms) into got
+    from public.nordschleife_board('@v99', true);
+  if got is distinct from 'QA Ann 360000, QA Cat 365000, QA Bob 370000' then
+    raise exception 'the tuned board was %', got;
+  end if;
+  if exists (select 1 from public.nordschleife_board('@v99', false, '%'))
+     or exists (select 1 from public.nordschleife_board('v99'))
+     or exists (select 1 from public.nordschleife_board('%')) then
+    raise exception 'a board read with a pattern';
+  end if;
+
+  select * into standing from public.nordschleife_lap_standing(ann_best);
+  if standing is distinct from row(true, 400000, 2, 3)::record then
+    raise exception 'a new best stood as %', standing;
+  end if;
+  select * into standing from public.nordschleife_lap_standing(ann_unverified);
+  if standing is distinct from row(false, 390000, 2, 3)::record then
+    raise exception 'an unverified lap stood as %', standing;
+  end if;
+  select * into standing from public.nordschleife_lap_standing(pro_slow);
+  if standing is distinct from row(true, 385000, 1, 3)::record then
+    raise exception 'a slower lap stood as %', standing;
+  end if;
+  select * into standing from public.nordschleife_lap_standing(cat_tuned);
+  if standing is distinct from row(true, null::integer, 2, 3)::record then
+    raise exception 'a first tuned lap stood as %', standing;
+  end if;
+  if exists (select 1 from public.nordschleife_lap_standing(gen_random_uuid())) then
+    raise exception 'a lap that isn''t there stood';
+  end if;
+  reset role;
+
+  insert into public.drift_park_scores (name, score, lap_time_ms, car_id) values
+    ('QA Ann', 50000, 82000, 'bmw-e92-m3@d99'),
+    ('qa ann', 60000, 82000, 'amg-one@d99~tx'),
+    ('QA Bob', 55000, 82000, 'bmw-e92-m3@d99'),
+    ('QA Bob', 99999, 82000, 'bmw-e92-m3@d999'),
+    ('QA Dee', 52000, 90000, 'bmw-e92-m3@d99'),
+    ('QA Dee', 52000, 85000, 'bmw-e92-m3@d99');
+  set local role anon;
+  select string_agg(name || ' ' || score || ' ' || lap_time_ms, ', ' order by score desc) into got
+    from public.drift_park_board('@d99');
+  if got is distinct from 'qa ann 60000 82000, QA Bob 55000 82000, QA Dee 52000 85000' then
+    raise exception 'the drift board was %', got;
+  end if;
+  reset role;
+
+  delete from public.nordschleife_leaderboard where car_id like '%@v9%';
+  delete from public.drift_park_scores where car_id like '%@d99%';
+  delete from public.racing_players where id = pro;
+end $$;
+
 select 'racing sql tests passed' as result;

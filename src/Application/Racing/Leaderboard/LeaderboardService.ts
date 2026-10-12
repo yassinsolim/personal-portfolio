@@ -1,6 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import LocalLeaderboard, { LeaderboardEntry } from './LocalLeaderboard';
-import LocalDriftBoard, { byScore, type DriftEntry } from './LocalDriftBoard';
+import LocalDriftBoard, { type DriftEntry } from './LocalDriftBoard';
 import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
@@ -42,6 +42,28 @@ const DRIFT_COLUMNS: string = `id,name,score,lap_time_ms,car_id,created_at,playe
 
 export type Board = 'stock' | 'tuned';
 
+// how a lap just sent stands (supabase/racing.sql nordschleife_lap_standing):
+// its driver's best on its board before it (0 for their first there), where
+// their best is now and of how many drivers
+export type LapStanding = {
+    verified: boolean;
+    previousMs: number;
+    rank: number;
+    drivers: number;
+};
+
+// one row per driver, as the database's boards are: their profile's name or
+// the lap's, in any case. the entries come best first
+export const bestPerDriver = <T extends { name: string; player?: { name: string } | null }>(entries: T[]) => {
+    const seen = new Set<string>();
+    return entries.filter((entry) => {
+        const driver = (entry.player?.name || entry.name).trim().toLowerCase();
+        if (seen.has(driver)) return false;
+        seen.add(driver);
+        return true;
+    });
+};
+
 // writes go out with this device's player (the database's
 // racing_attribute_player makes the lap theirs), read at the time of each
 // request so a reset profile takes effect at once. reads don't need it
@@ -63,6 +85,13 @@ type RemoteLeaderboardRow = {
     created_at: string;
     player_id?: string | null;
     player?: unknown;
+};
+
+type RemoteStandingRow = {
+    verified: boolean;
+    previous_ms: number | null;
+    rank: number | null;
+    drivers: number;
 };
 
 type RemoteGhostReplayRow = {
@@ -210,12 +239,24 @@ export default class LeaderboardService {
         return board === 'tuned' ? ['like', `${car}${SEASON_TAG}${TUNE_TAG}%`] : ['eq', `${car}${SEASON_TAG}`];
     }
 
-    // a lap shows once the database has checked its ghost drove the whole ring
+    // each driver's best verified lap on a board (supabase/racing.sql
+    // nordschleife_board), to order and page. head counts them instead
+    boardLaps(board: Board, carId?: string | null, head = false) {
+        const car = carId && carOptionsById[carId] ? carId : null;
+        return this.supabase!.rpc(
+            'nordschleife_board',
+            { p_season: SEASON_TAG, p_tuned: board === 'tuned', ...(car ? { p_car: car } : {}) },
+            head ? { get: true, head: true, count: 'exact' } : { get: true }
+        );
+    }
+
+    // a board: each driver's best lap, the fastest first. a lap shows once the
+    // database has checked its ghost drove the whole ring. offline it's this
+    // device's laps
     async getLeaderboard(limit = 10, board: Board = 'stock', carId?: string | null) {
-        const localEntries = this.local
-            .getTop(64, board)
-            .filter((entry) => !carId || entry.carId === carId)
-            .slice(0, limit);
+        const localEntries = bestPerDriver(
+            this.local.getTop(64, board).filter((entry) => !carId || entry.carId === carId)
+        ).slice(0, limit);
         await this.initialize();
 
         if (!this.supabase) {
@@ -223,11 +264,8 @@ export default class LeaderboardService {
         }
 
         try {
-            const { data, error } = await this.supabase
-                .from(this.tableName)
+            const { data, error } = await this.boardLaps(board, carId)
                 .select(LAP_COLUMNS)
-                .filter('car_id', ...this.boardFilter(board, carId))
-                .eq('verified', true)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
 
@@ -235,31 +273,50 @@ export default class LeaderboardService {
                 return localEntries;
             }
 
-            const remoteEntries = (data as unknown as RemoteLeaderboardRow[]).map((entry) =>
-                this.fromLapRow(entry)
-            );
-
-            return this.mergeEntries(remoteEntries, localEntries).slice(0, limit);
+            return (data as unknown as RemoteLeaderboardRow[]).map((entry) => this.fromLapRow(entry));
         } catch (error) {
             return localEntries;
         }
     }
 
-    // where a time would be on a board: one more than the laps faster. 0 when
-    // that can't be told
+    // where a time would be on a board: one more than the drivers whose best
+    // is faster. 0 when that can't be told
     async getRankOf(lapTimeMs: number, board: Board, carId?: string | null) {
         await this.initialize();
         if (!this.supabase) return 0;
         try {
-            const { count, error } = await this.supabase
-                .from(this.tableName)
-                .select('id', { count: 'exact', head: true })
-                .filter('car_id', ...this.boardFilter(board, carId))
-                .eq('verified', true)
-                .lt('lap_time_ms', Math.floor(lapTimeMs));
+            const { count, error } = await this.boardLaps(board, carId, true).lt(
+                'lap_time_ms',
+                Math.floor(lapTimeMs)
+            );
             return error || count === null ? 0 : count + 1;
         } catch {
             return 0;
+        }
+    }
+
+    // how a lap just sent stands on its board, null when that can't be told
+    // (offline, or a lap the board doesn't have)
+    async getLapStanding(lapId: string): Promise<LapStanding | null> {
+        await this.initialize();
+        if (!this.supabase || !lapId || lapId.startsWith(LOCAL_LAP_PREFIX)) return null;
+        try {
+            const { data, error } = await this.supabase.rpc(
+                'nordschleife_lap_standing',
+                { p_lap_id: lapId },
+                { get: true }
+            );
+            const row = (data as unknown as RemoteStandingRow[] | null)?.[0];
+            if (error || !row) return null;
+            const count = (value: unknown) => Math.max(0, Math.floor(Number(value) || 0));
+            return {
+                verified: row.verified === true,
+                previousMs: row.previous_ms ? this.sanitizeLapTime(row.previous_ms) : 0,
+                rank: count(row.rank),
+                drivers: count(row.drivers),
+            };
+        } catch {
+            return null;
         }
     }
 
@@ -321,35 +378,26 @@ export default class LeaderboardService {
         }
     }
 
-    // the laps on a board just faster than a time, the nearest first
+    // the drivers on a board just faster than a time, the nearest first
     async getLapsFasterThan(
         lapTimeMs: number,
         board: 'stock' | 'tuned' = 'stock',
         limit = 5
     ) {
-        const localEntries = this.local
-            .getTop(64, board)
+        const localEntries = bestPerDriver(this.local.getTop(64, board))
             .filter((entry) => entry.lapTimeMs < lapTimeMs)
             .reverse()
             .slice(0, limit);
         await this.initialize();
         if (!this.supabase) return localEntries;
         try {
-            const { data, error } = await this.supabase
-                .from(this.tableName)
+            const { data, error } = await this.boardLaps(board)
                 .select(LAP_COLUMNS)
-                .filter('car_id', ...this.boardFilter(board))
-                .eq('verified', true)
                 .lt('lap_time_ms', Math.floor(lapTimeMs))
                 .order('lap_time_ms', { ascending: false })
                 .limit(limit);
             if (error || !data) return localEntries;
-            const remoteEntries = (data as unknown as RemoteLeaderboardRow[]).map((row) =>
-                this.fromLapRow(row)
-            );
-            return this.mergeEntries(remoteEntries, localEntries)
-                .reverse()
-                .slice(0, limit);
+            return (data as unknown as RemoteLeaderboardRow[]).map((row) => this.fromLapRow(row));
         } catch {
             return localEntries;
         }
@@ -859,27 +907,21 @@ export default class LeaderboardService {
         };
     }
 
-    // the drift park's board: best runs first, this device's and everyone's
+    // the drift park's board: each driver's best run (supabase/racing.sql
+    // drift_park_board), the best first. offline it's this device's runs
     async getDriftBoard(limit = 10) {
-        const localEntries = this.drifts.getTop(limit);
+        const localEntries = bestPerDriver(this.drifts.getTop(64)).slice(0, limit);
         await this.initialize();
         if (!this.supabase) return localEntries;
         try {
             const { data, error } = await this.supabase
-                .from(this.driftTableName)
+                .rpc('drift_park_board', { p_season: DRIFT_TAG }, { get: true })
                 .select(DRIFT_COLUMNS)
-                .like('car_id', `%${DRIFT_TAG}%`)
                 .order('score', { ascending: false })
+                .order('lap_time_ms', { ascending: true })
                 .limit(limit);
             if (error || !data) return localEntries;
-            const remote = (data as unknown as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));
-            const seen = new Set(remote.map((e) => `${e.name}:${e.score}:${e.lapTimeMs}`));
-            return [
-                ...remote,
-                ...localEntries.filter((e) => !seen.has(`${e.name}:${e.score}:${e.lapTimeMs}`)),
-            ]
-                .sort(byScore)
-                .slice(0, limit);
+            return (data as unknown as RemoteDriftRow[]).map((row) => this.fromDriftRow(row));
         } catch {
             return localEntries;
         }

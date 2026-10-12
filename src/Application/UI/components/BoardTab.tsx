@@ -86,8 +86,8 @@ const Driver = ({
     );
 };
 
-// the pause menu's board: the top laps on the ring (stock or tuned, every
-// car or one) or the drift park's runs, each driver's badge opening their
+// the pause menu's board: each driver's best on the ring (stock or tuned,
+// every car or one) or in the drift park, each driver's badge opening their
 // card and each lap its own. your best is under the list when it's lower
 const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
     const [query, setQuery] = useState<BoardQuery>(() => ({ track, board, carId: null }));
@@ -206,8 +206,8 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                 )}
                 <span className="pmb-hint">
                     {query.track === 'ring'
-                        ? 'Verified laps. A name opens the driver, a lap its car and replay.'
-                        : 'Best drift runs. A name opens the driver.'}
+                        ? 'Each driver’s best verified lap. A name opens the driver, a lap its car and replay.'
+                        : 'Each driver’s best drift run. A name opens the driver.'}
                 </span>
             </div>
 

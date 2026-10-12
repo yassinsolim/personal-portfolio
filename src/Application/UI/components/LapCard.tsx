@@ -51,6 +51,9 @@ type Props = {
     canWatch: boolean;
     // it's the ghost you race now
     racing: boolean;
+    // its setup can go on your car (not in a lobby race)
+    canUse: boolean;
+    onUse: (carId: string, tune: string) => void;
     onWatch: () => void;
     onRace: () => void;
     onClose: () => void;
@@ -144,15 +147,47 @@ const dateOf = (iso: string) => {
         : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-// a lap on the board: who set it, the car and setup with the garage's
-// numbers for it, its line on the map, and its replay to watch or to race
-const LapCard = ({ entry, rank, board, outline, canWatch, racing, onWatch, onRace, onClose }: Props) => {
+// a setup's numbers as the garage works them out
+export const CarStats = ({ stats }: { stats: GarageState['stats'] }) => (
+    <dl className="lap-card-stats">
+        <dt>Power</dt>
+        <dd>{stats.powerKw.toLocaleString('en-US')} kW</dd>
+        <dt>Torque</dt>
+        <dd>{stats.torqueNm.toLocaleString('en-US')} Nm</dd>
+        <dt>Weight</dt>
+        <dd>{stats.massKg.toLocaleString('en-US')} kg</dd>
+        <dt>Grip</dt>
+        <dd>{stats.grip.toFixed(2)} g</dd>
+        <dt>Top speed</dt>
+        <dd>
+            {stats.topKph} km/h <small>({TOP_LIMIT[stats.topLimitedBy]})</small>
+        </dd>
+        <dt>100-0 km/h</dt>
+        <dd>{stats.stop100} m</dd>
+    </dl>
+);
+
+// and its performance index, once it's worked out
+export const PiBadge = ({ stats }: { stats: GarageState['stats'] | undefined }) =>
+    stats?.rating ? (
+        <div className={`garage-pi pi-${stats.rating.class.toLowerCase()}`} title="Performance index">
+            <strong>{stats.rating.class}</strong>
+            <span>{stats.rating.pi}</span>
+        </div>
+    ) : null;
+
+// a board lap's card: who set it, the car and setup with the garage's
+// numbers for it, its line on the map, its replay to watch or to race, and
+// its setup to put on your car
+const LapCard = ({ entry, rank, board, outline, canWatch, racing, canUse, onUse, onWatch, onRace, onClose }: Props) => {
     const [state, setState] = useState<LapState | null>(null);
+    const [used, setUsed] = useState(false);
     const car = carOptions.find((option) => option.id === entry.carId);
     const lines = useMemo(() => setupLines(entry.tune), [entry.tune]);
 
     useEffect(() => {
         setState(null);
+        setUsed(false);
         const onState = (next: LapState) => {
             if (next?.id === entry.id) setState(next);
         };
@@ -203,37 +238,13 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, onWatch, onRac
                     <strong>{car?.label || entry.carId}</strong>
                     <span>{lines.length ? `Tuned, ${lines.length} change${lines.length === 1 ? '' : 's'}` : 'Factory setup'}</span>
                 </div>
-                {stats?.rating ? (
-                    <div className={`garage-pi pi-${stats.rating.class.toLowerCase()}`} title="Performance index">
-                        <strong>{stats.rating.class}</strong>
-                        <span>{stats.rating.pi}</span>
-                    </div>
-                ) : null}
+                <PiBadge stats={stats} />
             </div>
 
             <div className="lap-card-body">
                 <section>
                     <h4>The car</h4>
-                    {stats ? (
-                        <dl className="lap-card-stats">
-                            <dt>Power</dt>
-                            <dd>{stats.powerKw.toLocaleString('en-US')} kW</dd>
-                            <dt>Torque</dt>
-                            <dd>{stats.torqueNm.toLocaleString('en-US')} Nm</dd>
-                            <dt>Weight</dt>
-                            <dd>{stats.massKg.toLocaleString('en-US')} kg</dd>
-                            <dt>Grip</dt>
-                            <dd>{stats.grip.toFixed(2)} g</dd>
-                            <dt>Top speed</dt>
-                            <dd>
-                                {stats.topKph} km/h <small>({TOP_LIMIT[stats.topLimitedBy]})</small>
-                            </dd>
-                            <dt>100-0 km/h</dt>
-                            <dd>{stats.stop100} m</dd>
-                        </dl>
-                    ) : (
-                        <p className="lap-card-note">Loading the car</p>
-                    )}
+                    {stats ? <CarStats stats={stats} /> : <p className="lap-card-note">Loading the car</p>}
                     {state?.pending && <p className="lap-card-note">Working out the performance index</p>}
                     <h4>Setup</h4>
                     {lines.length ? (
@@ -247,6 +258,11 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, onWatch, onRac
                         </dl>
                     ) : (
                         <p className="lap-card-note">As it left the factory.</p>
+                    )}
+                    {used && (
+                        <p className="lap-card-note">
+                            On your {car?.label || entry.carId} now. Your paint and wheels stay.
+                        </p>
                     )}
                 </section>
                 <section>
@@ -282,6 +298,19 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, onWatch, onRac
                 <button type="button" disabled={!replay || racing} onClick={onRace}>
                     {racing ? 'Racing this ghost' : 'Race this ghost'}
                 </button>
+                {lines.length > 0 && (
+                    <button
+                        type="button"
+                        disabled={!canUse || used}
+                        title="Its tune, aero and ride height on your car. Your paint and wheels stay"
+                        onClick={() => {
+                            onUse(entry.carId, entry.tune || '');
+                            setUsed(true);
+                        }}
+                    >
+                        {used ? 'Setup loaded' : 'Use this setup'}
+                    </button>
+                )}
                 <button type="button" onClick={onClose}>
                     Close <kbd>Esc</kbd>
                 </button>

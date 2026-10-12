@@ -230,6 +230,7 @@ export default class RaceManager {
     // the engine revved in neutral on the garage stand
     garageRev = { held: false, throttle: 0, rpm: 0, cutUntil: 0 };
     leaderboardBoard: 'stock' | 'tuned' = 'stock';
+    leaderboardSerial = 0;
     lastLapTimeMs = 0;
     localLeaderboard: LocalLeaderboard;
     leaderboardService: LeaderboardService;
@@ -291,6 +292,7 @@ export default class RaceManager {
     // the board lap picked from its card to race (ghost mode 'lap')
     ghostPick: GhostPick | null = readGhostPick();
     lapCardSerial = 0;
+    buildCardSerial = 0;
     // a board lap being watched: the race paused under it, its car followed
     watch: {
         lap: GhostPick;
@@ -706,6 +708,8 @@ export default class RaceManager {
 
         UIEventBus.on('race:ghostLap', (state: unknown) => this.pickGhostLap(state));
         UIEventBus.on('race:lapOpen', (state: unknown) => void this.openLap(state));
+        UIEventBus.on('race:buildOpen', (state: unknown) => void this.openBuild(state));
+        UIEventBus.on('race:applySetup', (state: unknown) => this.applySetup(state));
         UIEventBus.on('race:profileSave', (payload: unknown) => this.profiles.save(sanitizePayload(payload)));
         UIEventBus.on('race:profileRemove', async () => {
             const status = await this.profiles.remove();
@@ -755,18 +759,33 @@ export default class RaceManager {
         try {
             const telemetry = this.vehicle.getTelemetry();
             const { tune, look } = this.vehicle;
+            const code = isStockSetup(tune, look) ? undefined : tuneCode(tune, look);
             const entry = await this.leaderboardService.submitLap(
                 name,
                 lapTimeMs,
                 telemetry.carId,
                 lapReplay,
-                isStockSetup(tune, look) ? undefined : tuneCode(tune, look)
+                code
             );
             this.multiplayer.setLocalPlayerName(name);
             this.multiplayer.publishLap(entry);
-            await this.refreshLeaderboard();
+            const [standing, online] = await Promise.all([
+                this.leaderboardService.getLapStanding(entry.id),
+                this.leaderboardService.client(),
+                this.refreshLeaderboard(),
+            ]);
             UIEventBus.dispatch('race:lapSubmitted', {
                 entry,
+            });
+            // what became of it: the board it went on, and how it did
+            // against the driver's best there
+            UIEventBus.dispatch('race:lapResult', {
+                id: entry.id,
+                lapTimeMs: entry.lapTimeMs,
+                board: code ? 'tuned' : 'stock',
+                saved: entry.source === 'remote',
+                online: Boolean(online),
+                standing,
             });
         } finally {
             this.lapSubmitInFlight = false;
@@ -1306,41 +1325,87 @@ export default class RaceManager {
     }
 
     // a lap on the board, for its card: its car with its setup as the garage
-    // works it out, and what its replay shows. sent once with what's quick
-    // and again with the performance index
+    // works it out, and what its replay shows
     async openLap(state: unknown) {
         const lap = sanitizeGhostPick(state);
         if (!lap) return;
         const serial = ++this.lapCardSerial;
-        const shared = decodeTune(String((state as { tune?: unknown }).tune || ''));
+        const [replay, setup] = await Promise.all([
+            this.leaderboardService.getGhostReplayForLap(lap.id, lap.carId, lap.lapTimeMs),
+            this.cardSetup(lap.carId, String((state as { tune?: unknown }).tune || '')),
+        ]);
+        if (serial !== this.lapCardSerial) return;
+        const summary = replay && replay.samples.length >= 8 ? summarizeReplay(replay.samples) : null;
+        const ringM = Math.round(this.ringWorld?.track.length || 0);
+        this.sendCardStats(setup, () => serial === this.lapCardSerial, (stats, pending) =>
+            UIEventBus.dispatch('race:lapState', {
+                id: lap.id,
+                stats,
+                pending,
+                replay: summary,
+                ringM,
+            })
+        );
+    }
+
+    // a driver's car on their card: the same numbers with their setup
+    async openBuild(state: unknown) {
+        const { carId, tune } = (state || {}) as { carId?: unknown; tune?: unknown };
+        if (typeof carId !== 'string' || !carOptionsById[carId]) return;
+        const code = typeof tune === 'string' ? tune : '';
+        const serial = ++this.buildCardSerial;
+        const setup = await this.cardSetup(carId, code);
+        if (serial !== this.buildCardSerial) return;
+        this.sendCardStats(setup, () => serial === this.buildCardSerial, (stats, pending) =>
+            UIEventBus.dispatch('race:buildState', { carId, tune: code, stats, pending })
+        );
+    }
+
+    // a setup a card shows, as the garage works it out: its physics and its
+    // key for the performance index
+    async cardSetup(carId: string, code: string) {
+        const shared = decodeTune(code);
         const tune = shared ? shared.tune : STOCK_TUNE;
         const look = shared
             ? { ...STOCK_LOOK, ride: shared.ride, spoiler: shared.spoiler, wingAngle: shared.wingAngle }
             : STOCK_LOOK;
-        const [replay, model] = await Promise.all([
-            this.leaderboardService.getGhostReplayForLap(lap.id, lap.carId, lap.lapTimeMs),
-            this.vehicle.ensurePreparedModel(lap.carId),
-        ]);
-        if (serial !== this.lapCardSerial) return;
-        const spec = this.vehicle.specFor(lap.carId, tune, look, model);
-        const key = `${lap.carId}:${tuneCode(tune, look)}`;
-        const summary = replay && replay.samples.length >= 8 ? summarizeReplay(replay.samples) : null;
-        const ringM = Math.round(this.ringWorld?.track.length || 0);
-        const send = (performance: SetupPerformance | null, pending: boolean) =>
-            UIEventBus.dispatch('race:lapState', {
-                id: lap.id,
-                stats: this.setupStats(spec, performance),
-                pending,
-                replay: summary,
-                ringM,
-            });
-        const known = this.performance.get(key) || null;
-        send(known, !known);
+        const model = await this.vehicle.ensurePreparedModel(carId);
+        return {
+            spec: this.vehicle.specFor(carId, tune, look, model),
+            key: `${carId}:${tuneCode(tune, look)}`,
+        };
+    }
+
+    // its numbers, sent once with what's quick and again with the performance
+    // index, after the card has drawn (it takes a few frames' worth)
+    sendCardStats(
+        setup: { spec: PhysicsSpec; key: string },
+        current: () => boolean,
+        send: (stats: ReturnType<RaceManager['setupStats']>, pending: boolean) => void
+    ) {
+        const known = this.performance.get(setup.key) || null;
+        send(this.setupStats(setup.spec, known), !known);
         if (known) return;
-        // after the card has drawn, it takes a few frames' worth
         window.setTimeout(() => {
-            if (serial === this.lapCardSerial) send(this.performanceOf(key, spec), false);
+            if (current()) send(this.setupStats(setup.spec, this.performanceOf(setup.key, setup.spec)), false);
         }, 60);
+    }
+
+    // a setup from a driver's or a lap's card, on your car (the menu switches
+    // to that car first): its tune, aero and ride height. your paint and
+    // wheels stay, and the lap starts over as leaving the garage changed does
+    applySetup(state: unknown) {
+        if (!this.active || this.garageOpen || this.watch || this.inLobbyRace()) return;
+        const shared = decodeTune(String((state as { tune?: unknown } | undefined)?.tune || ''));
+        if (!shared) return;
+        this.vehicle.setGarage(
+            { ...this.vehicle.look, ride: shared.ride, spoiler: shared.spoiler, wingAngle: shared.wingAngle },
+            shared.tune,
+            true
+        );
+        this.publishGarage();
+        this.applyLine();
+        this.startLapTimer();
     }
 
     // a board lap picked from its card: the ghost races you on it from now on
@@ -1530,7 +1595,10 @@ export default class RaceManager {
 
     async refreshLeaderboard() {
         const board = this.leaderboardBoard;
+        const serial = ++this.leaderboardSerial;
         const entries = await this.leaderboardService.getLeaderboard(10, board);
+        // a board switched since doesn't get the old one's laps
+        if (serial !== this.leaderboardSerial) return;
         UIEventBus.dispatch('race:leaderboardUpdate', {
             entries,
             board,
@@ -2602,9 +2670,17 @@ export default class RaceManager {
 
             this.sectors.setCar(telemetry.carId);
             const ring = this.trackMode === 'ring';
-            // another car or setup has its own best lap, and its own rival
+            // another car or setup has its own best lap, and its own rival.
+            // the hud's board turns to the one its laps go on (the other is
+            // a click away), which syncs the ghost too
             if (ring && this.lapDelta.setKey(telemetry.carId, this.setupBoard() === 'tuned')) {
-                void this.syncGhost();
+                const board = this.setupBoard();
+                if (board !== this.leaderboardBoard) {
+                    this.leaderboardBoard = board;
+                    void this.refreshLeaderboard();
+                } else {
+                    void this.syncGhost();
+                }
             }
             if (!lapWasRunning && lapUpdate.lapRunning) {
                 if (ring) this.ghostReplay.startLap(nowMs);

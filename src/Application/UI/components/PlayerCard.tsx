@@ -4,8 +4,8 @@ import { carOptionsById } from '../../carOptions';
 import { carThumb } from './CarPicker';
 import { formatTime } from './RaceHudGauges';
 import PlayerBadge from './PlayerBadge';
-import { setupLines, type LapEntry } from './LapCard';
-import { FINISHES } from './Garage';
+import { CarStats, PiBadge, setupLines, type LapEntry } from './LapCard';
+import { FINISHES, type GarageState } from './Garage';
 import { decodeLook } from '../../Racing/Garage/garage';
 import type { PlayerProfile } from '../../Racing/Profile/profile';
 
@@ -19,6 +19,15 @@ type PlayerState = {
     offline: boolean;
 };
 
+// a car with a setup's numbers, as RaceManager works them out (the index
+// comes a moment later)
+type BuildState = {
+    carId: string;
+    tune: string;
+    stats: GarageState['stats'];
+    pending: boolean;
+};
+
 type Props = {
     playerId: string;
     mine: boolean;
@@ -27,6 +36,9 @@ type Props = {
     local: PlayerProfile | null;
     // a lap's card is open over this one
     covered: boolean;
+    // a setup can go on your car (not in a lobby race)
+    canUse: boolean;
+    onUse: (carId: string, tune: string) => void;
     onLap: (entry: LapEntry) => void;
     onEdit: () => void;
     onClose: () => void;
@@ -58,11 +70,14 @@ const Swatch = ({ color }: { color: string }) => (
 );
 
 // a driver's card: their badge, bio and number, the car they show off with
-// how they set it up (and their other cars), and their fastest laps, each
-// opening its own card
-const PlayerCard = ({ playerId, mine, local, covered, onLap, onEdit, onClose }: Props) => {
+// how they set it up and what that makes it (and their other cars, the
+// setup to put on yours), and their fastest laps, each opening its own card
+const PlayerCard = ({ playerId, mine, local, covered, canUse, onUse, onLap, onEdit, onClose }: Props) => {
     const [state, setState] = useState<PlayerState | null>(null);
     const [shownCar, setShownCar] = useState<string | null>(null);
+    const [build, setBuild] = useState<BuildState | null>(null);
+    // the car whose setup went on yours
+    const [used, setUsed] = useState<string | null>(null);
 
     useEffect(() => {
         setState(null);
@@ -97,9 +112,21 @@ const PlayerCard = ({ playerId, mine, local, covered, onLap, onEdit, onClose }: 
     }, [player]);
     const car = shownCar || player?.car || garageCars[0] || null;
     const codes = car && player ? player.garage[car] || { look: '', tune: '' } : null;
-    const setup = useMemo(() => setupLines(codes?.tune), [codes?.tune]);
+    const tune = codes?.tune || '';
+    const setup = useMemo(() => setupLines(tune), [tune]);
     const look = useMemo(() => lookParts(codes?.look || ''), [codes?.look]);
     const name = player?.name || laps[0]?.name || 'Driver';
+
+    useEffect(() => {
+        setBuild(null);
+        if (!car) return undefined;
+        const onBuild = (next: BuildState) => {
+            if (next?.carId === car && next.tune === tune) setBuild(next);
+        };
+        eventBus.on('race:buildState', onBuild);
+        eventBus.dispatch('race:buildOpen', { carId: car, tune });
+        return () => eventBus.remove('race:buildState', onBuild);
+    }, [car, tune]);
 
     return (
         <div
@@ -153,7 +180,13 @@ const PlayerCard = ({ playerId, mine, local, covered, onLap, onEdit, onClose }: 
                                             : 'Factory setup'}
                                     </span>
                                 </div>
+                                <PiBadge stats={build?.stats} />
                             </div>
+                            {build ? (
+                                <CarStats stats={build.stats} />
+                            ) : (
+                                <p className="lap-card-note">Loading the car</p>
+                            )}
                             {look && (look.paint || look.finish || look.wheels || look.rims || look.calipers) ? (
                                 <dl className="lap-card-setup player-look">
                                     {(look.paint || look.finish) && (
@@ -203,6 +236,11 @@ const PlayerCard = ({ playerId, mine, local, covered, onLap, onEdit, onClose }: 
                                 </dl>
                             ) : (
                                 <p className="lap-card-note">As it left the factory.</p>
+                            )}
+                            {used === car && (
+                                <p className="lap-card-note">
+                                    On your {label(car)} now. Your paint and wheels stay.
+                                </p>
                             )}
                             {garageCars.length > 1 && (
                                 <>
@@ -262,6 +300,20 @@ const PlayerCard = ({ playerId, mine, local, covered, onLap, onEdit, onClose }: 
                 {mine && (
                     <button type="button" className="race-menu-primary" onClick={onEdit}>
                         Edit your profile
+                    </button>
+                )}
+                {!mine && car && setup.length > 0 && (
+                    <button
+                        type="button"
+                        className="race-menu-primary"
+                        disabled={!canUse || used === car}
+                        title="Its tune, aero and ride height on your car. Your paint and wheels stay"
+                        onClick={() => {
+                            onUse(car, tune);
+                            setUsed(car);
+                        }}
+                    >
+                        {used === car ? 'Setup loaded' : `Use their ${label(car)} setup`}
                     </button>
                 )}
                 <button type="button" onClick={onClose}>
