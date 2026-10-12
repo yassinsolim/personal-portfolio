@@ -93,9 +93,17 @@ Run `supabase/racing.sql` in the project's SQL editor. It is safe to run again, 
   `x-player-key` request headers when the key matches (a device that hasn't saved its profile
   yet gets one with the lap's name), and clears whatever the row said otherwise. The SQL
   editor sends no headers and keeps what it's given. Old laps have no player.
+- The boards are each driver's best: `nordschleife_board(season, tuned, car)` returns the
+  fastest verified lap per driver (stock or tuned, every car or one) for the api to order and
+  page, and `drift_park_board(season)` the best run per driver. A driver is their profile's
+  name, or the lap's for laps without a profile, in any case (`racing_driver`).
+  `nordschleife_lap_standing(lap id)` says how a lap just sent stands: verified or not, the
+  driver's best on its board before it, and where their best is now of how many drivers. All
+  three run as the caller, so they only see what anon can read.
 - Grants: anon/authenticated get select + insert on laps and select + insert + update on
   ghosts, select on removed laps, select on the players' public columns, execute on the two
-  player functions, nothing else (no delete, truncate or update on laps).
+  player functions and the board functions, nothing else (no delete, truncate or update on
+  laps).
 - The leaderboard table in the `supabase_realtime` publication, so boards refresh when laps
   are added, verified or removed.
 

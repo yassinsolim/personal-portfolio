@@ -30,6 +30,7 @@ import { readStartTrack, writeStartTrack, type StartTrack } from '../Racing/Trac
 import PauseMenu, { type MenuTab } from './components/PauseMenu';
 import LapCard, { type LapEntry } from './components/LapCard';
 import PlayerCard from './components/PlayerCard';
+import LapResultBanner from './components/LapResultBanner';
 import WatchMode from './components/WatchMode';
 import RemovedLapCard from './components/RemovedLapCard';
 import {
@@ -578,8 +579,12 @@ const App = () => {
 
         eventBus.on(
             'race:leaderboardUpdate',
-            (payload: { entries?: LeaderboardEntry[] }) => {
+            (payload: { entries?: LeaderboardEntry[]; board?: string }) => {
                 setLeaderboard(payload?.entries || []);
+                // the race turns the hud to the board your laps go on
+                if (payload?.board === 'stock' || payload?.board === 'tuned') {
+                    setLeaderboardBoard(payload.board);
+                }
             }
         );
 
@@ -718,6 +723,15 @@ const App = () => {
         setSelectedCar(nextCar);
         storeCarId(nextCar);
         eventBus.dispatch('carChange', nextCar);
+    };
+    // a setup from a driver's or a lap's card on your car, switched to theirs.
+    // your profile shows it once it's saved again
+    const [setupsUsed, setSetupsUsed] = useState(0);
+    const applySetup = (carId: string, tune: string) => {
+        if (!carOptions.some((car) => car.id === carId)) return;
+        if (carId !== selectedCar) selectCar(carId);
+        eventBus.dispatch('race:applySetup', { tune });
+        setSetupsUsed((count) => count + 1);
     };
     const handleCarChange = (
         event: React.ChangeEvent<HTMLSelectElement>
@@ -975,8 +989,8 @@ const App = () => {
     }, [raceModeActive, racePaused, garageOpen, transitionLocked]);
 
     // the profile goes out a moment after the last change, as a race starts
-    // and when the garage closes (its setups are on the profile). an
-    // unchanged one isn't sent again
+    // and when the garage closes or a card's setup goes on (its setups are on
+    // the profile). an unchanged one isn't sent again
     useEffect(() => {
         if (!raceModeActive || askName || garageOpen || transitionLocked) return undefined;
         // the first drive's name card comes first
@@ -986,7 +1000,7 @@ const App = () => {
             900
         );
         return () => window.clearTimeout(timer);
-    }, [raceModeActive, askName, garageOpen, transitionLocked, playerName, profileDraft, selectedCar]);
+    }, [raceModeActive, askName, garageOpen, transitionLocked, playerName, profileDraft, selectedCar, setupsUsed]);
 
     const changeProfile = useCallback((draft: ProfileDraft) => {
         setProfileDraft(draft);
@@ -1358,6 +1372,7 @@ const App = () => {
             {raceModeActive && !garageOpen && !sceneOnly && hud.track === 'drift' && hud.drift && (
                 <DriftHud drift={hud.drift} best={driftBoard[0]?.score || 0} />
             )}
+            {raceModeActive && trackState.track === 'ring' && !sceneOnly && !garageOpen && <LapResultBanner />}
             {raceModeActive && trackState.building && (
                 <div className="drift-building" data-prevent-click>
                     Building the drift park
@@ -1412,13 +1427,16 @@ const App = () => {
                         ) : (
                             <ol>
                                 {leaderboard.slice(0, 5).map((entry, index) => (
-                                    <li key={entry.id}>
+                                    <li
+                                        key={entry.id}
+                                        className={myId && entry.playerId === myId ? 'mine' : undefined}
+                                    >
                                         <button
                                             type="button"
-                                            title={`${entry.name}'s car, setup and replay`}
+                                            title={`${entry.player?.name || entry.name}'s car, setup and replay`}
                                             onClick={() => openLap(entry, index + 1)}
                                         >
-                                            <span>{entry.name}</span>
+                                            <span>{entry.player?.name || entry.name}</span>
                                             <span>{formatLapTime(entry.lapTimeMs)}</span>
                                         </button>
                                     </li>
@@ -1641,6 +1659,8 @@ const App = () => {
                     mine={playerCard === myId}
                     local={localPlayer}
                     covered={Boolean(lapCard)}
+                    canUse={!inLobbyRace}
+                    onUse={applySetup}
                     onLap={(entry) => openLapCard(entry, 0)}
                     onEdit={() => {
                         setPlayerCard(null);
@@ -1657,6 +1677,8 @@ const App = () => {
                     outline={trackOutline}
                     canWatch={trackState.track === 'ring' && !inLobbyRace}
                     racing={ghostMode === 'lap' && ghostPick?.id === lapCard.id}
+                    canUse={!inLobbyRace}
+                    onUse={applySetup}
                     onWatch={() =>
                         eventBus.dispatch('race:watch', {
                             id: lapCard.id,

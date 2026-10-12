@@ -135,7 +135,7 @@ const RaceHelp = ({
                             ],
                             [
                                 'Ghost',
-                                'Race your best lap, a rival (the lap on the board just above yours) or the record. Pick it in the pause menu.',
+                                'Race your best lap, a rival (the driver on the board just above you) or the record. Pick it in the pause menu.',
                             ],
                             [
                                 'Driving line',
@@ -143,7 +143,7 @@ const RaceHelp = ({
                             ],
                             [
                                 'Boards',
-                                'Stock cars and tuned ones have their own leaderboard. Tunes from the board can be loaded in the garage.',
+                                'Each driver is on a board once, with their best (PB). Any garage change puts your laps on the tuned board instead of stock; after a lap you see which, and how it did against your PB. A lap or driver card can put their setup on your car, and the garage lists tunes from the board too.',
                             ],
                         ]}
                     />

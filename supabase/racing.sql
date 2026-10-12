@@ -18,6 +18,8 @@
 --   - a driver's profile is public to read except its key's hash, and only
 --     changes through racing_save_player with the device's key. laps and
 --     runs sent with that key (x-player-id, x-player-key) are the player's
+--   - the boards are each driver's best (nordschleife_board, drift_park_board),
+--     read through functions that run as the caller
 
 create extension if not exists pgcrypto;
 
@@ -668,6 +670,92 @@ create trigger racing_attribute_run
   before insert on public.drift_park_scores
   for each row execute function public.racing_attribute_player();
 
+-- ---------------------------------------------------------------- boards
+
+-- a driver on the boards: their profile's name, or the lap's for laps from
+-- before profiles (or without one). the same name in any case is one driver
+create or replace function public.racing_driver(p_profile_name text, p_name text)
+returns text
+language sql
+immutable
+as $$
+  select lower(btrim(coalesce(p_profile_name, p_name)));
+$$;
+
+-- a board: each driver's best verified lap of a season ("@v6"), stock or
+-- tuned, with any car or one. the api orders and pages it, e.g.
+--   /rpc/nordschleife_board?p_season=@v6&p_tuned=true&order=lap_time_ms&limit=50
+create or replace function public.nordschleife_board(p_season text, p_tuned boolean default false, p_car text default null)
+returns setof public.nordschleife_leaderboard
+language sql
+stable
+as $$
+  select distinct on (public.racing_driver(p.name, l.name)) l.*
+  from public.nordschleife_leaderboard l
+  left join public.racing_players p on p.id = l.player_id
+  where l.verified
+    and p_season ~ '^@v[0-9]{1,3}$'
+    and (p_car is null or public.nordschleife_valid_car_id(p_car || '@v0'))
+    and l.car_id like coalesce(p_car, '%') || p_season || case when p_tuned then '~t%' else '' end
+  order by public.racing_driver(p.name, l.name), l.lap_time_ms, l.created_at;
+$$;
+
+-- how a lap stands, for the game to say once it's in: whether it's verified,
+-- its driver's best on its board without it (null for their first there),
+-- where their best is now and how many drivers that board has
+create or replace function public.nordschleife_lap_standing(p_lap_id uuid)
+returns table (verified boolean, previous_ms integer, rank integer, drivers integer)
+language sql
+stable
+as $$
+  with lap as (
+    select l.id, l.verified, l.lap_time_ms,
+      public.racing_driver(p.name, l.name) as driver,
+      '%' || substring(l.car_id from '@v[0-9]{1,3}') || case when l.car_id like '%~t%' then '~t%' else '' end as board
+    from public.nordschleife_leaderboard l
+    left join public.racing_players p on p.id = l.player_id
+    where l.id = p_lap_id
+  ),
+  bests as (
+    select public.racing_driver(p.name, b.name) as driver, min(b.lap_time_ms) as best_ms
+    from lap
+    join public.nordschleife_leaderboard b on b.verified and b.id <> lap.id and b.car_id like lap.board
+    left join public.racing_players p on p.id = b.player_id
+    group by 1
+  ),
+  mine as (
+    select lap.verified, lap.driver,
+      (select best_ms from bests where bests.driver = lap.driver) as previous_ms,
+      lap.lap_time_ms
+    from lap
+  ),
+  cur as (
+    select mine.*, least(mine.previous_ms, case when mine.verified then mine.lap_time_ms end) as best_ms
+    from mine
+  )
+  select cur.verified, cur.previous_ms,
+    case when cur.best_ms is not null then
+      1 + (select count(*)::integer from bests where bests.driver <> cur.driver and bests.best_ms < cur.best_ms)
+    end,
+    (select count(*)::integer from bests where bests.driver <> cur.driver)
+      + case when cur.best_ms is not null then 1 else 0 end
+  from cur;
+$$;
+
+-- the drift park's board: each driver's best run of a season ("@d1")
+create or replace function public.drift_park_board(p_season text)
+returns setof public.drift_park_scores
+language sql
+stable
+as $$
+  select distinct on (public.racing_driver(p.name, s.name)) s.*
+  from public.drift_park_scores s
+  left join public.racing_players p on p.id = s.player_id
+  where p_season ~ '^@d[0-9]{1,3}$'
+    and (s.car_id like '%' || p_season or s.car_id like '%' || p_season || '~t%')
+  order by public.racing_driver(p.name, s.name), s.score desc, s.created_at;
+$$;
+
 -- ---------------------------------------------------------------- realtime
 
 -- the board listens for new laps (postgres changes on insert)
@@ -708,6 +796,14 @@ revoke all on function public.racing_save_player(uuid, text, jsonb) from public;
 grant execute on function public.racing_save_player(uuid, text, jsonb) to anon, authenticated;
 revoke all on function public.racing_delete_player(uuid, text) from public;
 grant execute on function public.racing_delete_player(uuid, text) to anon, authenticated;
+revoke all on function public.racing_driver(text, text) from public;
+grant execute on function public.racing_driver(text, text) to anon, authenticated;
+revoke all on function public.nordschleife_board(text, boolean, text) from public;
+grant execute on function public.nordschleife_board(text, boolean, text) to anon, authenticated;
+revoke all on function public.nordschleife_lap_standing(uuid) from public;
+grant execute on function public.nordschleife_lap_standing(uuid) to anon, authenticated;
+revoke all on function public.drift_park_board(text) from public;
+grant execute on function public.drift_park_board(text) to anon, authenticated;
 revoke all on function public.nordschleife_lap_checkpoints() from public, anon, authenticated;
 revoke all on function public.nordschleife_replay_drives_lap(jsonb, integer) from public, anon, authenticated;
 revoke all on function public.nordschleife_verify_lap() from public, anon, authenticated;
