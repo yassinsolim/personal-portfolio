@@ -15,7 +15,7 @@ import type { AssistPreset } from '../../Racing/Vehicle/assists';
 import { GHOST_MODES, type GhostMode, type GhostPick } from '../../Racing/Ghost/ghostMode';
 import { LINE_MODES, type LineMode } from '../../Racing/Track/lineMode';
 import { STEERING_MAX, STEERING_MIN, clampSteering } from '../../Racing/Input/steering';
-import type { ProfileDraft } from '../../Racing/Profile/profile';
+import type { PlayerProfile, ProfileDraft } from '../../Racing/Profile/profile';
 import type { SaveStatus } from '../../Racing/Profile/ProfileService';
 import {
     readGraphicsOff,
@@ -130,6 +130,8 @@ type Props = {
     onProfileDraft: (draft: ProfileDraft) => void;
     profileStatus: SaveStatus | null;
     onRemoveProfile: () => void;
+    onSignedIn: (player: PlayerProfile) => void;
+    onSignedOut: () => void;
     lineMode: LineMode;
     steering: number;
     onResume: () => void;
@@ -325,9 +327,11 @@ const PauseMenu = (props: Props) => {
                         onDraft={props.onProfileDraft}
                         status={props.profileStatus}
                         drivenCar={props.carId}
-                        canView={Boolean(props.myId)}
+                        playerId={props.myId}
                         onView={() => props.myId && props.onPlayer(props.myId)}
                         onRemove={props.onRemoveProfile}
+                        onSignedIn={props.onSignedIn}
+                        onSignedOut={props.onSignedOut}
                     />
                 )}
 
