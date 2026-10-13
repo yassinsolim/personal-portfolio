@@ -230,6 +230,12 @@ const LONGITUDINAL_GRIP = 1.1;
 // wall hits treat the car as harder to spin than it is, which reads better
 // than a pinball bounce off a clipped barrier
 const IMPACT_INERTIA_SCALE = 3;
+// a wall gives little back, and rubs along the body like concrete does
+const WALL_RESTITUTION = 0.15;
+const WALL_FRICTION = 0.9;
+// how hard a hit is (m/s into the wall) for the car to keep 1/e of its speed:
+// a 3 degree graze at 200 km/h costs about a quarter, 10 degrees two thirds
+const WALL_SCRUB_SPEED = 10;
 
 // the rev limiter cuts the fuel this long each time the revs reach it
 const LIMITER_CUT = 0.06;
@@ -1341,9 +1347,9 @@ export default class VehiclePhysics {
             } else if (load > 0) {
                 stiffness = (grip * load * C * B) / spec.slipRatioPeak;
             }
-            // rolling resistance and grass drag
+            // rolling resistance
             const rolling =
-                (spec.rollingResistance + (surface.drag[i] ?? 0)) *
+                spec.rollingResistance *
                 load *
                 Math.tanh(vl / 0.4);
             fl -= rolling;
@@ -1418,8 +1424,11 @@ export default class VehiclePhysics {
             this.forceLong[i] = fl;
             this.forceLat[i] = ft;
 
-            const fx = fl * cos - ft * sin;
-            const fy = fl * sin + ft * cos;
+            // soft ground (grass) holds the wheel back on the body itself:
+            // through the tire, the wheel would just spin up against it
+            const sink = (surface.drag[i] ?? 0) * load * Math.tanh(vl / 0.4);
+            const fx = (fl - sink) * cos - ft * sin;
+            const fy = (fl - sink) * sin + ft * cos;
             forceX += fx;
             forceY += fy;
             moment += x * fy - y * fx;
@@ -1502,6 +1511,38 @@ export default class VehiclePhysics {
             x: this.vx - this.yawRate * pointY,
             y: this.vy + this.yawRate * pointX,
         };
+    }
+
+    // a body corner against a wall whose normal (body frame) points back onto
+    // the road: it bounces off a little, rubs along it, and keeps less speed
+    // the harder it went in. pressed along a wall every step's push costs some
+    // more, so riding one is slower than braking for the corner. returns the
+    // hit in m/s, 0 when the corner was already moving away
+    wallContact(pointX: number, pointY: number, normalX: number, normalY: number) {
+        const velocity = this.pointVelocity(pointX, pointY);
+        const into = velocity.x * normalX + velocity.y * normalY;
+        if (into >= 0) return 0;
+        const normalImpulse =
+            -(1 + WALL_RESTITUTION) * into * this.effectiveMass(pointX, pointY, normalX, normalY);
+        const tangentX = -normalY;
+        const tangentY = normalX;
+        const along = velocity.x * tangentX + velocity.y * tangentY;
+        const frictionImpulse = clamp(
+            -along * this.effectiveMass(pointX, pointY, tangentX, tangentY),
+            -WALL_FRICTION * normalImpulse,
+            WALL_FRICTION * normalImpulse
+        );
+        this.applyImpulse(
+            pointX,
+            pointY,
+            normalX * normalImpulse + tangentX * frictionImpulse,
+            normalY * normalImpulse + tangentY * frictionImpulse
+        );
+        const keep = Math.exp(into / WALL_SCRUB_SPEED);
+        this.vx *= keep;
+        this.vy *= keep;
+        for (let i = 0; i < 4; i++) this.wheelOmega[i] *= keep;
+        return normalImpulse / this.spec.massKg;
     }
 
     effectiveMass(

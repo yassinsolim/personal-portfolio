@@ -127,7 +127,7 @@ const RaceHelp = ({
                             ],
                             [
                                 'Off the road',
-                                'Grass and gravel cost you grip and speed, and that is the only price: the lap still counts.',
+                                'Grass is slippery and uneven and drags the car down, and a wall takes speed by how hard you hit it: a few degrees in at 200 km/h costs a quarter of it, riding one costs more than braking for the corner. The lap still counts.',
                             ],
                             [
                                 'Rewind',
