@@ -127,7 +127,7 @@ const RaceHelp = ({
                             ],
                             [
                                 'Off the road',
-                                'Grass and gravel cost you grip and speed, and that is the only price: the lap still counts.',
+                                'Grass is slippery and uneven and drags the car down, and a wall takes speed by how hard you hit it: a few degrees in at 200 km/h costs a quarter of it, riding one costs more than braking for the corner. The lap still counts.',
                             ],
                             [
                                 'Rewind',
@@ -143,7 +143,7 @@ const RaceHelp = ({
                             ],
                             [
                                 'Boards',
-                                'Each driver is on a board once, with their best (PB). Any garage change puts your laps on the tuned board instead of stock; after a lap you see which, and how it did against your PB. A lap or driver card can put their setup on your car, and the garage lists tunes from the board too.',
+                                'Each driver is on a board once, with their best (PB). Any garage change puts your laps on the tuned board instead of stock; after a lap you see which, and how it did against your PB. A lap or driver card can put their setup on your car, and the garage lists tunes from the board too. Last season, from before walls and grass cost time, is under Leaderboard, Last season.',
                             ],
                             [
                                 'Profile',

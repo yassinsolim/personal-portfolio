@@ -30,6 +30,8 @@ export type LapEntry = {
     tune?: string;
     playerId?: string | null;
     player?: PlayerBadge | null;
+    // set before walls and grass cost time
+    lastSeason?: boolean;
 };
 
 // what RaceManager works out for the card: the setup's numbers (the index
@@ -225,6 +227,7 @@ const LapCard = ({ entry, rank, board, outline, canWatch, racing, canUse, onUse,
                 <div>
                     <p>
                         {rank > 0 ? `#${rank} ${board === 'tuned' ? 'tuned' : 'stock'}` : board === 'tuned' ? 'Tuned' : 'Stock'}
+                        {entry.lastSeason ? ', last season' : ''}
                         {dateOf(entry.createdAt) ? ` · ${dateOf(entry.createdAt)}` : ''}
                     </p>
                     <h3>{entry.name}</h3>

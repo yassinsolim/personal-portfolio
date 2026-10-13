@@ -1656,30 +1656,34 @@ export default class RaceManager {
             if (serial === this.boardSerial) UIEventBus.dispatch('race:boardList', { ...query, entries, mine: null });
             return;
         }
-        const entries = await service.getLeaderboard(BOARD_SIZE, query.board, query.carId);
+        const entries = await service.getLeaderboard(BOARD_SIZE, query.board, query.carId, query.season);
         if (serial !== this.boardSerial) return;
         UIEventBus.dispatch('race:boardList', { ...query, entries, mine: null });
         const me = readIdentity()?.id;
         if (!me || entries.some((entry) => entry.playerId === me)) return;
-        const best = await service.getPlayerBest(me, query.board, query.carId);
-        const rank = best ? await service.getRankOf(best.lapTimeMs, query.board, query.carId) : 0;
+        const best = await service.getPlayerBest(me, query.board, query.carId, query.season);
+        const rank = best ? await service.getRankOf(best.lapTimeMs, query.board, query.carId, query.season) : 0;
         if (serial !== this.boardSerial || !best) return;
         UIEventBus.dispatch('race:boardList', { ...query, entries, mine: { entry: best, rank } });
     }
 
-    // a driver's card: their profile, fastest laps and best drift run
+    // a driver's card: their profile, fastest laps, best drift run, and their
+    // bests from last season
     async openPlayer(id: unknown) {
         if (!isPlayerId(id)) return;
         const serial = ++this.playerSerial;
         const service = this.leaderboardService;
-        const [player, laps, drift, online] = await Promise.all([
+        const [player, laps, drift, online, lastStock, lastTuned] = await Promise.all([
             this.profiles.getPlayer(id),
             service.getPlayerLaps(id),
             service.getPlayerDriftBest(id),
             service.client(),
+            service.getPlayerBest(id, 'stock', null, 'last'),
+            service.getPlayerBest(id, 'tuned', null, 'last'),
         ]);
         if (serial !== this.playerSerial) return;
-        UIEventBus.dispatch('race:playerState', { id, player, laps, drift, offline: !online });
+        const lastSeason = [lastStock, lastTuned].filter((lap) => lap !== null);
+        UIEventBus.dispatch('race:playerState', { id, player, laps, drift, lastSeason, offline: !online });
     }
 
     // the board your laps go on with the car as it's set up

@@ -1,5 +1,6 @@
 // three sectors along the lap, split at named corners. keeps this lap's
 // splits, the last lap's and the best per sector for the current car
+import { SEASON_TAG } from '../Leaderboard/season';
 
 export type SectorState = {
     // sector the car is in, 0 to 2
@@ -13,7 +14,7 @@ export type SectorState = {
     names: string[];
 };
 
-const STORAGE_PREFIX = 'yassinverse:raceSectors@v6:';
+const STORAGE_PREFIX = `yassinverse:raceSectors${SEASON_TAG}:`;
 
 export default class SectorTimer {
     bounds: number[];

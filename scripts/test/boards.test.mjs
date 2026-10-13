@@ -24,30 +24,31 @@ const { default: LeaderboardService, bestPerDriver } = await import(
 );
 const { lapVerdict } = await import('../../src/Application/Racing/Leaderboard/lapResult.ts');
 
-// a stand-in for supabase-js: each rpc call and what's chained on it is kept,
-// and awaiting it gives what the test answers
+// a stand-in for supabase-js: each rpc call or table read and what's chained
+// on it is kept, and awaiting it gives what the test answers
 const fakeClient = (answer) => {
     const calls = [];
+    const start = (call) => {
+        calls.push(call);
+        const builder = new Proxy(
+            {},
+            {
+                get(_, key) {
+                    if (key === 'then') {
+                        return (resolve, reject) => Promise.resolve(answer(call)).then(resolve, reject);
+                    }
+                    return (...rest) => {
+                        call.chain.push([key, ...rest]);
+                        return builder;
+                    };
+                },
+            }
+        );
+        return builder;
+    };
     const client = {
-        rpc(fn, args, options) {
-            const call = { fn, args, options, chain: [] };
-            calls.push(call);
-            const builder = new Proxy(
-                {},
-                {
-                    get(_, key) {
-                        if (key === 'then') {
-                            return (resolve, reject) => Promise.resolve(answer(call)).then(resolve, reject);
-                        }
-                        return (...rest) => {
-                            call.chain.push([key, ...rest]);
-                            return builder;
-                        };
-                    },
-                }
-            );
-            return builder;
-        },
+        rpc: (fn, args, options) => start({ fn, args, options, chain: [] }),
+        from: (table) => start({ fn: `from:${table}`, chain: [] }),
     };
     return { client, calls };
 };
@@ -63,7 +64,10 @@ const serviceWith = (client) => {
 const row = (id, name, ms, carId) => ({ id, name, lap_time_ms: ms, car_id: carId, created_at: '', player_id: null, player: null });
 
 test("the board is the database's, each driver once, without this device's laps", async () => {
-    const { client, calls } = fakeClient(() => ({ data: [row('lap-1', 'Ann', 390000, 'amg-one@v6~tq1')], error: null }));
+    const { client, calls } = fakeClient((call) => ({
+        data: [row('lap-1', 'Ann', 390000, `amg-one${call.args.p_season}~tq1`)],
+        error: null,
+    }));
     const service = serviceWith(client);
     service.local.add({ name: 'yassin', lapTimeMs: 380000, carId: 'amg-one', tune: 'q1' });
 
@@ -73,7 +77,7 @@ test("the board is the database's, each driver once, without this device's laps"
         ['lap-1']
     );
     assert.equal(calls[0].fn, 'nordschleife_board');
-    assert.deepEqual(calls[0].args, { p_season: '@v6', p_tuned: true, p_car: 'amg-one' });
+    assert.deepEqual(calls[0].args, { p_season: '@v7', p_tuned: true, p_car: 'amg-one' });
     assert.deepEqual(calls[0].options, { get: true });
     assert.deepEqual(
         calls[0].chain.map(([key, ...rest]) => (key === 'select' ? key : [key, ...rest])),
@@ -81,7 +85,43 @@ test("the board is the database's, each driver once, without this device's laps"
     );
 
     await service.getLeaderboard(5, 'stock', 'gt3rs');
-    assert.deepEqual(calls[1].args, { p_season: '@v6', p_tuned: false });
+    assert.deepEqual(calls[1].args, { p_season: '@v7', p_tuned: false });
+
+    // last season is still there to read, without this device's laps
+    const last = await service.getLeaderboard(5, 'stock', null, 'last');
+    assert.deepEqual(calls[2].args, { p_season: '@v6', p_tuned: false });
+    assert.equal(last[0].lastSeason, true);
+    assert.equal(entries[0].lastSeason, undefined);
+    assert.ok(last.every((entry) => entry.source === 'remote'));
+});
+
+test("the garage's board tunes come from both seasons, one per tune", async () => {
+    const { client, calls } = fakeClient(() => ({
+        data: [
+            row('new-q1', 'Ann', 390000, 'amg-one@v7~tq1'),
+            row('old-q1', 'Bob', 391000, 'amg-one@v6~tq1'),
+            row('old-z9', 'Cat', 395000, 'amg-one@v6~tz9'),
+        ],
+        error: null,
+    }));
+    const service = serviceWith(client);
+    const tunes = await service.getTunesForCar('amg-one');
+    assert.deepEqual(
+        tunes.map((entry) => [entry.id, entry.tune, entry.lastSeason === true]),
+        [
+            ['new-q1', 'q1', false],
+            ['old-z9', 'z9', true],
+        ]
+    );
+    assert.equal(calls[0].fn, 'from:nordschleife_leaderboard');
+    assert.deepEqual(
+        calls[0].chain.find(([key]) => key === 'or'),
+        ['or', 'car_id.like.amg-one@v7~t*,car_id.like.amg-one@v6~t*']
+    );
+    assert.deepEqual(
+        calls[0].chain.find(([key]) => key === 'eq'),
+        ['eq', 'verified', true]
+    );
 });
 
 test('a rank counts the drivers whose best is faster', async () => {

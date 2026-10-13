@@ -4,7 +4,7 @@ import LocalDriftBoard, { type DriftEntry } from './LocalDriftBoard';
 import { mockRealtimeEnabled } from '../Multiplayer/mockRealtime';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import type { GhostLapReplay } from '../Ghost/GhostReplay';
-import { SEASON_TAG } from './season';
+import { LAST_SEASON_TAG, SEASON_TAG, seasonTag, type Season } from './season';
 import type { RemovedLap } from './removedLaps';
 import { isPlayerId, readIdentity, sanitizeBadge } from '../Profile/profile';
 
@@ -233,30 +233,34 @@ export default class LeaderboardService {
 
     // the car_id filter of a board: stock laps end in the season tag, tuned
     // ones carry ~t<tune code> after it, and a car narrows it to that car's
-    boardFilter(board: Board, carId?: string | null): ['like' | 'eq', string] {
+    boardFilter(board: Board, carId?: string | null, season: Season = 'current'): ['like' | 'eq', string] {
         const car = carId && carOptionsById[carId] ? carId : '';
-        if (!car) return ['like', board === 'tuned' ? `%${SEASON_TAG}${TUNE_TAG}%` : `%${SEASON_TAG}`];
-        return board === 'tuned' ? ['like', `${car}${SEASON_TAG}${TUNE_TAG}%`] : ['eq', `${car}${SEASON_TAG}`];
+        const tag = seasonTag(season);
+        if (!car) return ['like', board === 'tuned' ? `%${tag}${TUNE_TAG}%` : `%${tag}`];
+        return board === 'tuned' ? ['like', `${car}${tag}${TUNE_TAG}%`] : ['eq', `${car}${tag}`];
     }
 
     // each driver's best verified lap on a board (supabase/racing.sql
     // nordschleife_board), to order and page. head counts them instead
-    boardLaps(board: Board, carId?: string | null, head = false) {
+    boardLaps(board: Board, carId?: string | null, head = false, season: Season = 'current') {
         const car = carId && carOptionsById[carId] ? carId : null;
         return this.supabase!.rpc(
             'nordschleife_board',
-            { p_season: SEASON_TAG, p_tuned: board === 'tuned', ...(car ? { p_car: car } : {}) },
+            { p_season: seasonTag(season), p_tuned: board === 'tuned', ...(car ? { p_car: car } : {}) },
             head ? { get: true, head: true, count: 'exact' } : { get: true }
         );
     }
 
     // a board: each driver's best lap, the fastest first. a lap shows once the
     // database has checked its ghost drove the whole ring. offline it's this
-    // device's laps
-    async getLeaderboard(limit = 10, board: Board = 'stock', carId?: string | null) {
-        const localEntries = bestPerDriver(
-            this.local.getTop(64, board).filter((entry) => !carId || entry.carId === carId)
-        ).slice(0, limit);
+    // device's laps (this season's)
+    async getLeaderboard(limit = 10, board: Board = 'stock', carId?: string | null, season: Season = 'current') {
+        const localEntries =
+            season === 'current'
+                ? bestPerDriver(
+                      this.local.getTop(64, board).filter((entry) => !carId || entry.carId === carId)
+                  ).slice(0, limit)
+                : [];
         await this.initialize();
 
         if (!this.supabase) {
@@ -264,7 +268,7 @@ export default class LeaderboardService {
         }
 
         try {
-            const { data, error } = await this.boardLaps(board, carId)
+            const { data, error } = await this.boardLaps(board, carId, false, season)
                 .select(LAP_COLUMNS)
                 .order('lap_time_ms', { ascending: true })
                 .limit(limit);
@@ -281,11 +285,11 @@ export default class LeaderboardService {
 
     // where a time would be on a board: one more than the drivers whose best
     // is faster. 0 when that can't be told
-    async getRankOf(lapTimeMs: number, board: Board, carId?: string | null) {
+    async getRankOf(lapTimeMs: number, board: Board, carId?: string | null, season: Season = 'current') {
         await this.initialize();
         if (!this.supabase) return 0;
         try {
-            const { count, error } = await this.boardLaps(board, carId, true).lt(
+            const { count, error } = await this.boardLaps(board, carId, true, season).lt(
                 'lap_time_ms',
                 Math.floor(lapTimeMs)
             );
@@ -321,14 +325,14 @@ export default class LeaderboardService {
     }
 
     // a player's best lap on a board
-    async getPlayerBest(playerId: string, board: Board, carId?: string | null) {
+    async getPlayerBest(playerId: string, board: Board, carId?: string | null, season: Season = 'current') {
         await this.initialize();
         if (!this.supabase) return null;
         try {
             const { data, error } = await this.supabase
                 .from(this.tableName)
                 .select(LAP_COLUMNS)
-                .filter('car_id', ...this.boardFilter(board, carId))
+                .filter('car_id', ...this.boardFilter(board, carId, season))
                 .eq('verified', true)
                 .eq('player_id', playerId)
                 .order('lap_time_ms', { ascending: true })
@@ -403,7 +407,8 @@ export default class LeaderboardService {
         }
     }
 
-    // the fastest tuned laps with a car, one per tune, to load in the garage
+    // the fastest tuned laps with a car, one per tune, to load in the garage.
+    // last season's setups still drive, so they count too
     async getTunesForCar(carId: string, limit = 5) {
         const localEntries = this.local
             .getTop(64, 'tuned')
@@ -415,7 +420,11 @@ export default class LeaderboardService {
                 const { data, error } = await this.supabase
                     .from(this.tableName)
                     .select(LAP_COLUMNS)
-                    .like('car_id', `${carId}${SEASON_TAG}${TUNE_TAG}%`)
+                    .or(
+                        [SEASON_TAG, LAST_SEASON_TAG]
+                            .map((tag) => `car_id.like.${carId}${tag}${TUNE_TAG}*`)
+                            .join(',')
+                    )
                     .eq('verified', true)
                     .order('lap_time_ms', { ascending: true })
                     .limit(limit * 4);
@@ -440,6 +449,7 @@ export default class LeaderboardService {
 
     fromLapRow(row: RemoteLeaderboardRow): LeaderboardEntry {
         const player = sanitizeBadge(row.player);
+        const lastSeason = /@v\d+/.exec(String(row.car_id || ''))?.[0] === LAST_SEASON_TAG;
         return {
             id: String(row.id || '').slice(0, 80),
             name: this.sanitizeName(row.name),
@@ -450,6 +460,7 @@ export default class LeaderboardService {
             tune: this.readTune(row.car_id),
             playerId: player?.id || (isPlayerId(row.player_id) ? row.player_id : null),
             player,
+            ...(lastSeason ? { lastSeason } : {}),
         };
     }
 

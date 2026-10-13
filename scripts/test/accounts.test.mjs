@@ -150,6 +150,11 @@ test('signing out forgets the player, and a name check says free when it cannot 
     const { service } = serviceWith(client);
     assert.equal(await service.nameFree('Becklandxd'), false);
     assert.equal(calls[0].args.p_name, 'Becklandxd');
+    assert.equal(calls[0].args.p_id, profile.readIdentity().id);
+    store.clear();
+    await service.nameFree('Becklandxd');
+    assert.ok(!('p_id' in calls[1].args), 'a device with no player sends no id (a null would go out as "null")');
+    profile.ensureIdentity();
     assert.equal(await service.signOut(), 'out');
     assert.equal(profile.readIdentity(), null);
 

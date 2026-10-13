@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { carOptionsById, defaultCarId } from '../../carOptions';
 import Application from '../../Application';
 import { legacyColor } from '../../Utils/LegacyColor';
+import { LOCAL_GHOST_KEY } from '../Leaderboard/season';
 
-const STORAGE_KEY = 'yassinverse:nordschleife:ghost:v6';
+const STORAGE_KEY = LOCAL_GHOST_KEY;
 const SAMPLE_INTERVAL_MS = 60;
 const GHOST_OPACITY = 0.38;
 // 16 minutes, the slowest car's lap of the real ring fits

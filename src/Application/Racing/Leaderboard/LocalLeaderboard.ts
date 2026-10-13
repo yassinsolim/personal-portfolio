@@ -1,5 +1,6 @@
 import { randomInt } from '../../Utils/Random';
 import type { PlayerBadge } from '../Profile/profile';
+import { LOCAL_LAPS_KEY } from './season';
 
 export type LeaderboardEntry = {
     id: string;
@@ -13,9 +14,11 @@ export type LeaderboardEntry = {
     // whose lap it is on the board, and their badge
     playerId?: string | null;
     player?: PlayerBadge | null;
+    // set before walls and grass cost time (the board's last season)
+    lastSeason?: boolean;
 };
 
-const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v6';
+const STORAGE_KEY = LOCAL_LAPS_KEY;
 
 export default class LocalLeaderboard {
     entries: LeaderboardEntry[];

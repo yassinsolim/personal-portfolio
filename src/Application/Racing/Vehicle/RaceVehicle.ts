@@ -29,6 +29,7 @@ import VehiclePhysics, {
     type PhysicsControls,
     type PhysicsSurface,
 } from './VehiclePhysics';
+import { grassPatch, SURFACE_DRAG, SURFACE_GRIP } from './surfaceGrip';
 import {
     buildPhysicsSpec,
     defaultWheelGeometry,
@@ -66,21 +67,6 @@ const LONG_AXIS_THRESHOLD = 1.12;
 const SMOKE_SPAWN_INTERVAL = 0.03;
 const MAX_SPEED_MPS = 400 / 3.6;
 const MAX_REVERSE_SPEED_MPS = 34 / 3.6;
-// grip and drag per surface. kerbs lose a little, grass a lot
-const SURFACE_GRIP: Record<TrackSurface, number> = {
-    asphalt: 1,
-    kerb: 0.9,
-    grass: 0.55,
-    off: 0.4,
-};
-const SURFACE_DRAG: Record<TrackSurface, number> = {
-    asphalt: 0,
-    kerb: 0.004,
-    grass: 0.07,
-    off: 0.1,
-};
-const BARRIER_RESTITUTION = 0.22;
-const BARRIER_FRICTION = 0.35;
 // cars reflect the sky a bit under full strength, the probe has no occluders
 // so at 1 the lower body glows
 const RACE_ENV_INTENSITY = 0.55;
@@ -4679,7 +4665,15 @@ export default class RaceVehicle {
             const lateral = frame.lateral + x * forwardAcross + y * leftAcross;
             const kind = this.track.getSurface(frame, lateral);
             this.wheelSurfaces[i] = kind;
-            surface.grip[i] = SURFACE_GRIP[kind];
+            // off the road the grip changes under each wheel as it rolls
+            surface.grip[i] =
+                SURFACE_GRIP[kind] *
+                (kind === 'grass' || kind === 'off'
+                    ? grassPatch(
+                          this.position.x + x * sin + y * cos,
+                          this.position.z + x * cos - y * sin
+                      )
+                    : 1);
             surface.drag[i] = SURFACE_DRAG[kind];
         }
         return surface;
@@ -4718,8 +4712,8 @@ export default class RaceVehicle {
     }
 
     // the barriers stand at the outer edge of the verges. corners of the body
-    // that cross one get pushed back, with an impulse at the contact point so
-    // glancing hits turn the car along the wall instead of stopping it dead
+    // that cross one get pushed back, and the hit (VehiclePhysics.wallContact)
+    // turns the car along the wall and costs it speed by how hard it went in
     applyBarriers() {
         if (!this.trackBound) {
             this.barrierContact = 0;
@@ -4766,36 +4760,7 @@ export default class RaceVehicle {
             const normalZ = -side * frame.leftZ;
             const nx = normalX * sin + normalZ * cos;
             const ny = normalX * cos - normalZ * sin;
-            const velocity = this.physics.pointVelocity(pointX, pointY);
-            const into = velocity.x * nx + velocity.y * ny;
-            if (into < 0) {
-                const mass = this.physics.effectiveMass(pointX, pointY, nx, ny);
-                const normalImpulse = -(1 + BARRIER_RESTITUTION) * into * mass;
-                const tx = -ny;
-                const ty = nx;
-                const along = velocity.x * tx + velocity.y * ty;
-                const tangentMass = this.physics.effectiveMass(
-                    pointX,
-                    pointY,
-                    tx,
-                    ty
-                );
-                const frictionImpulse = THREE.MathUtils.clamp(
-                    -along * tangentMass,
-                    -BARRIER_FRICTION * normalImpulse,
-                    BARRIER_FRICTION * normalImpulse
-                );
-                this.physics.applyImpulse(
-                    pointX,
-                    pointY,
-                    nx * normalImpulse + tx * frictionImpulse,
-                    ny * normalImpulse + ty * frictionImpulse
-                );
-                impact = Math.max(
-                    impact,
-                    normalImpulse / this.physics.spec.massKg
-                );
-            }
+            impact = Math.max(impact, this.physics.wallContact(pointX, pointY, nx, ny));
             this.barrierPoint
                 .copy(this.position)
                 .addScaledVector(this.tmpVectorB.set(sin, 0, cos), pointX)
