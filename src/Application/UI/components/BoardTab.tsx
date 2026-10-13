@@ -164,6 +164,7 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                             type="button"
                             key={id}
                             className={query.track === id ? 'on' : ''}
+                            aria-pressed={query.track === id}
                             onClick={() => pick({ track: id })}
                         >
                             {label}
@@ -183,6 +184,7 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                                     type="button"
                                     key={id}
                                     className={query.season === id ? 'on' : ''}
+                                    aria-pressed={query.season === id}
                                     onClick={() => pick({ season: id })}
                                 >
                                     {label}
@@ -200,6 +202,7 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                                     type="button"
                                     key={id}
                                     className={query.board === id ? 'on' : ''}
+                                    aria-pressed={query.board === id}
                                     onClick={() => pick({ board: id })}
                                 >
                                     {label}

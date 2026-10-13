@@ -7,6 +7,7 @@
 // window.__roomDisplays has the displays and the context, for scripts
 // (scripts/room/display-shots.mjs)
 import UIEventBus from '../../UI/EventBus';
+import { LOCAL_GHOST_KEY } from '../../Racing/Leaderboard/season';
 import { assetUrl } from '../../Utils/assetUrl';
 import { currentStage, type LoadStage } from '../../Utils/loadStages';
 import { createTerminalDisplay } from './TerminalDisplay';
@@ -25,7 +26,7 @@ type Site = {
 
 // where the race keeps this browser's best lap (Racing/Ghost/GhostReplay.ts).
 // local storage only, never the online leaderboard
-const GHOST_KEY = 'yassinverse:nordschleife:ghost:v6';
+const GHOST_KEY = LOCAL_GHOST_KEY;
 const GAP = 40;
 
 const localBestLap = () => {

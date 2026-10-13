@@ -1,5 +1,6 @@
 import { randomInt } from '../../Utils/Random';
 import type { PlayerBadge } from '../Profile/profile';
+import { LOCAL_LAPS_KEY } from './season';
 
 export type LeaderboardEntry = {
     id: string;
@@ -17,7 +18,7 @@ export type LeaderboardEntry = {
     lastSeason?: boolean;
 };
 
-const STORAGE_KEY = 'yassinverse:nordschleife:leaderboard:v7';
+const STORAGE_KEY = LOCAL_LAPS_KEY;
 
 export default class LocalLeaderboard {
     entries: LeaderboardEntry[];

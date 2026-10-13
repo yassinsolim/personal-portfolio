@@ -7,6 +7,7 @@ import { assetUrl } from '../../Utils/assetUrl';
 import { isMobileDevice } from '../../Utils/Device';
 import { roomTier } from '../../Utils/roomTier';
 import { SCREEN_POSES, type ScreenPose } from './layout';
+import { LOCAL_LAPS_KEY } from '../../Racing/Leaderboard/season';
 import {
     SCREEN_CSS_SIZE,
     type DisplayContext,
@@ -865,7 +866,7 @@ const screenArea = (pose: ScreenPose, camera: THREE.PerspectiveCamera) => {
     return Math.abs(sum) / 2 / 4;
 };
 
-const LEADERBOARD_KEY = 'yassinverse:nordschleife:leaderboard:v6';
+const LEADERBOARD_KEY = LOCAL_LAPS_KEY;
 
 const bestLocalLap = () => {
     try {

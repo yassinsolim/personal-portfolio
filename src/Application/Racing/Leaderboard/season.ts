@@ -4,6 +4,10 @@
 // before stays viewable as last season. older rows stay too
 export const SEASON_TAG = '@v7';
 export const LAST_SEASON_TAG = '@v6';
+// this device's own laps and best lap ghost, kept per season (the room's
+// screens read them too)
+export const LOCAL_LAPS_KEY = 'yassinverse:nordschleife:leaderboard:v7';
+export const LOCAL_GHOST_KEY = 'yassinverse:nordschleife:ghost:v7';
 
 export type Season = 'current' | 'last';
 
