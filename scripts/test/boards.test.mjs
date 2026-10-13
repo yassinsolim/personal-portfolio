@@ -63,7 +63,10 @@ const serviceWith = (client) => {
 const row = (id, name, ms, carId) => ({ id, name, lap_time_ms: ms, car_id: carId, created_at: '', player_id: null, player: null });
 
 test("the board is the database's, each driver once, without this device's laps", async () => {
-    const { client, calls } = fakeClient(() => ({ data: [row('lap-1', 'Ann', 390000, 'amg-one@v6~tq1')], error: null }));
+    const { client, calls } = fakeClient((call) => ({
+        data: [row('lap-1', 'Ann', 390000, `amg-one${call.args.p_season}~tq1`)],
+        error: null,
+    }));
     const service = serviceWith(client);
     service.local.add({ name: 'yassin', lapTimeMs: 380000, carId: 'amg-one', tune: 'q1' });
 
@@ -73,7 +76,7 @@ test("the board is the database's, each driver once, without this device's laps"
         ['lap-1']
     );
     assert.equal(calls[0].fn, 'nordschleife_board');
-    assert.deepEqual(calls[0].args, { p_season: '@v6', p_tuned: true, p_car: 'amg-one' });
+    assert.deepEqual(calls[0].args, { p_season: '@v7', p_tuned: true, p_car: 'amg-one' });
     assert.deepEqual(calls[0].options, { get: true });
     assert.deepEqual(
         calls[0].chain.map(([key, ...rest]) => (key === 'select' ? key : [key, ...rest])),
@@ -81,7 +84,14 @@ test("the board is the database's, each driver once, without this device's laps"
     );
 
     await service.getLeaderboard(5, 'stock', 'gt3rs');
-    assert.deepEqual(calls[1].args, { p_season: '@v6', p_tuned: false });
+    assert.deepEqual(calls[1].args, { p_season: '@v7', p_tuned: false });
+
+    // last season is still there to read, without this device's laps
+    const last = await service.getLeaderboard(5, 'stock', null, 'last');
+    assert.deepEqual(calls[2].args, { p_season: '@v6', p_tuned: false });
+    assert.equal(last[0].lastSeason, true);
+    assert.equal(entries[0].lastSeason, undefined);
+    assert.ok(last.every((entry) => entry.source === 'remote'));
 });
 
 test('a rank counts the drivers whose best is faster', async () => {

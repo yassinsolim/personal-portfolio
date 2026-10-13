@@ -175,10 +175,12 @@ export default class ProfileService {
     async nameFree(name: string) {
         const supabase = await this.client();
         if (!supabase || !name.trim()) return true;
+        // a get puts arguments in the url, where null would be the text "null"
+        const id = readIdentity()?.id;
         try {
             const { data, error } = await supabase.rpc(
                 'racing_name_free',
-                { p_name: name.trim(), p_id: readIdentity()?.id ?? null },
+                { p_name: name.trim(), ...(id ? { p_id: id } : {}) },
                 { get: true }
             );
             return error ? true : data !== false;

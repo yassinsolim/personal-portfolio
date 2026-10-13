@@ -1,11 +1,13 @@
 import { carOptionsById } from '../../carOptions';
+import type { Season } from './season';
 
 // what the pause menu's board shows: the ring's stock or tuned laps (all
-// cars or one), or the drift park's runs
+// cars or one) this season or last, or the drift park's runs
 export type BoardQuery = {
     track: 'ring' | 'drift';
     board: 'stock' | 'tuned';
     carId: string | null;
+    season: Season;
 };
 
 // laps on the menu's board
@@ -17,8 +19,9 @@ export const sanitizeBoardQuery = (state: unknown): BoardQuery => {
         track: source.track === 'drift' ? 'drift' : 'ring',
         board: source.board === 'tuned' ? 'tuned' : 'stock',
         carId: typeof source.carId === 'string' && carOptionsById[source.carId] ? source.carId : null,
+        season: source.season === 'last' ? 'last' : 'current',
     };
 };
 
 export const sameBoardQuery = (a: BoardQuery, b: BoardQuery) =>
-    a.track === b.track && a.board === b.board && a.carId === b.carId;
+    a.track === b.track && a.board === b.board && a.carId === b.carId && a.season === b.season;

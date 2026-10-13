@@ -132,15 +132,18 @@ test('board rows carry their driver, and the board filter picks a car', () => {
     });
     assert.equal(entry.playerId, ID);
     assert.deepEqual(entry.player, { id: ID, name: 'QA Driver', avatar: 'flag', color: '#3e63dd', number: 3 });
-    const bare = service.fromLapRow({ id: 'lap-2', name: 'Old', lap_time_ms: 480000, car_id: 'bmw-e92-m3@v6', created_at: '' });
+    const bare = service.fromLapRow({ id: 'lap-2', name: 'Old', lap_time_ms: 480000, car_id: 'bmw-e92-m3@v7', created_at: '' });
     assert.equal(bare.playerId, null);
     assert.equal(bare.player, null);
 
-    assert.deepEqual(service.boardFilter('stock'), ['like', '%@v6']);
-    assert.deepEqual(service.boardFilter('tuned'), ['like', '%@v6~t%']);
-    assert.deepEqual(service.boardFilter('stock', 'amg-one'), ['eq', 'amg-one@v6']);
-    assert.deepEqual(service.boardFilter('tuned', 'amg-one'), ['like', 'amg-one@v6~t%']);
-    assert.deepEqual(service.boardFilter('stock', 'gt3rs'), ['like', '%@v6']);
+    assert.deepEqual(service.boardFilter('stock'), ['like', '%@v7']);
+    assert.deepEqual(service.boardFilter('tuned'), ['like', '%@v7~t%']);
+    assert.deepEqual(service.boardFilter('stock', 'amg-one'), ['eq', 'amg-one@v7']);
+    assert.deepEqual(service.boardFilter('tuned', 'amg-one'), ['like', 'amg-one@v7~t%']);
+    assert.deepEqual(service.boardFilter('stock', 'gt3rs'), ['like', '%@v7']);
+    assert.deepEqual(service.boardFilter('tuned', 'amg-one', 'last'), ['like', 'amg-one@v6~t%']);
+    assert.equal(service.fromLapRow({ id: 'old', name: 'Old', lap_time_ms: 480000, car_id: 'amg-one@v6', created_at: '' }).lastSeason, true);
+    assert.equal(bare.lastSeason, undefined);
 });
 
 test("a lap renamed on the board isn't shown twice on the device that set it", () => {
@@ -159,14 +162,16 @@ test("a lap renamed on the board isn't shown twice on the device that set it", (
 });
 
 test("the menu's board query only takes what it knows", () => {
-    assert.deepEqual(sanitizeBoardQuery({ track: 'drift', board: 'tuned', carId: 'amg-one' }), {
+    assert.deepEqual(sanitizeBoardQuery({ track: 'drift', board: 'tuned', carId: 'amg-one', season: 'last' }), {
         track: 'drift',
         board: 'tuned',
         carId: 'amg-one',
+        season: 'last',
     });
-    assert.deepEqual(sanitizeBoardQuery({ track: 'moon', board: 'x', carId: 'gt3rs' }), {
+    assert.deepEqual(sanitizeBoardQuery({ track: 'moon', board: 'x', carId: 'gt3rs', season: 'v1' }), {
         track: 'ring',
         board: 'stock',
         carId: null,
+        season: 'current',
     });
 });

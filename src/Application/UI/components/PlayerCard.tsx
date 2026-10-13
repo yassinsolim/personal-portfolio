@@ -16,6 +16,8 @@ type PlayerState = {
     player: PlayerProfile | null;
     laps: LapEntry[];
     drift: DriftBest;
+    // their stock and tuned bests from before walls and grass cost time
+    lastSeason?: LapEntry[];
     offline: boolean;
 };
 
@@ -280,8 +282,28 @@ const PlayerCard = ({ playerId, mine, local, covered, canUse, onUse, onLap, onEd
                             ))}
                         </ol>
                     ) : (
-                        <p className="lap-card-note">{state ? 'No laps on the board yet.' : 'Loading'}</p>
+                        <p className="lap-card-note">{state ? 'No laps this season yet.' : 'Loading'}</p>
                     )}
+                    {state?.lastSeason?.length ? (
+                        <>
+                            <h4>Last season</h4>
+                            <ol className="player-laps">
+                                {state.lastSeason.map((lap) => (
+                                    <li key={lap.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => onLap(lap)}
+                                            title="Before walls and grass cost time: the lap, its car, setup and replay"
+                                        >
+                                            <strong>{formatTime(lap.lapTimeMs)}</strong>
+                                            <span>{label(lap.carId)}</span>
+                                            <em>{lap.tune ? 'Tuned' : 'Stock'}</em>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ol>
+                        </>
+                    ) : null}
                     {state?.drift ? (
                         <>
                             <h4>Drift park</h4>

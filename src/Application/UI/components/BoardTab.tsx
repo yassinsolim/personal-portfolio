@@ -90,7 +90,7 @@ const Driver = ({
 // every car or one) or in the drift park, each driver's badge opening their
 // card and each lap its own. your best is under the list when it's lower
 const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
-    const [query, setQuery] = useState<BoardQuery>(() => ({ track, board, carId: null }));
+    const [query, setQuery] = useState<BoardQuery>(() => ({ track, board, carId: null, season: 'current' }));
     const [list, setList] = useState<BoardList | null>(null);
     const current = useRef(query);
     current.current = query;
@@ -175,6 +175,23 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                         <div className="pm-choice">
                             {(
                                 [
+                                    ['current', 'This season'],
+                                    ['last', 'Last season'],
+                                ] as const
+                            ).map(([id, label]) => (
+                                <button
+                                    type="button"
+                                    key={id}
+                                    className={query.season === id ? 'on' : ''}
+                                    onClick={() => pick({ season: id })}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="pm-choice">
+                            {(
+                                [
                                     ['stock', 'Stock'],
                                     ['tuned', 'Tuned'],
                                 ] as const
@@ -205,9 +222,11 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                     </>
                 )}
                 <span className="pmb-hint">
-                    {query.track === 'ring'
-                        ? 'Each driver’s best verified lap. A name opens the driver, a lap its car and replay.'
-                        : 'Each driver’s best drift run. A name opens the driver.'}
+                    {query.track === 'drift'
+                        ? 'Each driver’s best drift run. A name opens the driver.'
+                        : query.season === 'last'
+                          ? 'Last season, before walls and grass cost time. Kept as it ended.'
+                          : 'Each driver’s best verified lap. A name opens the driver, a lap its car and replay.'}
                 </span>
             </div>
 
@@ -218,8 +237,10 @@ const BoardTab = ({ track, board, myId, onBoard, onLap, onPlayer }: Props) => {
                     {query.track === 'drift'
                         ? 'No drift runs yet. Drift a full lap of the park to score.'
                         : query.carId
-                          ? `No ${query.board} laps with the ${carLabel(query.carId)} yet.`
-                          : 'No laps on this board yet.'}
+                          ? `No ${query.board} laps with the ${carLabel(query.carId)} ${query.season === 'last' ? 'last season' : 'yet'}.`
+                          : query.season === 'last'
+                            ? 'No laps on this board last season.'
+                            : 'No laps on this board yet. A new season started with the wall and grass update.'}
                 </p>
             ) : query.track === 'drift' ? (
                 <ol className="pmb-list pmb-drift">
