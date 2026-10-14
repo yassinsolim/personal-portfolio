@@ -20,23 +20,175 @@ export const COCKPIT_GLASS_OPACITY: Record<GlassZone, number> = {
     surround: 0.45,
 };
 
-// per car: the steering wheel by node name (the node or one above it) or by
-// material, for the models that keep it apart (the rest keep a still wheel),
-// and eyes set by hand where the body throws the guess off
+type Vec3 = [number, number, number];
+
+// a steering wheel the model doesn't keep apart, cut from the cabin's meshes:
+// the parts wholly inside a cylinder round its column (a part reaching out of
+// it, like the dash or a column mounted paddle, stays). center is on the
+// column, axis toward the driver, along how far either way (- toward the
+// dash)
+type WheelCut = {
+    center: Vec3;
+    axis: Vec3;
+    radius: number;
+    along: [number, number];
+    material: RegExp;
+};
+
+// per car: the driver's eyes, and the steering wheel by node name (the node
+// or one above it) or material for the models that keep it apart, or cut
+// from the cabin. measured from each model and set by hand, so nothing is
+// worked out from the body when a car loads. solid is cabin materials the
+// model blends though they're solid (their alpha only cuts out decals):
+// blended parts don't hide each other by depth, which shows from the seat
 const COCKPITS: Record<
     string,
-    { node?: RegExp; material?: RegExp; eye?: [number, number, number] }
+    {
+        eye: Vec3;
+        node?: RegExp;
+        material?: RegExp;
+        cut?: WheelCut;
+        solid?: RegExp;
+    }
 > = {
-    // its roof scoop reads as the top of the roof
     'amg-one': { eye: [0.37, 0.55, -0.06] },
-    'amg-c63s-coupe': { node: /SteeringWheel_\d+$/ },
-    'bmw-e92-m3': { node: /^e92_steer_m3$/ },
-    'bmw-f82-m4': { node: /^ARm4_steer_(carbon|stick_msport)$/ },
-    'koenigsegg-jesko': { node: /INT_STEERING_WHEEL/ },
-    'lamborghini-aventador-s': { node: /SteeringWheel5/ },
-    'mclaren-p1': { node: /^STEER_HR$/ },
-    'mercedes-gt63s-edition-one': { material: /^Steering wheel$/ },
-    'pagani-huayra': { material: /^PAG_HUAYRA_SW$/ },
+    'amg-c63-507': {
+        eye: [0.35, 0.764, -0.305],
+        cut: {
+            center: [0.35, 0.51, 0.145],
+            axis: [0, 0.453, -0.891],
+            radius: 0.2,
+            along: [-0.11, 0.05],
+            material: /InteriorA|Badge/,
+        },
+        solid: /InteriorA/,
+    },
+    'amg-c63s-coupe': { eye: [0.346, 0.816, -0.28], node: /SteeringWheel_\d+$/ },
+    'aston-martin-valkyrie': {
+        eye: [0.225, 0.532, 0.365],
+        cut: {
+            center: [0.225, 0.278, 0.815],
+            axis: [0.078, 0.1, -0.99],
+            radius: 0.2,
+            along: [-0.085, 0.045],
+            material: /_int|alcantara|black1|lcd_digital|stro4ka|badge/,
+        },
+    },
+    'bmw-e92-m3': { eye: [0.362, 0.775, -0.25], node: /^e92_steer_m3$/ },
+    'bmw-f82-m4': {
+        eye: [0.357, 0.842, -0.236],
+        node: /^ARm4_steer_(carbon|stick_msport)$/,
+    },
+    'bmw-f90-m5-competition': {
+        eye: [0.398, 0.865, -0.287],
+        cut: {
+            center: [0.398, 0.608, 0.163],
+            axis: [0.004, 0.39, -0.92],
+            radius: 0.2,
+            along: [-0.085, 0.04],
+            material: /bMAT_Details_(MAT1|INT1)|Badge/,
+        },
+    },
+    'bmw-m8-competition-coupe': {
+        eye: [0.395, 0.803, -0.34],
+        cut: {
+            center: [0.395, 0.544, 0.11],
+            axis: [0, 0.352, -0.936],
+            radius: 0.2,
+            along: [-0.075, 0.05],
+            material: /InteriorA|Coloured|Badge/,
+        },
+    },
+    'bugatti-chiron-super-sport': {
+        eye: [0.392, 0.656, 0.31],
+        cut: {
+            center: [0.392, 0.395, 0.76],
+            axis: [0, 0.292, -0.957],
+            radius: 0.21,
+            along: [-0.095, 0.06],
+            material: /InteriorB|Carbon1|CUERO|Badge/,
+        },
+        solid: /InteriorB/,
+    },
+    'ferrari-laferrari': {
+        eye: [0.324, 0.618, 0.286],
+        cut: {
+            center: [0.324, 0.357, 0.736],
+            axis: [0, 0.291, -0.957],
+            radius: 0.19,
+            along: [-0.035, 0.04],
+            material: /Details_|Carbon|INT|Badge/,
+        },
+    },
+    'ferrari-sf90-stradale': {
+        eye: [0.342, 0.645, 0.171],
+        cut: {
+            center: [0.342, 0.383, 0.621],
+            axis: [0, 0.23, -0.973],
+            radius: 0.2,
+            along: [-0.1, 0.03],
+            material: /InteriorA|InteriorTilling|BadgeA/,
+        },
+    },
+    'koenigsegg-jesko': { eye: [0.315, 0.628, 0.241], node: /INT_STEERING_WHEEL/ },
+    'lamborghini-aventador-s': {
+        eye: [0.372, 0.657, 0.19],
+        node: /SteeringWheel5/,
+        solid: /^LamboM_Interior/,
+    },
+    'lamborghini-huracan': {
+        eye: [0.359, 0.612, 0.216],
+        cut: {
+            center: [0.359, 0.352, 0.666],
+            axis: [0, 0.31, -0.951],
+            radius: 0.2,
+            along: [-0.1, 0.05],
+            material: /InteriorA|InteriorTilling|Badge/,
+        },
+    },
+    'mclaren-p1': { eye: [0.318, 0.637, 0.336], node: /^STEER_HR$/ },
+    'mclaren-senna': {
+        eye: [0.317, 0.612, 0.378],
+        cut: {
+            center: [0.317, 0.35, 0.828],
+            axis: [0, 0.22, -0.975],
+            radius: 0.2,
+            along: [-0.1, 0.06],
+            material: /InteriorB|Carbon1M|Coloured|BadgeA/,
+        },
+    },
+    'mercedes-gt63s-edition-one': {
+        eye: [0.388, 0.815, -0.311],
+        cut: {
+            center: [0.388, 0.561, 0.139],
+            axis: [0, 0.454, -0.891],
+            radius: 0.21,
+            along: [-0.1, 0.03],
+            material:
+                /Satin|Leather Black|Alcantara Black|Aluminum|Central console|Steering wheel|Yellow plastic/,
+        },
+    },
+    'pagani-huayra': { eye: [0.319, 0.574, 0.318], material: /^PAG_HUAYRA_SW$/ },
+    'porsche-918-spyder': {
+        eye: [0.334, 0.613, 0.205],
+        cut: {
+            center: [0.334, 0.352, 0.655],
+            axis: [0, 0.258, -0.966],
+            radius: 0.2,
+            along: [-0.09, 0.04],
+            material: /InteriorA|Badge/,
+        },
+    },
+    'toyota-crown-platinum': {
+        eye: [0.401, 0.92, -0.1],
+        cut: {
+            center: [0.401, 0.721, 0.309],
+            axis: [0, 0.35, -0.937],
+            radius: 0.2,
+            along: [-0.05, 0.05],
+            material: /^black$/,
+        },
+    },
 };
 
 // a driver's eyes from the middle of the wheel: up, and back toward the seat
@@ -165,6 +317,130 @@ export const wheelFrame = (parts: THREE.Mesh[]): WheelFrame | null => {
     return { center, axis, radius };
 };
 
+// the triangles of a mesh by index (a mesh without one is its own index)
+const corner = (index: THREE.BufferAttribute | null, i: number) =>
+    index ? index.getX(i) : i;
+
+// a mesh's geometry down to the given triangles, sharing its attributes (a
+// clone of the model shares its geometries, so they're never changed)
+const keepTriangles = (geometry: THREE.BufferGeometry, triangles: number[]) => {
+    const part = new THREE.BufferGeometry();
+    Object.entries(geometry.attributes).forEach(([name, attribute]) =>
+        part.setAttribute(name, attribute)
+    );
+    part.setIndex(triangles);
+    return part;
+};
+
+// cuts a steering wheel out of the cabin's meshes (WheelCut): one new mesh
+// per mesh it's in, same parent and material, the rest stays
+export const cutWheel = (model: THREE.Object3D, cut: WheelCut) => {
+    const center = new THREE.Vector3().fromArray(cut.center);
+    const axis = new THREE.Vector3().fromArray(cut.axis).normalize();
+    const meshes: THREE.Mesh[] = [];
+    model.traverse((child) => {
+        const mesh = child as THREE.Mesh;
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        if (cut.material.test(mesh.material.name || '')) meshes.push(mesh);
+    });
+    const toMesh = new THREE.Matrix4();
+    const middle = new THREE.Vector3();
+    const column = new THREE.Vector3();
+    const point = new THREE.Vector3();
+    const pieces: THREE.Mesh[] = [];
+    meshes.forEach((mesh) => {
+        const geometry = mesh.geometry;
+        const position = geometry.getAttribute('position');
+        if (!position) return;
+        // the cylinder in the mesh's own units (the models scale evenly)
+        toMesh.copy(mesh.matrixWorld).invert();
+        middle.copy(center).applyMatrix4(toMesh);
+        column.copy(axis).transformDirection(toMesh);
+        const scale = 1 / mesh.matrixWorld.getMaxScaleOnAxis();
+        const radius = cut.radius * scale;
+        const from = cut.along[0] * scale;
+        const to = cut.along[1] * scale;
+        const inside = new Uint8Array(position.count);
+        let any = false;
+        for (let i = 0; i < position.count; i++) {
+            point.fromBufferAttribute(position, i).sub(middle);
+            const along = point.dot(column);
+            if (along < from || along > to) continue;
+            if (point.lengthSq() - along * along > radius * radius) continue;
+            inside[i] = 1;
+            any = true;
+        }
+        if (!any) return;
+        const index = geometry.index;
+        const count = index ? index.count : position.count;
+        // the parts touching the cylinder: vertices joined by the triangles
+        // that reach into it. a part with a vertex outside stays whole
+        const root = new Int32Array(position.count);
+        for (let i = 0; i < root.length; i++) root[i] = i;
+        const find = (i: number) => {
+            while (root[i] !== i) {
+                root[i] = root[root[i]];
+                i = root[i];
+            }
+            return i;
+        };
+        const touching: number[] = [];
+        for (let i = 0; i + 2 < count; i += 3) {
+            const a = corner(index, i);
+            const b = corner(index, i + 1);
+            const c = corner(index, i + 2);
+            if (!inside[a] && !inside[b] && !inside[c]) continue;
+            touching.push(i);
+            root[find(a)] = find(b);
+            root[find(b)] = find(c);
+        }
+        const out = new Uint8Array(position.count);
+        touching.forEach((i) => {
+            for (let k = 0; k < 3; k++) {
+                const v = corner(index, i + k);
+                if (!inside[v]) out[find(v)] = 1;
+            }
+        });
+        const taken = new Uint8Array(count / 3);
+        const wheel: number[] = [];
+        touching.forEach((i) => {
+            const a = corner(index, i);
+            const b = corner(index, i + 1);
+            const c = corner(index, i + 2);
+            if (!inside[a] || !inside[b] || !inside[c] || out[find(a)]) return;
+            taken[i / 3] = 1;
+            wheel.push(a, b, c);
+        });
+        if (!wheel.length) return;
+        const rest: number[] = [];
+        for (let i = 0; i + 2 < count; i += 3) {
+            if (!taken[i / 3]) {
+                rest.push(
+                    corner(index, i),
+                    corner(index, i + 1),
+                    corner(index, i + 2)
+                );
+            }
+        }
+        const piece = new THREE.Mesh(
+            keepTriangles(geometry, wheel).toNonIndexed(),
+            mesh.material
+        );
+        piece.name = `${mesh.name}-steering`;
+        piece.castShadow = mesh.castShadow;
+        piece.receiveShadow = mesh.receiveShadow;
+        mesh.parent?.add(piece);
+        piece.position.copy(mesh.position);
+        piece.quaternion.copy(mesh.quaternion);
+        piece.scale.copy(mesh.scale);
+        piece.updateMatrixWorld(true);
+        pieces.push(piece);
+        if (rest.length) mesh.geometry = keepTriangles(geometry, rest);
+        else mesh.removeFromParent();
+    });
+    return pieces;
+};
+
 // the roof's highest point over the middle of the car, as the hood probe
 // finds it
 const roofOf = (profile: BodyProfile) => {
@@ -211,10 +487,12 @@ export const eyeFrom = (
 };
 
 // before the car is merged: the steering wheel goes in a group of its own,
-// turning about its column, and the eyes are worked out. the model isn't on
-// the car yet, so its world is the car's frame. returns the group to merge
-// the wheel within, and the eyes (plain numbers in userData, the model gets
-// cloned through json). ride is how high the car's frame is off the ground
+// turning about its column, and the eyes are set. the model isn't on the car
+// yet, so its world is the car's frame. returns the group to merge the wheel
+// within, and the eyes (plain numbers in userData, the model gets cloned
+// through json). ride is how high the car's frame is off the ground; length
+// and ride only matter for a car without a cockpit set here, whose eyes are
+// guessed from its body
 export const prepareCockpit = (
     model: THREE.Object3D,
     carId: string,
@@ -223,8 +501,30 @@ export const prepareCockpit = (
 ) => {
     model.updateMatrixWorld(true);
     const spec = COCKPITS[carId];
-    const parts: THREE.Mesh[] = [];
-    if (spec && (spec.node || spec.material)) {
+    if (spec?.solid) {
+        const solid = spec.solid;
+        model.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+            const material = mesh.material;
+            if (!material.transparent || !solid.test(material.name || '')) return;
+            material.transparent = false;
+            material.depthWrite = true;
+            material.alphaTest = 0.5;
+        });
+    }
+    let parts: THREE.Mesh[] = [];
+    let frame: WheelFrame | null = null;
+    if (spec?.cut) {
+        parts = cutWheel(model, spec.cut);
+        if (parts.length) {
+            frame = {
+                center: new THREE.Vector3().fromArray(spec.cut.center),
+                axis: new THREE.Vector3().fromArray(spec.cut.axis).normalize(),
+                radius: spec.cut.radius,
+            };
+        }
+    } else if (spec && (spec.node || spec.material)) {
         model.traverse((child) => {
             const mesh = child as THREE.Mesh;
             if (!mesh.isMesh || Array.isArray(mesh.material)) return;
@@ -233,8 +533,8 @@ export const prepareCockpit = (
                 spec.material && spec.material.test(mesh.material.name || '');
             if (byNode || byMaterial) parts.push(mesh);
         });
+        frame = parts.length ? wheelFrame(parts) : null;
     }
-    const frame = parts.length ? wheelFrame(parts) : null;
     let spin: THREE.Group | null = null;
     if (frame) {
         // moved as one with the body by the garage's ride height, so the
@@ -262,7 +562,7 @@ export const prepareCockpit = (
         mount.updateMatrixWorld(true);
         parts.forEach((mesh) => spin!.attach(mesh));
     }
-    const eye = spec?.eye
+    const eye = spec
         ? new THREE.Vector3().fromArray(spec.eye)
         : eyeFrom(
               bodyProfile(new THREE.Object3D(), model, length),

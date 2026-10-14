@@ -103,6 +103,9 @@ const VIEW_STORAGE_KEY = 'yassinverse:nordschleife:cameraView:v1';
 const HEAD_LEAN = 0.025;
 const HEAD_SLIDE_MAX = 0.6;
 const COCKPIT_FOV_KICK = 0.45;
+// the eyes look a little down the road, as a driver does: more of the dash
+// and the road, less headliner
+const COCKPIT_PITCH = 0.05;
 // looking back from the seat swings the eyes to the middle, between the
 // seats, and up a little, to see out the back window
 const LOOK_BACK_START = 1.6;
@@ -886,7 +889,9 @@ export default class RaceChaseCamera {
         if (view.cockpit) {
             const turn = vehicle.carPivot.quaternion;
             position.copy(this.cockpitEye(this.tmpEye)).applyQuaternion(turn).add(anchor);
-            look.set(0, 0, view.lookAhead).applyQuaternion(turn).add(position);
+            look.set(0, -Math.tan(COCKPIT_PITCH) * view.lookAhead, view.lookAhead)
+                .applyQuaternion(turn)
+                .add(position);
             up.set(0, 1, 0).applyQuaternion(turn);
             return view.fov;
         }
@@ -1109,7 +1114,7 @@ export default class RaceChaseCamera {
         camera.quaternion
             .copy(turn)
             .multiply(this.tmpTurn.setFromAxisAngle(Y_AXIS, Math.PI + yaw))
-            .multiply(this.tmpTurn.setFromAxisAngle(X_AXIS, -this.pitchOffset));
+            .multiply(this.tmpTurn.setFromAxisAngle(X_AXIS, -this.pitchOffset - COCKPIT_PITCH));
         this.applyShake(position, this.tmpLook.copy(position), telemetry, speed, dt, 0.25);
         this.applyFov(view, telemetry, speed, dt, COCKPIT_FOV_KICK);
         this.initialized = true;
