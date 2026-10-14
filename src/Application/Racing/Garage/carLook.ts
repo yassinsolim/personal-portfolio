@@ -10,13 +10,7 @@ import { buildKitParts, type KitSurface } from './bodyKit';
 
 // body paint material names per car, lowercase substrings
 const PAINT: Record<string, string[]> = {
-    'amg-one': [
-        'body_color',
-        'piano_black',
-        'black_m_nc_black_0',
-        'black_under_black_0',
-        'mizo',
-    ],
+    'amg-one': ['amgmat_carpaint_metallic_white', 'amgmat_amg_one_carpaint2'],
     'bmw-e92-m3': ['e92_paint'],
     'amg-c63-507': ['2014paint_material'],
     'amg-c63s-coupe': ['c63mat_amg_c63_base'],
@@ -31,18 +25,17 @@ const PAINT: Record<string, string[]> = {
     'bugatti-chiron-super-sport': ['paint_material'],
     'mclaren-senna': ['paint_material'],
     'ferrari-sf90-stradale': ['paint_material'],
-    'toyota-supra-mk4': ['carpaint'],
 };
-// the amg one's painted panels are plain 'black' too, which only counts as
-// paint off the wheels. the p1 and aventador name their black trim after the
-// paint, and the huayra and valkyrie their second colour
+// the p1 and aventador name their black trim after the paint, and the huayra
+// and valkyrie their second colour. the supra's is just 'paint', which the
+// caliper paint holds too
 const PAINT_EXACT: Record<string, string[]> = {
-    'amg-one': ['black', 'material'],
     'mclaren-p1': ['carpaint'],
     'lamborghini-aventador-s': ['lambom_carpaint_max1'],
     'koenigsegg-jesko': ['jeskovehicle_exterior_mm_ext1'],
     'pagani-huayra': ['pag_huayra_paint'],
     'aston-martin-valkyrie': ['body'],
+    'toyota-supra-mk4': ['paint'],
 };
 const CALIPER = /callipergloss|calliperanodised|_caliper|tire_brake|^brakes$/;
 const BRAKE = /disc|disk|brake|calip|rotor/;

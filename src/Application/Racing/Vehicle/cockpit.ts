@@ -51,7 +51,17 @@ const COCKPITS: Record<
         solid?: RegExp;
     }
 > = {
-    'amg-one': { eye: [0.37, 0.55, -0.06] },
+    'amg-one': {
+        eye: [0.332, 0.578, 0.145],
+        cut: {
+            center: [0.332, 0.343, 0.595],
+            axis: [0, 0.233, -0.972],
+            radius: 0.21,
+            along: [-0.1, 0.05],
+            material: /Details_INT1|Carbon_039|Details_MAT_016|Details_Add/,
+        },
+        solid: /Details_INT1/,
+    },
     'amg-c63-507': {
         eye: [0.35, 0.764, -0.305],
         cut: {
@@ -63,7 +73,10 @@ const COCKPITS: Record<
         },
         solid: /InteriorA/,
     },
-    'amg-c63s-coupe': { eye: [0.346, 0.816, -0.28], node: /SteeringWheel_\d+$/ },
+    'amg-c63s-coupe': {
+        eye: [0.346, 0.816, -0.28],
+        node: /SteeringWheel_\d+$/,
+    },
     'aston-martin-valkyrie': {
         eye: [0.225, 0.532, 0.365],
         cut: {
@@ -130,7 +143,10 @@ const COCKPITS: Record<
             material: /InteriorA|InteriorTilling|BadgeA/,
         },
     },
-    'koenigsegg-jesko': { eye: [0.315, 0.628, 0.241], node: /INT_STEERING_WHEEL/ },
+    'koenigsegg-jesko': {
+        eye: [0.315, 0.628, 0.241],
+        node: /INT_STEERING_WHEEL/,
+    },
     'lamborghini-aventador-s': {
         eye: [0.372, 0.657, 0.19],
         node: /SteeringWheel5/,
@@ -168,7 +184,10 @@ const COCKPITS: Record<
                 /Satin|Leather Black|Alcantara Black|Aluminum|Central console|Steering wheel|Yellow plastic/,
         },
     },
-    'pagani-huayra': { eye: [0.319, 0.574, 0.318], material: /^PAG_HUAYRA_SW$/ },
+    'pagani-huayra': {
+        eye: [0.319, 0.574, 0.318],
+        material: /^PAG_HUAYRA_SW$/,
+    },
     'porsche-918-spyder': {
         eye: [0.334, 0.613, 0.205],
         cut: {
@@ -188,6 +207,10 @@ const COCKPITS: Record<
             along: [-0.05, 0.05],
             material: /^black$/,
         },
+    },
+    'toyota-supra-mk4': {
+        eye: [0.341, 0.71, -0.41],
+        node: /^Animate_SteeringWheel/,
     },
 };
 
@@ -326,7 +349,7 @@ const corner = (index: THREE.BufferAttribute | null, i: number) =>
 const keepTriangles = (geometry: THREE.BufferGeometry, triangles: number[]) => {
     const part = new THREE.BufferGeometry();
     Object.entries(geometry.attributes).forEach(([name, attribute]) =>
-        part.setAttribute(name, attribute)
+        part.setAttribute(name, attribute),
     );
     part.setIndex(triangles);
     return part;
@@ -418,13 +441,13 @@ export const cutWheel = (model: THREE.Object3D, cut: WheelCut) => {
                 rest.push(
                     corner(index, i),
                     corner(index, i + 1),
-                    corner(index, i + 2)
+                    corner(index, i + 2),
                 );
             }
         }
         const piece = new THREE.Mesh(
             keepTriangles(geometry, wheel).toNonIndexed(),
-            mesh.material
+            mesh.material,
         );
         piece.name = `${mesh.name}-steering`;
         piece.castShadow = mesh.castShadow;
@@ -507,7 +530,8 @@ export const prepareCockpit = (
             const mesh = child as THREE.Mesh;
             if (!mesh.isMesh || Array.isArray(mesh.material)) return;
             const material = mesh.material;
-            if (!material.transparent || !solid.test(material.name || '')) return;
+            if (!material.transparent || !solid.test(material.name || ''))
+                return;
             material.transparent = false;
             material.depthWrite = true;
             material.alphaTest = 0.5;

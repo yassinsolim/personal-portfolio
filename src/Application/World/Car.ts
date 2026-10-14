@@ -5,8 +5,8 @@ import UIEventBus from '../UI/EventBus';
 import { applyBmwM5GlassTint } from '../Utils/BmwM5GlassTint';
 import { applyCarFinish } from '../Utils/CarFinish';
 import { addContactShadow } from './CarContactShadow';
-import { CAR_GROUND_Y, FLOOR_Y, OLD_DESK_CENTER } from './screens/layout';
-import { carOptionsById, defaultCarId, getStoredCarId } from '../carOptions';
+import { CAR_GROUND_Y, FLOOR_Y, OLD_DESK_CENTER, UNITS_PER_METRE } from './screens/layout';
+import { carOptionsById, getStoredCarId } from '../carOptions';
 import type { CarOption } from '../carOptions';
 import { applyCarLook } from '../Racing/Garage/carLook';
 import { loadLook } from '../Racing/Garage/garage';
@@ -16,7 +16,6 @@ import {
     setLegacyHex,
 } from '../Utils/LegacyColor';
 
-const BASE_CAR_SCALE = 27;
 const CAR_POSITION = new THREE.Vector3(-2400, 0, -7600);
 const CAR_ROTATION = new THREE.Euler(0, -Math.PI / 2, 0);
 const CAR_ENV_INTENSITY = 0.95;
@@ -25,6 +24,7 @@ const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
 const BMW_M8_COMPETITION_COUPE_ID = 'bmw-m8-competition-coupe';
 const MERCEDES_GT63S_EDITION_ONE_ID = 'mercedes-gt63s-edition-one';
 const KEEP_EXPORT_MATERIALS = new Set([
+    'amg-one',
     MERCEDES_GT63S_EDITION_ONE_ID,
     'lamborghini-huracan',
     'lamborghini-aventador-s',
@@ -67,7 +67,6 @@ export default class Car {
     currentCarId: string;
     cachedModels: Map<string, THREE.Group>;
     loadingPromises: Map<string, Promise<THREE.Group>>;
-    sceneUnitsPerMeter: number;
 
     constructor() {
         this.application = new Application();
@@ -79,7 +78,6 @@ export default class Car {
         this.currentCarId = getStoredCarId();
         this.cachedModels = new Map();
         this.loadingPromises = new Map();
-        this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
 
         this.setModel(this.currentCarId);
         this.addLights();
@@ -188,9 +186,6 @@ export default class Car {
     }
 
     prepareCarModel(car: THREE.Group, carOption: CarOption) {
-        if (!this.sceneUnitsPerMeter) {
-            this.sceneUnitsPerMeter = this.getSceneUnitsPerMeter();
-        }
         const scale = this.getCarScale(car, carOption) * this.getCarScaleFactor(
             carOption
         );
@@ -304,25 +299,7 @@ export default class Car {
     }
 
     getCarScale(car: THREE.Object3D, carOption: CarOption) {
-        const rawLength = this.getModelLength(car);
-        if (!rawLength || !this.sceneUnitsPerMeter) {
-            return BASE_CAR_SCALE;
-        }
-
-        return (this.sceneUnitsPerMeter * carOption.lengthMeters) / rawLength;
-    }
-
-    getSceneUnitsPerMeter() {
-        const baseOption = carOptionsById[defaultCarId];
-        if (!baseOption) return 0;
-
-        const gltf = this.resources.items.gltfModel[baseOption.resourceName];
-        if (!gltf) return 0;
-
-        const baseLength = this.getModelLength(gltf.scene);
-        if (!baseLength || !baseOption.lengthMeters) return 0;
-
-        return (baseLength * BASE_CAR_SCALE) / baseOption.lengthMeters;
+        return (UNITS_PER_METRE * carOption.lengthMeters) / this.getModelLength(car);
     }
 
     getModelLength(model: THREE.Object3D) {

@@ -1,9 +1,9 @@
 {
     "amg-one": {
-        "wheelbase": 2.8025,
-        "trackFront": 1.6,
-        "trackRear": 1.6,
-        "modelWheelRadius": 0.34
+        "wheelbase": 2.711,
+        "trackFront": 1.706,
+        "trackRear": 1.709,
+        "modelWheelRadius": 0.342
     },
     "bmw-e92-m3": {
         "wheelbase": 2.7591,
@@ -120,9 +120,9 @@
         "modelWheelRadius": 0.36
     },
     "toyota-supra-mk4": {
-        "wheelbase": 2.533,
-        "trackFront": 1.568,
-        "trackRear": 1.568,
-        "modelWheelRadius": 0.331
+        "wheelbase": 2.542,
+        "trackFront": 1.519,
+        "trackRear": 1.529,
+        "modelWheelRadius": 0.329
     }
 }

@@ -51,15 +51,15 @@ The same list is in the race menu under "3D models" (`src/Application/modelCredi
 original downloads, unmodified, are in `models-src/`.
 
 - Mercedes-AMG One (`static/models/Cars/mercedes_amg_project_one/`)
-  - Title: "Mercedes AMG Project ONE"
-  - Author: hashikemu (https://sketchfab.com/hashikemu)
-  - Source: https://sketchfab.com/3d-models/mercedes-amg-project-one-287716b5aeb24b0b934452526827eb52
-  - License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
-  - Changes: Textures deduplicated, resized to at most 1024 px and converted to WebP; geometry welded and
-    Draco compressed (`scripts/optimize-models.mjs`). A low detail `.lite.glb` (whole model
-    simplified to 1 cm, 512 px textures) for weak GPUs, and `.ktx2.glb` twins of both with
-    KTX2 (BasisU) textures (`scripts/build-ktx2-cars.mjs`). The
-    garage recolours the paint and can fit another car's wheels at runtime
+  - Title: "2023 Mercedes-Benz AMG ONE"
+  - Author: Ddiaz Design (https://sketchfab.com/ddiaz-design)
+  - Source: https://sketchfab.com/3d-models/2023-mercedes-benz-amg-one-0f75e0705a1f455585813859d901458a
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: the wheel and caliper parts regrouped into one node per corner and merged by
+    material (`scripts/lib/wheel-groups.mjs`), then the same web, lite and KTX2 steps as the
+    other cars. Its white livery is repainted the deep metallic blue the site's AMG One has
+    always worn. The garage recolours the paint and can fit another car's wheels at runtime
+  - ShareAlike: our adapted versions of this model are distributed under the same license, CC BY-NC-SA 4.0
 - BMW E92 M3 (`static/models/Cars/bmw_m3_e92_stance/`)
   - Title: "BMW M3 e92 [stance]"
   - Author: Black Snow (https://sketchfab.com/BlackSnow02)
@@ -212,12 +212,14 @@ original downloads, unmodified, are in `models-src/`.
   - License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
   - Changes: as the Pagani Huayra
 - Toyota Supra MK4 (`static/models/Cars/toyota_supra_mk4/`)
-  - Title: "Toyota Supra (A80) 1993"
-  - Author: Lexyc16 (https://sketchfab.com/Lexyc16)
-  - Source: https://sketchfab.com/3d-models/toyota-supra-a80-1993-dd897d7823784bc5893c183c1328e8cb
-  - License: CC BY-NC 4.0 (https://creativecommons.org/licenses/by-nc/4.0/)
-  - Changes: as the Pagani Huayra; the tyres, rims, discs and calipers came as one mesh each
-    for all four wheels and are cut apart per corner
+  - Title: "1994 Toyota Supra Turbo"
+  - Author: OUTPISTON (https://sketchfab.com/outpiston)
+  - Source: https://sketchfab.com/3d-models/1994-toyota-supra-turbo-4bc2178565374e8aa04351a0a63290f5
+  - License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/)
+  - Changes: its rig (a joint per door, wheel and caliper) baked into still meshes, keeping
+    the one of its four caliper fittings that sits on the stock disc; then as the AMG One
+  - ShareAlike: our adapted versions of this model are distributed under the same license,
+    CC BY-NC-SA 4.0
 
 The non-commercial models (CC BY-NC and CC BY-NC-SA) are used on a personal portfolio that has
 no ads, sales or sponsorship.

@@ -7,7 +7,8 @@
 import { compactPrimitive, getBounds, joinPrimitives, transformPrimitive } from '@gltf-transform/functions';
 
 // wheels: nodes whose meshes spin. calipers: nodes, or materials among the
-// wheel parts, that stay put. forward: the model axis the nose points along
+// wheel parts, that stay put. forward: the model axis the nose points along.
+// unskin: a rigged game export, baked into plain meshes first (unskin below)
 export const WHEEL_GROUPS = {
     'ferrari-laferrari': {
         wheels: /^Combined_Wheels_3D_$/,
@@ -67,11 +68,19 @@ export const WHEEL_GROUPS = {
         calipers: /^Object_(14|15|29)$/,
         forward: 1,
     },
-    // one mesh per material for all four corners: the tyres, rims and discs
-    // spin, the calipers stay
+    // rigged: a joint per wheel and caliper, named by corner. its calipers
+    // come in four offsets; the second straddles the stock disc
     'toyota-supra-mk4': {
-        wheels: /^Object_(10|18|19)$/,
-        calipers: /^Object_11$/,
+        unskin: true,
+        variant: 1,
+        wheels: /^Wheel (Front|Rear) [LR]_\d+\//,
+        calipers: /^Calliper (Front|Rear) [LR]_\d+\//,
+        forward: 1,
+    },
+    // a node per corner holds its tyre, hub, disc and caliper
+    'amg-one': {
+        wheels: /^amgprojone_tire(\.\d+)?$/,
+        caliperMaterial: /Tire_Brake/,
         forward: 1,
     },
 };
@@ -141,10 +150,102 @@ const splitByCorner = (doc, node, prim, cornerAt, near) => {
     return { pieces, rest };
 };
 
+const multiply = (a, b) => {
+    const out = new Array(16).fill(0);
+    for (let col = 0; col < 4; col++) {
+        for (let row = 0; row < 4; row++) {
+            for (let k = 0; k < 4; k++) out[col * 4 + row] += a[k * 4 + row] * b[col * 4 + k];
+        }
+    }
+    return out;
+};
+const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+// a rigged game export draws every part through a skeleton (wheels, doors,
+// the steering wheel each on a joint). this bakes the pose it's saved in
+// into plain meshes in scene space: each node goes to the scene root, named
+// after the joint most of it hangs on. a part kept in several variants on one
+// joint (the supra's calipers, one per wheel offset) keeps only the variant'th
+const unskin = (doc, variant = 0) => {
+    const root = doc.getRoot();
+    const scene = root.getDefaultScene() || root.listScenes()[0];
+    const variants = [];
+    for (const node of root.listNodes()) {
+        const skin = node.getSkin();
+        const mesh = node.getMesh();
+        if (!skin || !mesh) continue;
+        const inverseBind = skin.getInverseBindMatrices();
+        const joints = skin.listJoints().map((joint, i) =>
+            multiply(joint.getWorldMatrix(), inverseBind ? inverseBind.getElement(i, []) : IDENTITY),
+        );
+        const counts = new Map();
+        const baked = doc.createMesh(mesh.getName());
+        for (const prim of mesh.listPrimitives()) {
+            const copy = ownCopy(doc, prim);
+            const sets = [0, 1].filter((set) => copy.getAttribute(`JOINTS_${set}`));
+            const matrixOf = (i) => {
+                const m = new Array(16).fill(0);
+                for (const set of sets) {
+                    const j = copy.getAttribute(`JOINTS_${set}`).getElement(i, []);
+                    const w = copy.getAttribute(`WEIGHTS_${set}`).getElement(i, []);
+                    j.forEach((joint, k) => {
+                        if (!w[k]) return;
+                        joints[joint].forEach((v, e) => (m[e] += v * w[k]));
+                        counts.set(joint, (counts.get(joint) || 0) + w[k]);
+                    });
+                }
+                return m;
+            };
+            const position = copy.getAttribute('POSITION');
+            const normal = copy.getAttribute('NORMAL');
+            const tangent = copy.getAttribute('TANGENT');
+            const p = [];
+            for (let i = 0; i < position.getCount(); i++) {
+                const m = matrixOf(i);
+                position.getElement(i, p);
+                position.setElement(i, [0, 1, 2].map((a) => m[a] * p[0] + m[4 + a] * p[1] + m[8 + a] * p[2] + m[12 + a]));
+                for (const [attribute, size] of [[normal, 3], [tangent, 4]]) {
+                    if (!attribute) continue;
+                    const v = attribute.getElement(i, []);
+                    const t = [0, 1, 2].map((a) => m[a] * v[0] + m[4 + a] * v[1] + m[8 + a] * v[2]);
+                    const length = Math.hypot(...t) || 1;
+                    attribute.setElement(i, size === 4 ? [...t.map((x) => x / length), v[3]] : t.map((x) => x / length));
+                }
+            }
+            for (const set of sets) {
+                copy.setAttribute(`JOINTS_${set}`, null);
+                copy.setAttribute(`WEIGHTS_${set}`, null);
+            }
+            baked.addPrimitive(copy);
+        }
+        const [joint] = [...counts].sort((a, b) => b[1] - a[1])[0] || [];
+        const name = `${skin.listJoints()[joint]?.getName() || 'part'}/${node.getName()}`;
+        const part = doc.createNode(name).setMesh(baked);
+        const box = getBounds(part);
+        const middle = center(box);
+        const reach = Math.hypot(...box.max.map((v, i) => v - box.min[i])) / 2;
+        const key = `${joint}:${baked.listPrimitives().map((prim) => `${prim.getMaterial()?.getName()}:${prim.getAttribute('POSITION').getCount()}`).join()}`;
+        // the same part moved a little, not its mirror image across the car
+        const set = variants.find((other) => other.key === key && Math.hypot(...other.middle.map((v, i) => v - middle[i])) < reach);
+        if (set) set.parts.push(part);
+        else variants.push({ key, middle, parts: [part] });
+        node.setSkin(null).setMesh(null);
+    }
+    for (const { key, parts } of variants) {
+        if (parts.length > 1 && parts.length <= variant) throw new Error(`unskin: ${key} has ${parts.length} variants, no ${variant}`);
+        parts.forEach((part, i) => {
+            if (i === (parts.length > 1 ? variant : 0)) scene.addChild(part);
+            else part.dispose();
+        });
+    }
+    root.listSkins().forEach((skin) => skin.dispose());
+};
+
 // returns a line per corner (centre and size in meters) for the log
 export const groupWheels = (doc, carId, lengthMeters) => {
     const config = WHEEL_GROUPS[carId];
     if (!config) return [];
+    if (config.unskin) unskin(doc, config.variant);
     const root = doc.getRoot();
     const scene = root.getDefaultScene() || root.listScenes()[0];
     const sceneBox = getBounds(scene);
