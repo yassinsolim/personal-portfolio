@@ -129,21 +129,29 @@ export const carOptions: CarOption[] = [
         modelPath:
             'models/Cars/mercedes_amg_project_one/source/mercedes_amg_project_one.glb',
         lengthMeters: 4.75,
-        // the canopy is two stacked glass shells, so each layer is lighter
-        // and the pair lands near the 0.8 / 0.5 the other cars use
         windowTint: {
-            materials: ['window', 'window_0', 'window_1', 'window_b'],
-            opacity: 0.55,
-            windshieldOpacity: 0.3,
+            materials: ['amgmat_glass_021'],
+            opacity: 0.8,
+            windshieldOpacity: 0.5,
+        },
+        // the deep metallic blue it always wore here, over the export's
+        // white livery
+        paint: {
+            materials: [
+                'amgmat_carpaint_metallic_white_074',
+                'amgmat_amg_one_carpaint2_014',
+            ],
+            color: 0x050f2f,
+            metalness: 1,
+            roughness: 0.18,
         },
         race: {
             visualForwardAxis: 'positiveZ',
             wheelNodeMap: {
-                frontLeft: ['rim_wheel_0'],
-                frontRight: ['rim_wheel_d_0'],
-                rearLeft: ['rim1_wheel_0'],
-                rearRight: ['rim1_wheel_d_0'],
-                candidates: ['rim', 'rim1', 'tire_f', 'tire_r'],
+                frontLeft: ['wheel_fl'],
+                frontRight: ['wheel_fr'],
+                rearLeft: ['wheel_rl'],
+                rearRight: ['wheel_rr'],
             },
             drivetrain: 'AWD',
             topSpeedKph: 352,
@@ -1874,14 +1882,14 @@ export const carOptions: CarOption[] = [
         modelPath: 'models/Cars/toyota_supra_mk4/source/toyota_supra_mk4.glb',
         lengthMeters: 4.52,
         windowTint: {
-            materials: ['glass'],
+            materials: ['glassmtl'],
             opacity: 0.8,
             windshieldOpacity: 0.5,
         },
         // super red iv: solid red under a glossy clearcoat. the hex is read
         // as linear (LegacyColor), this is srgb #aa1018
         paint: {
-            materials: ['carpaint'],
+            materials: ['paint'],
             color: 0x660102,
             metalness: 0,
             roughness: 0.3,

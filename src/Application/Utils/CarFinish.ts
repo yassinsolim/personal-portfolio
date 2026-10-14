@@ -133,7 +133,8 @@ const buildGeometry = (source: THREE.BufferGeometry, vertices: number[]) => {
 const createTintMaterial = (
     source: THREE.MeshStandardMaterial,
     tint: CarWindowTint,
-    opacity: number
+    opacity: number,
+    zone: GlassZone
 ) => {
     const material = source.clone();
     material.map = null;
@@ -145,6 +146,9 @@ const createTintMaterial = (
     material.opacity = opacity;
     material.transparent = true;
     material.depthWrite = false;
+    // the race's cockpit cam clears the tint from inside, then puts it back
+    material.userData.tintZone = zone;
+    material.userData.tintOpacity = opacity;
     material.needsUpdate = true;
     return material;
 };
@@ -171,7 +175,7 @@ export const applyWindowTint = (
         if (!tintedMaterials.has(key)) {
             tintedMaterials.set(
                 key,
-                createTintMaterial(source, tint, opacityByZone[zone])
+                createTintMaterial(source, tint, opacityByZone[zone], zone)
             );
         }
         return tintedMaterials.get(key)!;

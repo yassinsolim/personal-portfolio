@@ -54,6 +54,12 @@ const simplifyMaterialsByModel = {
     'mercedes-gt63s-edition-one': ['Brake Disc'],
 };
 
+// the amg one loads with the homepage, so it's kept lean: no vertex tangents
+// (three works them out per pixel) and small normal maps (they only show on
+// grilles, lamps and discs)
+const dropTangentsByModel = new Set(['amg-one']);
+const normalMaxSizeByModel = { 'amg-one': 256 };
+
 const extraModels = [
     {
         // self-made (scripts/blender/build-flipper.py), already low poly and baked
@@ -215,6 +221,7 @@ for (const model of selected) {
         lite ? litePathOf(model.modelPath) : model.modelPath
     );
     const textureSize = lite ? LITE_TEXTURE_SIZE : TEXTURE_MAX_SIZE;
+    const normalSize = Math.min(textureSize, normalMaxSizeByModel[model.id] || textureSize);
     const inputBytes = (await fs.stat(input)).size;
     const started = Date.now();
 
@@ -224,6 +231,11 @@ for (const model of selected) {
     if (!lite) {
         const masks = dropMaskColors(document);
         if (masks) console.log(`${model.id}: dropped ${masks} vertex colour masks`);
+        if (dropTangentsByModel.has(model.id)) {
+            for (const mesh of document.getRoot().listMeshes()) {
+                for (const prim of mesh.listPrimitives()) prim.setAttribute('TANGENT', null);
+            }
+        }
         for (const line of groupWheels(document, model.id, model.lengthMeters)) {
             console.log(`${model.id}: ${line}`);
         }
@@ -262,7 +274,7 @@ for (const model of selected) {
         textureCompress({
             encoder: sharp,
             targetFormat: 'webp',
-            resize: [textureSize, textureSize],
+            resize: [normalSize, normalSize],
             slots: /^normalTexture$/,
             quality: 95,
         }),

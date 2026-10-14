@@ -24,6 +24,16 @@ import { loaderVariant } from '../UI/loaders/variant';
 const RACE_PREFETCH_DELAY_MS = 3000;
 // the room's programs get this long to compile before it's drawn anyway
 const COMPILE_WAIT_MS = 4000;
+// texels uploaded per frame while warming up: a big atlas still gets a frame
+// to itself, a car's small textures share one
+const UPLOAD_TEXELS_PER_FRAME = 2048 * 2048;
+
+const texelsOf = (texture: THREE.Texture) =>
+    (Array.isArray(texture.image) ? texture.image : [texture.image]).reduce(
+        (sum: number, image?: { width?: number; height?: number }) =>
+            sum + (image?.width || 0) * (image?.height || 0),
+        0
+    );
 
 type RaceAction = {
     event: string;
@@ -115,10 +125,11 @@ export default class World {
         }
     }
 
-    // while the loading screen is up, the room's textures go to the gpu a
-    // frame at a time and its programs compile in parallel (compileAsync),
-    // instead of all in the first frame it's drawn: that frame held the
-    // main thread for about a second. Application skips drawing until then
+    // while the loading screen is up, the room's textures go to the gpu over
+    // several frames (UPLOAD_TEXELS_PER_FRAME) and its programs compile in
+    // parallel (compileAsync), instead of all in the first frame it's drawn:
+    // that frame held the main thread for about a second. Application skips
+    // drawing until then
     async warmUp() {
         const renderer = this.application.renderer.instance;
         try {
@@ -137,9 +148,15 @@ export default class World {
                 );
             });
             let uploaded = 0;
+            let frameTexels = Infinity;
             for (const texture of textures) {
                 reportStage('homepage', 'upload', uploaded++ / textures.size);
-                await afterFrame();
+                const texels = texelsOf(texture);
+                if (frameTexels + texels > UPLOAD_TEXELS_PER_FRAME) {
+                    await afterFrame();
+                    frameTexels = 0;
+                }
+                frameTexels += texels;
                 renderer.initTexture(texture);
             }
             reportStage('homepage', 'compile', 0);

@@ -69,11 +69,11 @@ const sketchfabCar = (
 export const MODEL_CREDITS: ModelCredit[] = [
     sketchfabCar(
         'Mercedes-AMG One',
-        'Mercedes AMG Project ONE',
-        sketchfabAuthor('hashikemu', 'hashikemu'),
-        'mercedes-amg-project-one-287716b5aeb24b0b934452526827eb52',
-        CC_BY_NC,
-        carChanges(false),
+        '2023 Mercedes-Benz AMG ONE',
+        DDIAZ,
+        '2023-mercedes-benz-amg-one-0f75e0705a1f455585813859d901458a',
+        CC_BY_NC_SA,
+        `${REGROUPED}; repainted deep blue over its white livery; ${carChanges(true)}`,
     ),
     sketchfabCar(
         'BMW E92 M3',
@@ -225,10 +225,10 @@ export const MODEL_CREDITS: ModelCredit[] = [
     ),
     sketchfabCar(
         'Toyota Supra MK4',
-        'Toyota Supra (A80) 1993',
-        sketchfabAuthor('Lexyc16', 'Lexyc16'),
-        'toyota-supra-a80-1993-dd897d7823784bc5893c183c1328e8cb',
-        CC_BY_NC,
-        `${REGROUPED}; ${carChanges(true)}`,
+        '1994 Toyota Supra Turbo',
+        sketchfabAuthor('OUTPISTON', 'outpiston'),
+        '1994-toyota-supra-turbo-4bc2178565374e8aa04351a0a63290f5',
+        CC_BY_NC_SA,
+        `its rig baked into still meshes and one of its four caliper fittings kept; ${REGROUPED}; ${carChanges(true)}`,
     ),
 ];

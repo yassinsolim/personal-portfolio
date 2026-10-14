@@ -10,7 +10,7 @@ const KEYBOARD: Line[] = [
     ['Space', 'Handbrake'],
     ['Q  E', 'Shift down, up (manual: Q in first at a stop is reverse)'],
     ['Mouse', 'Look around, click the road to lock it'],
-    ['C', 'Camera: chase, far, bumper, hood'],
+    ['C', 'Camera: chase, far, bumper, hood, cockpit'],
     ['H', 'Horn'],
     ['Z (hold)', 'Rewind'],
     ['R', 'Back on track'],

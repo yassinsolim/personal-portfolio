@@ -36,10 +36,12 @@ type CameraView = {
     // hood cam: back from the nose as a share of the length, up as a share
     // of the height, so it lands on the hood of any car
     hood?: { back: number; up: number };
+    // cockpit cam: at the driver's eyes (Vehicle/cockpit.ts)
+    cockpit?: boolean;
 };
 
 // chase is low and close so the road streams past, far shows more of the
-// car, bumper sits on the nose
+// car, bumper sits on the nose, cockpit is the driver's seat
 const VIEWS: CameraView[] = [
     {
         name: 'chase',
@@ -82,8 +84,38 @@ const VIEWS: CameraView[] = [
         mounted: true,
         hood: { back: 0.27, up: 0.78 },
     },
+    {
+        name: 'cockpit',
+        distance: 0,
+        height: 0,
+        lookHeight: 0,
+        lookAhead: 10,
+        fov: 60,
+        // the head turns this share of the way toward where the car is going
+        slideFollow: 0.45,
+        mounted: true,
+        cockpit: true,
+    },
 ];
 const VIEW_STORAGE_KEY = 'yassinverse:nordschleife:cameraView:v1';
+// cockpit cam: meters the head gives per g, how far it turns into a slide,
+// and the speed fov's share (it stretches the cabin)
+const HEAD_LEAN = 0.025;
+const HEAD_SLIDE_MAX = 0.6;
+const COCKPIT_FOV_KICK = 0.45;
+// the eyes look a little down the road, as a driver does: more of the dash
+// and the road, less headliner
+const COCKPIT_PITCH = 0.05;
+// looking back from the seat swings the eyes to the middle, between the
+// seats, and up a little, to see out the back window
+const LOOK_BACK_START = 1.6;
+const LOOK_BACK_FULL = 2.9;
+const LOOK_BACK_RISE = 0.06;
+// a model with no eyes worked out: about where a seated driver's are, the
+// height from the ground
+const FALLBACK_EYE = new THREE.Vector3(0.37, 1.08, 0);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
 
 // where a mounted view sits on the car, from its anchor: along is forward, up
 // is up. the hood cam uses the spot probed on the body when it has one
@@ -178,6 +210,16 @@ export default class RaceChaseCamera {
         model: null,
         spot: null,
     };
+    // cockpit cam: the head's give to the g forces (in the car's frame) and
+    // its turn into a slide, each through a spring
+    headX = 0;
+    headXVelocity = 0;
+    headZ = 0;
+    headZVelocity = 0;
+    headYaw = 0;
+    headYawVelocity = 0;
+    tmpEye = new THREE.Vector3();
+    tmpTurn = new THREE.Quaternion();
     defaultFov: number;
     defaultNear: number;
     defaultFar: number;
@@ -607,6 +649,10 @@ export default class RaceChaseCamera {
         const telemetry = vehicle.getTelemetry();
         const view = this.getView();
         this.time += dt;
+        // the cabin and the glass as seen from the seat, only while in it
+        vehicle.setCockpitView(
+            Boolean(view.cockpit) && !this.garage && !this.photo && !this.watchTarget
+        );
 
         const speed = Math.hypot(vehicle.speedMps, vehicle.lateralSpeed);
         const size = vehicle.bodySize.z / REFERENCE_CAR_LENGTH;
@@ -693,6 +739,10 @@ export default class RaceChaseCamera {
         }
         if (camera.view?.enabled) camera.clearViewOffset();
 
+        if (view.cockpit) {
+            this.updateCockpit(view, carYaw, travelYaw, speed, dt);
+            return;
+        }
         if (view.mounted) {
             this.updateMounted(view, carYaw, anchor, size, speed, dt);
             return;
@@ -836,6 +886,15 @@ export default class RaceChaseCamera {
         const view = this.getView();
         const telemetry = vehicle.getTelemetry();
         const anchor = vehicle.position;
+        if (view.cockpit) {
+            const turn = vehicle.carPivot.quaternion;
+            position.copy(this.cockpitEye(this.tmpEye)).applyQuaternion(turn).add(anchor);
+            look.set(0, -Math.tan(COCKPIT_PITCH) * view.lookAhead, view.lookAhead)
+                .applyQuaternion(turn)
+                .add(position);
+            up.set(0, 1, 0).applyQuaternion(turn);
+            return view.fov;
+        }
         if (view.mounted) {
             const mount = this.mount(view);
             up.set(0, 1, 0).applyQuaternion(vehicle.carPivot.quaternion);
@@ -1004,17 +1063,77 @@ export default class RaceChaseCamera {
         void size;
     }
 
-    // speed widens the view, hard acceleration kicks it out a bit more
-    applyFov(
+    // the driver's eyes in the car's frame, from the model (Vehicle/cockpit.ts)
+    cockpitEye(target: THREE.Vector3) {
+        if (this.vehicle.getCockpitEye(target)) return target;
+        target.copy(FALLBACK_EYE);
+        target.y -= this.vehicle.rideHeight;
+        return target;
+    }
+
+    // cockpit cam: the driver's eyes, fixed to the body. the head gives a
+    // little to the g forces and turns toward where the car is going in a
+    // slide; the mouse and the pad's right stick look round the cabin
+    updateCockpit(
         view: CameraView,
-        telemetry: ReturnType<RaceVehicle['getTelemetry']>,
+        carYaw: number,
+        travelYaw: number,
         speed: number,
         dt: number
     ) {
         const camera = this.application.camera.instance;
+        const vehicle = this.vehicle;
+        const telemetry = vehicle.getTelemetry();
+        // out of a turn, forward under braking, back on the power
+        const leanX = THREE.MathUtils.clamp(-telemetry.lateralG, -1.5, 1.5) * HEAD_LEAN;
+        const leanZ = THREE.MathUtils.clamp(-telemetry.longitudinalG, -1.5, 1.5) * HEAD_LEAN;
+        const slip = speed > 3 ? wrapAngle(travelYaw - carYaw) : 0;
+        const slide = THREE.MathUtils.clamp(slip * view.slideFollow, -HEAD_SLIDE_MAX, HEAD_SLIDE_MAX);
+        if (!this.initialized) {
+            this.headX = leanX;
+            this.headZ = leanZ;
+            this.headYaw = slide;
+            this.headXVelocity = 0;
+            this.headZVelocity = 0;
+            this.headYawVelocity = 0;
+            this.fov = view.fov;
+        }
+        [this.headX, this.headXVelocity] = spring(this.headX, this.headXVelocity, leanX, 7, dt);
+        [this.headZ, this.headZVelocity] = spring(this.headZ, this.headZVelocity, leanZ, 7, dt);
+        [this.headYaw, this.headYawVelocity] = spring(this.headYaw, this.headYawVelocity, slide, 4, dt);
+
+        const yaw = this.yawOffset + this.headYaw;
+        const back = THREE.MathUtils.smoothstep(Math.abs(yaw), LOOK_BACK_START, LOOK_BACK_FULL);
+        const eye = this.cockpitEye(this.tmpEye);
+        eye.x += this.headX - eye.x * back * 0.85;
+        eye.y += back * LOOK_BACK_RISE;
+        eye.z += this.headZ;
+        const turn = vehicle.carPivot.quaternion;
+        const position = this.tmpPosition.copy(eye).applyQuaternion(turn).add(vehicle.position);
+        // the camera looks down its -z, the car drives along its +z
+        camera.quaternion
+            .copy(turn)
+            .multiply(this.tmpTurn.setFromAxisAngle(Y_AXIS, Math.PI + yaw))
+            .multiply(this.tmpTurn.setFromAxisAngle(X_AXIS, -this.pitchOffset - COCKPIT_PITCH));
+        this.applyShake(position, this.tmpLook.copy(position), telemetry, speed, dt, 0.25);
+        this.applyFov(view, telemetry, speed, dt, COCKPIT_FOV_KICK);
+        this.initialized = true;
+        camera.position.copy(position);
+    }
+
+    // speed widens the view, hard acceleration kicks it out a bit more. kick
+    // scales both, for views where the stretch shows
+    applyFov(
+        view: CameraView,
+        telemetry: ReturnType<RaceVehicle['getTelemetry']>,
+        speed: number,
+        dt: number,
+        kick = 1
+    ) {
+        const camera = this.application.camera.instance;
         const speedKick =
-            Math.pow(Math.min(1, Math.max(0, (speed - 12) / 80)), 1.3) * 13;
-        const accelKick = Math.max(0, telemetry.longitudinalG) * 3.5;
+            Math.pow(Math.min(1, Math.max(0, (speed - 12) / 80)), 1.3) * 13 * kick;
+        const accelKick = Math.max(0, telemetry.longitudinalG) * 3.5 * kick;
         const target =
             this.paused || this.speedFovOff
                 ? view.fov

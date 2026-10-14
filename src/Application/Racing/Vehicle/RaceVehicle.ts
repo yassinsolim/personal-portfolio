@@ -13,6 +13,7 @@ import {
     applyTune,
     loadLook,
     loadTune,
+    rideOffsetMeters,
     sanitizeLook,
     sanitizeTune,
     saveLook,
@@ -20,6 +21,14 @@ import {
     STOCK_LOOK,
     STOCK_TUNE,
 } from '../Garage/garage';
+import {
+    CABIN,
+    COCKPIT_GLASS_OPACITY,
+    groupCabin,
+    prepareCockpit,
+    STEERING_SPIN,
+    type GlassZone,
+} from './cockpit';
 import type { CarLook, CarTune } from '../Garage/garage';
 import { engineSound, type EngineSound } from '../Garage/engines';
 import DrivingInput from '../Input/DrivingInput';
@@ -72,6 +81,9 @@ const MAX_REVERSE_SPEED_MPS = 34 / 3.6;
 const RACE_ENV_INTENSITY = 0.55;
 const RACE_EMISSIVE_MAX = 0.45;
 const WHEEL_VISUAL_STEER_LIMIT = THREE.MathUtils.degToRad(38);
+// the steering wheel turns this many times as far as the front wheels (road
+// cars are 12 to 16 to 1)
+const STEERING_RATIO = 14;
 const WHEEL_RADIUS_PLAUSIBLE_MIN = 0.12;
 const WHEEL_RADIUS_PLAUSIBLE_MAX = 1.4;
 const MAX_SINGLE_WHEEL_RADIUS = 0.6;
@@ -122,7 +134,6 @@ const SAFE_STATE_MIN_SNAPSHOT_INTERVAL_S = 0.14;
 const SAFE_STATE_MIN_SNAPSHOT_DISTANCE = 0.6;
 const UPSIDE_DOWN_RECOVERY_UP_THRESHOLD = -0.2;
 const UPSIDE_DOWN_RECOVERY_DELAY_S = 0.6;
-const AMG_ONE_ID = 'amg-one';
 const BMW_E92_M3_ID = 'bmw-e92-m3';
 const AMG_C63S_COUPE_ID = 'amg-c63s-coupe';
 const BMW_F90_M5_COMPETITION_ID = 'bmw-f90-m5-competition';
@@ -162,7 +173,6 @@ const TOYOTA_SUPPRESSED_STATIC_WHEEL_HINTS = [
     '523_refl_black_0_1',
     '539_refl_black_0_1',
 ];
-const AMG_ONE_RACE_BLUE = legacyColor(0x050f2f);
 const BMW_E92_RIM_SILVER = legacyColor(0xd3d8de);
 const BMW_M8_FROZEN_MARINA_BAY_BLUE = legacyColor(0x040924);
 const BMW_F90_M5_METALLIC_MARINA_BAY_BLUE = legacyColor(0x040924);
@@ -303,6 +313,11 @@ export default class RaceVehicle {
     carModel: THREE.Group | null;
     // the garage's stand while the car is shown there, else the pivot
     modelHolder: THREE.Object3D | null = null;
+    // the shown model's steering wheel, turned with the front wheels, for
+    // the cars whose models keep it apart
+    steeringSpin: THREE.Object3D | null = null;
+    // the camera is in the driver's seat (Camera/RaceChaseCamera.ts)
+    cockpitView = false;
     currentCarId: string;
     currentTuning: CarRaceConfig;
     cachedModels: Map<string, THREE.Group>;
@@ -773,11 +788,6 @@ export default class RaceVehicle {
         if (carId === BMW_F90_M5_COMPETITION_ID) {
             this.linkBmwM5CompetitionWheelDetails(model, wheelRig);
         }
-        if (carId === AMG_ONE_ID) {
-            this.linkAmgOneAxleTires(model, wheelRig);
-            wheelRig = this.collapseAmgOneAxleWheelRig(wheelRig);
-            this.normalizeLinkedWheelClusterCenters(wheelRig);
-        }
         this.applyWheelFinishStyling(model, carId, wheelRig);
         const wheelRadius = this.getDetectedWheelRadius(wheelRig);
         const rideHeight = THREE.MathUtils.clamp(wheelRadius * 0.98, 0.16, 0.52);
@@ -805,7 +815,10 @@ export default class RaceVehicle {
             ) * 0.42
         );
 
+        const steering = prepareCockpit(model, carId, shiftedSize.z, rideHeight);
+        let cabin: THREE.Group | null = null;
         if (this.cheapMaterials) {
+            cabin = groupCabin(model);
             this.dropHiddenParts(model);
             const envMap = getCheapSkyCube();
             model.traverse((child) => {
@@ -814,7 +827,7 @@ export default class RaceVehicle {
                 mesh.material = toCheapCarMaterial(mesh.material, envMap);
             });
         }
-        this.mergeStaticMeshes(model, wheelRig);
+        this.mergeStaticMeshes(model, wheelRig, [steering, cabin]);
 
         // soft darkening right under the car, the sun shadow alone reads as
         // floating at the contact patches
@@ -1231,47 +1244,6 @@ export default class RaceVehicle {
         return linkedNode.parent.worldToLocal(wheelCenterWorld.clone());
     }
 
-    linkAmgOneAxleTires(model: THREE.Object3D, wheelRig: WheelRig[]) {
-        const linkAxle = (front: boolean, tireMeshNames: string[]) => {
-            const axleWheel =
-                wheelRig.find((wheel) => wheel.front === front && wheel.left) ||
-                wheelRig.find((wheel) => wheel.front === front);
-            if (!axleWheel) return;
-
-            const primaryBox = new THREE.Box3().setFromObject(axleWheel.object);
-            if (primaryBox.isEmpty()) return;
-            const primaryCenterWorld = primaryBox.getCenter(new THREE.Vector3());
-            const existing = new Set([
-                axleWheel.object.uuid,
-                ...axleWheel.linkedVisuals.map((linked) => linked.object.uuid),
-            ]);
-
-            tireMeshNames.forEach((name) => {
-                const tireMesh = model.getObjectByName(name);
-                if (!tireMesh || existing.has(tireMesh.uuid)) return;
-                axleWheel.linkedVisuals.push({
-                    object: tireMesh,
-                    spinCenter: this.getWheelLinkedSpinCenter(
-                        tireMesh,
-                        primaryCenterWorld
-                    ),
-                    basePosition: tireMesh.position.clone(),
-                    baseQuaternion: tireMesh.quaternion.clone(),
-                });
-                existing.add(tireMesh.uuid);
-            });
-        };
-
-        linkAxle(true, [
-            'rubber_tread_0',
-            'rubber_rubber_side_0',
-        ]);
-        linkAxle(false, [
-            'rubber1_tread_0',
-            'rubber1_rubber_side_0',
-        ]);
-    }
-
     linkBmwM5CompetitionWheelDetails(model: THREE.Object3D, wheelRig: WheelRig[]) {
         if (!wheelRig.length) return;
 
@@ -1332,89 +1304,6 @@ export default class RaceVehicle {
                 baseQuaternion: child.quaternion.clone(),
             });
             linked.add(child.uuid);
-        });
-    }
-
-    collapseAmgOneAxleWheelRig(wheelRig: WheelRig[]) {
-        const collapseAxle = (front: boolean) => {
-            const axleWheels = wheelRig.filter((wheel) => wheel.front === front);
-            const primary =
-                axleWheels.find((wheel) => wheel.left) || axleWheels[0] || null;
-            if (!primary) return null;
-
-            const existing = new Set<string>([
-                primary.object.uuid,
-                ...primary.linkedVisuals.map((linked) => linked.object.uuid),
-            ]);
-
-            axleWheels.forEach((wheel) => {
-                if (wheel === primary) return;
-                if (!existing.has(wheel.object.uuid)) {
-                    const wheelCenterWorld = wheel.object.parent
-                        ? wheel.object.parent.localToWorld(wheel.spinCenter.clone())
-                        : wheel.object.getWorldPosition(this.tmpVectorA);
-                    primary.linkedVisuals.push({
-                        object: wheel.object,
-                        spinCenter: this.getWheelLinkedSpinCenter(
-                            wheel.object,
-                            wheelCenterWorld
-                        ),
-                        basePosition: wheel.basePosition.clone(),
-                        baseQuaternion: wheel.baseQuaternion.clone(),
-                    });
-                    existing.add(wheel.object.uuid);
-                }
-                wheel.linkedVisuals.forEach((linked) => {
-                    if (existing.has(linked.object.uuid)) return;
-                    primary.linkedVisuals.push({
-                        object: linked.object,
-                        spinCenter: linked.spinCenter.clone(),
-                        basePosition: linked.basePosition.clone(),
-                        baseQuaternion: linked.baseQuaternion.clone(),
-                    });
-                    existing.add(linked.object.uuid);
-                });
-            });
-
-            return primary;
-        };
-
-        const front = collapseAxle(true);
-        const rear = collapseAxle(false);
-        return [front, rear].filter(Boolean) as WheelRig[];
-    }
-
-    normalizeLinkedWheelClusterCenters(wheelRig: WheelRig[]) {
-        const clusterBox = new THREE.Box3();
-        const itemBox = new THREE.Box3();
-        const clusterCenterWorld = new THREE.Vector3();
-
-        wheelRig.forEach((wheel) => {
-            clusterBox.makeEmpty();
-            itemBox.setFromObject(wheel.object);
-            if (!itemBox.isEmpty()) {
-                clusterBox.union(itemBox);
-            }
-            wheel.linkedVisuals.forEach((linked) => {
-                itemBox.setFromObject(linked.object);
-                if (!itemBox.isEmpty()) {
-                    clusterBox.union(itemBox);
-                }
-            });
-            if (clusterBox.isEmpty()) return;
-
-            clusterBox.getCenter(clusterCenterWorld);
-            if (wheel.object.parent) {
-                wheel.spinCenter = wheel.object.parent.worldToLocal(
-                    clusterCenterWorld.clone()
-                );
-            }
-            wheel.linkedVisuals.forEach((linked) => {
-                if (!linked.object.parent) return;
-                linked.spinCenter = linked.object.parent.worldToLocal(
-                    clusterCenterWorld.clone()
-                );
-            });
         });
     }
 
@@ -3152,7 +3041,13 @@ export default class RaceVehicle {
     // few materials. merging them per material cuts the draw calls (and the
     // shadow pass) to a handful. each wheel and linked part is merged within
     // itself, since it spins and steers as one piece
-    mergeStaticMeshes(model: THREE.Object3D, wheelRig: WheelRig[]) {
+    // extra roots (the steering wheel, a weak gpu's cabin) merge within
+    // themselves too, so they can turn or hide on their own
+    mergeStaticMeshes(
+        model: THREE.Object3D,
+        wheelRig: WheelRig[],
+        extra: Array<THREE.Object3D | null> = []
+    ) {
         model.updateMatrixWorld(true);
         // linked visuals are wheel parts that live elsewhere in the model and
         // follow their wheel rigidly, one draw each (the m5 has 113). as
@@ -3172,6 +3067,9 @@ export default class RaceVehicle {
                 if ((child as THREE.Mesh).isMesh && child.name) names.push(child.name);
             });
             wheel.object.userData.raceParts = names;
+        });
+        extra.forEach((root) => {
+            if (root) roots.add(root);
         });
         model.updateMatrixWorld(true);
         this.mergeUnder(model, roots);
@@ -3418,12 +3316,11 @@ export default class RaceVehicle {
         return [...hubs.filter(Boolean), ...steerHubs];
     }
 
-    // weak gpus: cabin and engine bay parts can't be seen from the chase
-    // camera through tinted glass, and on the e92 they're most of its draws
-    // (carpet, leather, stitching, gauges). they're dropped from the model
+    // weak gpus: engine bay parts can't be seen from any camera, they're
+    // dropped from the model. the cabin's are kept for the cockpit cam
+    // (groupCabin), hidden from the others
     dropHiddenParts(model: THREE.Object3D) {
-        const hidden =
-            /interior|carpet|leather|alcantara|stitch|gauge|dashscreen|shifter|seat|belt|pedal|steering|engine|cockpit|_int1|details_int/i;
+        const hidden = /engine/i;
         const drop: THREE.Object3D[] = [];
         model.traverse((child) => {
             const mesh = child as THREE.Mesh;
@@ -3749,20 +3646,6 @@ export default class RaceVehicle {
         if (carId === TOYOTA_CROWN_ID) {
             bodyColor = TOYOTA_CROWN_SILVER;
             bodyMatchers = ['body', 'blue'];
-        } else if (carId === AMG_ONE_ID) {
-            bodyColor = AMG_ONE_RACE_BLUE;
-            bodyMatchers = [
-                'body_color',
-                'piano_black',
-                'piano_black_0',
-                'piano_black_1',
-                'piano_black_2',
-                'black',
-                'black_m_nc_black_0',
-                'black_under_black_0',
-                'material',
-                'mizo',
-            ];
         } else if (carId === BMW_F90_M5_COMPETITION_ID) {
             bodyColor = BMW_F90_M5_METALLIC_MARINA_BAY_BLUE;
             bodyMatchers = ['m5_metallic', 'mat_m5_metallic'];
@@ -3903,12 +3786,46 @@ export default class RaceVehicle {
         this.carModel = model;
         holder.add(model);
         this.applyModelMetadata(model);
+        this.steeringSpin = model.getObjectByName(STEERING_SPIN) || null;
+        this.applyCockpitView();
+    }
+
+    // from the driver's seat a weak gpu's cabin shows, and tinted glass is no
+    // darker than a driver sees through it (the tint is a look from outside)
+    setCockpitView(on: boolean) {
+        if (on === this.cockpitView) return;
+        this.cockpitView = on;
+        this.applyCockpitView();
+    }
+
+    applyCockpitView() {
+        const model = this.carModel;
+        if (!model) return;
+        const cabin = model.getObjectByName(CABIN);
+        if (cabin) cabin.visible = this.cockpitView;
+        model.traverse((child) => {
+            const material = (child as THREE.Mesh).material;
+            if (!material || Array.isArray(material)) return;
+            const tinted = material.userData.tintOpacity as number | undefined;
+            if (tinted === undefined) return;
+            const clear = COCKPIT_GLASS_OPACITY[material.userData.tintZone as GlassZone] ?? tinted;
+            material.opacity = this.cockpitView ? Math.min(tinted, clear) : tinted;
+        });
+    }
+
+    // the driver's eyes in the car's frame, up or down with the garage's ride
+    // height. null for a model with no eyes worked out
+    getCockpitEye(target: THREE.Vector3) {
+        const eye = this.carModel?.userData.raceCockpitEye as number[] | undefined;
+        if (!eye) return null;
+        target.fromArray(eye);
+        target.y += rideOffsetMeters(this.look);
+        return target;
     }
 
     applyModelMetadata(model: THREE.Group) {
         const wheelRig = (model.userData.raceWheelRig || []) as WheelRig[];
-        const shouldAnimateWheels =
-            this.currentCarId === AMG_ONE_ID || this.isWheelRigSpatiallyValid(wheelRig);
+        const shouldAnimateWheels = this.isWheelRigSpatiallyValid(wheelRig);
         this.wheelRig = shouldAnimateWheels ? wheelRig : [];
         this.frontWheelRig = this.wheelRig.filter((wheel) => wheel.front);
         this.rearWheelRig = this.wheelRig.filter((wheel) => wheel.rear);
@@ -4027,8 +3944,8 @@ export default class RaceVehicle {
     // the physics turns the car about its center of mass, between the axles
     // by the weight split. models put their origin anywhere (the crown's is
     // at its nose), so a model moves until its wheels sit on the physics
-    // car's axles. with a rig getWheelGeometry won't measure (the amg one's
-    // axle nodes) the physics has the default wheelbase, and the middles meet
+    // car's axles. with a rig getWheelGeometry won't measure the physics has
+    // the default wheelbase, and the middles meet
     axleOffset(model: THREE.Object3D, wheels: WheelRig[], option?: CarOption) {
         const offset = new THREE.Vector3();
         const at = (wheel: WheelRig) =>
@@ -4624,6 +4541,7 @@ export default class RaceVehicle {
         this.updateTransform(dt);
         this.syncDrivetrain();
         this.updateWheelVisuals(dt, controls.throttle);
+        this.turnSteeringWheel();
         this.updateDriftSmoke(dt);
         this.input.rumble(this.getDriftIntensity(), this.impact);
     }
@@ -5608,6 +5526,13 @@ export default class RaceVehicle {
             target,
             THREE.MathUtils.clamp(deltaSeconds * 20, 0, 1)
         );
+    }
+
+    // the steering wheel turns with the front wheels, through a road car's
+    // ratio, anticlockwise for a left turn as the driver sees it
+    turnSteeringWheel() {
+        if (!this.steeringSpin) return;
+        this.steeringSpin.rotation.z = this.steerVisualAngle * STEERING_RATIO;
     }
 
     getWheelVisualSteerDirectionMultiplier() {

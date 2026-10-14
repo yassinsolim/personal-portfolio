@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { ScreenId } from './types';
 
-// room v2 is built at the car's own scale: the amg one is 4.75 m and drawn 27x
-// its glb size, which is 2764 scene units per metre (Car.getSceneUnitsPerMeter).
+// room v2 is built at 2764 scene units per metre (the first amg one model
+// drawn 27x its glb size), and every room car is scaled to it by its length.
 // scripts/room/setup.json uses the same numbers, and the room glb's
 // m1_screen / m2_screen / m3_screen quads sit exactly on these rects
 export const UNITS_PER_METRE = 2763.957;

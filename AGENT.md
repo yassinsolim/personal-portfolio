@@ -163,10 +163,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   images count when they finish, dev counts sources), `upload`, `compile`, `ready`. Race:
   `download`, `build`, then the transition's phases (`start`, `fly`, `settled`, `handoff`,
   `reveal`, `done`). The BIOS screen still counts sources; a new loader should use these.
-- The room isn't drawn until its textures are on the gpu (one a frame) and its programs have
+- The room isn't drawn until its textures are on the gpu (a 2048x2048 texel budget a frame, so
+  an atlas gets a frame to itself and a car's small textures share one) and its programs have
   compiled in parallel (`World.warmUp`, `compileAsync`, capped at 4 s), and the loading screen waits
   for `ready`. The first frame used to hold the main thread for about a second (synchronous
-  program links and 4k uploads).
+  program links and 4k uploads); one texture a frame cost the Ddiaz AMG One's 30 textures 200 ms.
 - Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
   (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
   `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149
@@ -1197,8 +1198,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Adding a car: carOptions entry, `race-drivetrain-reference.mjs` and `docs/cars-drivetrain.md`
   (the drivetrain test runs every reference car), `race-car-geometry.json`, `PAINT` in
   `carLook.ts`, `WHEELS` in `Garage.tsx`, `STOCK_ENGINE`/`ENGINES`, a sound bank, credits in
-  `modelCredits.ts` and `CREDITS.md`, and the two car id regexes in `supabase/racing.sql` (then
-  run it on the live project).
+  `modelCredits.ts` and `CREDITS.md`, the eyes and steering wheel in `Vehicle/cockpit.ts`, and the
+  two car id regexes in `supabase/racing.sql` (then run it on the live project).
 - Saved setups (`yassinverse:garageLook:<car>`, `garageTune:<car>`, written on every change)
   show on the room car at load: paint at once (`World/Car.ts` swapCar), and rims, kit and ride
   height once the race car is built, which capable devices do when idle after the intro if the
@@ -1279,3 +1280,53 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Bake one atlas as one joined object (bake.py does): Blender applies the bake margin per object,
   so separate parts paint over each other's islands. The shell is calibrated to RaceReveal's
   `ROOM_FLOOR` and `ROOM_WALL` (`bake.py --calibrate`); if the backdrop changes, re-measure both.
+
+## Cockpit Notes (2026-10-13)
+- Cockpit cam (C cycles chase, far, bumper, hood, cockpit; it's stored as index 4, so saved
+  views keep their meaning): the driver's eyes, fixed to the body (`RaceChaseCamera.updateCockpit`).
+  The head gives 2.5 cm per g against the load, turns 45% of the way toward where the car is
+  going in a slide, and the mouse or the pad's right stick look round the cabin. Turned past
+  1.6 rad the eyes slide to the middle and up, so looking back shows the back window between
+  the seats. Shake is at 0.25 and the speed fov at 0.45 (it stretches the cabin), both still
+  under the Advanced graphics switches. The car click flies into the seat (`restPose` has the
+  cockpit pose); one frame passes through the roof on the way in.
+- Every car's eyes are set by hand in `COCKPITS` (`Vehicle/cockpit.ts`), in the pivot's frame, and
+  kept as plain numbers (`userData.raceCockpitEye`, the model is cloned through json): on the
+  column's line, about 45 cm behind the wheel's middle and high enough that the rim's top sits
+  12 to 15 degrees under the eyes, so the road shows over it. The view looks 0.05 rad down
+  (`COCKPIT_PITCH`). Nothing is worked out from the body at load; a car missing from the table
+  falls back to `eyeFrom` (the hood probe's profile), so give a new car an entry.
+- The steering wheel turns on all 21 cars. Where the model keeps it apart it's found by node or
+  material name; where it's baked into the cabin's meshes, `cutWheel` takes the parts wholly
+  inside a cylinder round the column (`cut`: center on the column, axis toward the driver,
+  radius, how far along it), so the dash and column mounted paddles that reach out of it stay.
+  The numbers come from the probes in `.tmp-validation/` (`wheel-probe.mjs` finds rims,
+  `wheel-parts.mjs` lists the parts round a guess, `wheel-rays.mjs` raycasts screenshot pixels).
+  Badges on a hub need their own material in the cut's list. Check a cut with the wheel turned
+  90 degrees (`TURN=90` on `cockpit-sheet.mjs`).
+- `solid`: cabin materials an export marks as blended though they're solid (their alpha only
+  cuts decals out: the C63 507's and Chiron's interiors, the Aventador's) are drawn alpha tested,
+  so they write depth. Blended, they draw in triangle order, and a cut wheel vanished behind the
+  gauges.
+- The steering wheel's parts go in a `race-steering` group at its middle before the merge, merge
+  within `race-steering-spin` as a root of their own, and turn by `steerVisualAngle` times 14
+  (`STEERING_RATIO`). `applyRide` moves a group flagged `raceRidesWithBody` as one piece, so the
+  wheel turns about its own middle at any ride height.
+- The AMG One and Supra MK4 models were replaced for the cockpit (the old ones had a toy dash and
+  no cabin): Ddiaz Design's AMG ONE, repainted the site's deep blue, and OUTPISTON's 1994 Supra
+  Turbo, a rigged export that `wheel-groups.mjs` unskins first (`unskin`, keeping one of its four
+  caliper fittings). The AMG One loads with the homepage, so `optimize-models.mjs` drops its
+  tangents and caps its normal maps at 256 px. Room cars scale by `UNITS_PER_METRE` (they used to
+  scale off the default car's glb size, which a new AMG One would have changed).
+- Weak gpus used to drop the cabin's parts (`dropHiddenParts`). They're kept in a `race-cabin`
+  group now, merged within itself and hidden, shown only from the cockpit cam; engine bay parts
+  are still dropped.
+- Window tint is a look from outside: `CarFinish` tags tint materials with their zone and
+  opacity, and `RaceVehicle.setCockpitView` caps them from the seat (windscreen 0.12, the rest
+  0.45), putting them back when the view changes.
+- Check every car after touching it with `.tmp-validation/cockpit-sheet.mjs`-style shots (the
+  `.tmp-validation/` scripts aren't committed): headless Chromium on the real gpu
+  (`--use-angle=metal`, `?raceTier=high` and `low`), the race started with
+  `raceTransition.start`, then each car through `carChange`, `chaseCamera.update(0)` and
+  `renderer.update()`, copied off the canvas into one sheet. Animation frames stop in a hidden
+  tab or an IDE browser panel that's off screen, so don't wait on them there.
