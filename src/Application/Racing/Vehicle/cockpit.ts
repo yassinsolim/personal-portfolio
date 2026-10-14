@@ -622,3 +622,19 @@ export const groupCabin = (model: THREE.Object3D) => {
     parts.forEach((part) => cabin.attach(part));
     return cabin;
 };
+
+// a clone of the player's car (a remote player in the same car) as seen from
+// outside: glass of its own at its tint, since the player's clears from the
+// seat, and a weak gpu's cabin hidden
+export const outsideView = (model: THREE.Object3D) =>
+    model.traverse((child) => {
+        if (child.name === CABIN) child.visible = false;
+        const mesh = child as THREE.Mesh;
+        const material = mesh.material;
+        if (!material || Array.isArray(material)) return;
+        const tinted = material.userData.tintOpacity as number | undefined;
+        if (tinted === undefined) return;
+        const own = material.clone();
+        own.opacity = tinted;
+        mesh.material = own;
+    });

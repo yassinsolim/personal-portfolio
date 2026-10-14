@@ -4,6 +4,7 @@ import UIEventBus from '../UI/EventBus';
 import NordschleifeTrack, { type TrackFrame } from './Track/NordschleifeTrack';
 import { buildDriftParkData, DRIFT_PARK_SPLITS } from './Track/driftPark';
 import RaceVehicle, { type WheelVisualMeta } from './Vehicle/RaceVehicle';
+import { outsideView } from './Vehicle/cockpit';
 import {
     peakOutput,
     predictStop,
@@ -1960,6 +1961,7 @@ export default class RaceManager {
             }
         }
         if (!model) return null;
+        outsideView(model);
 
         const root = new THREE.Group();
         root.name = `race-remote-${player.sessionId}`;
