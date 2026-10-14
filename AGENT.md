@@ -1279,3 +1279,38 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
 - Bake one atlas as one joined object (bake.py does): Blender applies the bake margin per object,
   so separate parts paint over each other's islands. The shell is calibrated to RaceReveal's
   `ROOM_FLOOR` and `ROOM_WALL` (`bake.py --calibrate`); if the backdrop changes, re-measure both.
+
+## Cockpit Notes (2026-10-13)
+- Cockpit cam (C cycles chase, far, bumper, hood, cockpit; it's stored as index 4, so saved
+  views keep their meaning): the driver's eyes, fixed to the body (`RaceChaseCamera.updateCockpit`).
+  The head gives 2.5 cm per g against the load, turns 45% of the way toward where the car is
+  going in a slide, and the mouse or the pad's right stick look round the cabin. Turned past
+  1.6 rad the eyes slide to the middle and up, so looking back shows the back window between
+  the seats. Shake is at 0.25 and the speed fov at 0.45 (it stretches the cabin), both still
+  under the Advanced graphics switches. The car click flies into the seat (`restPose` has the
+  cockpit pose); one frame passes through the roof on the way in.
+- The eyes are worked out at prepare time (`Vehicle/cockpit.ts`), in the pivot's frame, and kept
+  as plain numbers (`userData.raceCockpitEye`, the model is cloned through json). From the
+  steering wheel when the model keeps it apart (`COCKPITS`: the C63 S, E92, M4, Jesko, Aventador,
+  P1, GT63 S and Huayra, by node or material name): 26 cm up and 42 cm back from its middle.
+  Else from the body (the hood probe's profile): 24 cm under the roof's top, and 0.74 m back from
+  the windscreen's foot, 0.92 m on a cab forward car (its roof highest ahead of the middle, the
+  mid engined ones, with longer raked screens). Both were measured on the eight cars whose wheels
+  are known. The roof also caps the wheel's guess: a low supercar's driver sits further down
+  behind it. The AMG One's eyes are set by hand (its roof scoop reads as the roof); the Supra MK4
+  model has no interior.
+- The steering wheel's parts go in a `race-steering` group at its middle before the merge (the
+  axis is the way its vertices spread least), merge within `race-steering-spin` as a root of their
+  own, and turn by `steerVisualAngle` times 14 (`STEERING_RATIO`). `applyRide` moves a group flagged
+  `raceRidesWithBody` as one piece, so the wheel turns about its own middle at any ride height.
+- Weak gpus used to drop the cabin's parts (`dropHiddenParts`). They're kept in a `race-cabin`
+  group now, merged within itself and hidden, shown only from the cockpit cam; engine bay parts
+  are still dropped.
+- Window tint is a look from outside: `CarFinish` tags tint materials with their zone and
+  opacity, and `RaceVehicle.setCockpitView` caps them from the seat (windscreen 0.12, the rest
+  0.45), putting them back when the view changes.
+- Check every car after touching it, `.tmp-validation/cockpit-sheet.mjs`-style: headless Chromium
+  on the real gpu (`--use-angle=metal`, `?raceTier=high`), the race started with
+  `raceTransition.start`, then each car through `carChange`, `chaseCamera.update(0)` and
+  `renderer.update()`, copied off the canvas into one sheet. Animation frames stop in a hidden
+  tab or an IDE browser panel that's off screen, so don't wait on them there.

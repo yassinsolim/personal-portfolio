@@ -333,7 +333,9 @@ const applyRide = (
     const moved: THREE.Object3D[] = [];
     model.traverse((child) => {
         if (child === model || roots.has(child)) return;
-        const kit = child.name === 'garage-kit';
+        // the kit, the steering wheel (it turns about its own middle) and a
+        // weak gpu's cabin move as one piece
+        const kit = child.name === 'garage-kit' || Boolean(child.userData.raceRidesWithBody);
         if (!kit && (!(child as THREE.Mesh).isMesh || child.userData.garageKit))
             return;
         if (underAny(child, roots, model)) return;

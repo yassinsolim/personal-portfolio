@@ -78,6 +78,11 @@ export const toCheapCarMaterial = (
     });
     // the garage tells rims apart by it (Garage/carLook.ts)
     phong.userData.garageMetalness = metal;
+    // tinted glass, which the cockpit cam clears (Utils/CarFinish.ts)
+    if (m.userData.tintZone) {
+        phong.userData.tintZone = m.userData.tintZone;
+        phong.userData.tintOpacity = m.userData.tintOpacity;
+    }
     return phong;
 };
 

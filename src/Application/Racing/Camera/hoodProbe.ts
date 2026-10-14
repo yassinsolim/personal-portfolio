@@ -20,7 +20,7 @@ const PLANES = [-0.12, 0, 0.12];
 // height (from the ground). every car's hood stays under it
 const GLASS_SHARE = 0.8;
 // the camera sits this far ahead of the glass, this far above the hood
-const GLASS_AHEAD = 0.18;
+export const GLASS_AHEAD = 0.18;
 const ABOVE_HOOD = 0.1;
 
 const shown = (object: THREE.Object3D | null) => {
