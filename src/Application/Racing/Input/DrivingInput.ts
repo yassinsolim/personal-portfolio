@@ -1,5 +1,5 @@
 import UIEventBus from '../../UI/EventBus';
-import { BUTTON, currentPad, padShared, stick } from '../../Gamepad/pad';
+import { BUTTON, currentPad, lookStick, padShared } from '../../Gamepad/pad';
 import { clampSteering, readSteering, steerRates, stickCurve } from './steering';
 
 // steer is positive to the left (toward positive yaw): A and the left arrow
@@ -303,7 +303,7 @@ export default class DrivingInput {
     readGamepad(): DrivingInputState | null {
         const pad = this.getGamepad();
         // a menu over the race (lobby card, garage) or the fly in has the pad
-        if (!pad || padShared.menuOpen) {
+        if (!pad || padShared.menuOpen || !padShared.active) {
             if (pad) this.syncPad(pad);
             this.look.x = 0;
             this.look.y = 0;
@@ -349,7 +349,7 @@ export default class DrivingInput {
         if (this.padPressed(pad, PAD_X)) {
             UIEventBus.dispatch('race:cycleCamera', { source: 'gamepad' });
         }
-        const [lookX, lookY] = stick(pad.axes[2] ?? 0, pad.axes[3] ?? 0, LOOK_DEADZONE);
+        const [lookX, lookY] = lookStick(pad, LOOK_DEADZONE);
         this.look.x = lookX;
         this.look.y = lookY;
         this.look.back = Boolean(pad.buttons[PAD_B]?.pressed);

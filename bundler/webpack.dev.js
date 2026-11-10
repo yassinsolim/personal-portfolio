@@ -4,6 +4,7 @@ const os = require('os')
 const { merge } = require('webpack-merge')
 const commonConfiguration = require('./webpack.common.js')
 const portFinderSync = require('portfinder-sync')
+const workerHeaders = require('../scripts/worker-headers.js')
 
 const shouldExportScene = process.env.EXPORT_SCENE === '1'
 const MAX_EXPORT_BYTES = 100 * 1024 * 1024
@@ -59,7 +60,14 @@ module.exports = merge(
             open: shouldExportScene ? '/?export=1&save=1' : true,
             server: 'http',
             allowedHosts: ['127.0.0.1', 'localhost'],
-            headers: devSecurityHeaders,
+            headers: (req) =>
+            {
+                const pathname = new URL(req.url, 'http://localhost').pathname
+                return {
+                    ...devSecurityHeaders,
+                    ...workerHeaders(pathname),
+                }
+            },
             hot: false,
             watchFiles: ['src/**', 'static/**'],
             static:

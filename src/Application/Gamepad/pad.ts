@@ -62,13 +62,50 @@ export const stick = (
     return [x * scale, y * scale];
 };
 
-// a pad that isn't in the standard layout can rest its triggers at -1 on
-// the axes past the left stick, so only that stick counts there
+// Raw layouts can put idle triggers at -1 where the right stick normally is.
+export const lookStick = (pad: PadLike, deadzone = 0.2): [number, number] =>
+    pad.mapping === 'standard'
+        ? stick(pad.axes[2] ?? 0, pad.axes[3] ?? 0, deadzone)
+        : [0, 0];
+
+const activeAxes = (pad: PadLike) =>
+    pad.axes.slice(0, pad.mapping === 'standard' ? 4 : 2).map(
+        (value) => Number.isFinite(value) && Math.abs(value) >= 0.55,
+    );
+
 const hasInput = (pad: PadLike) =>
     pad.buttons.some((button) => button.pressed) ||
-    (pad.mapping === 'standard' ? pad.axes : pad.axes.slice(0, 2)).some(
-        (value) => Math.abs(value) > 0.5,
-    );
+    activeAxes(pad).some(Boolean);
+
+// Keep sampling even during mouse use: held input must be released before
+// it can take over again. Newly connected axes start from their resting state.
+export class PadActivity {
+    index = -1;
+    private buttons: boolean[] = [];
+    private axes: boolean[] = [];
+
+    update(pad: PadLike | null): boolean {
+        if (!pad?.connected) {
+            this.index = -1;
+            this.buttons = [];
+            this.axes = [];
+            return false;
+        }
+        const buttons = pad.buttons.map((button) => button.pressed);
+        const axes = activeAxes(pad);
+        if (pad.index !== this.index) {
+            this.index = pad.index;
+            this.buttons = [];
+            this.axes = axes;
+        }
+        const started =
+            buttons.some((down, i) => down && !this.buttons[i]) ||
+            axes.some((down, i) => down && !this.axes[i]);
+        this.buttons = buttons;
+        this.axes = axes;
+        return started;
+    }
+}
 
 // stays on one pad until another one is used while it sits idle, so a
 // second pad lying around (or a drifting stick) can't take over
@@ -122,6 +159,7 @@ export const padDirection = (pad: PadLike): Direction | null => {
     if (held(BUTTON.RIGHT)) return 'right';
     const x = pad.axes[0] ?? 0;
     const y = pad.axes[1] ?? 0;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     if (Math.max(Math.abs(x), Math.abs(y)) < 0.55) return null;
     if (Math.abs(x) > Math.abs(y)) return x > 0 ? 'right' : 'left';
     return y > 0 ? 'down' : 'up';

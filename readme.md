@@ -48,6 +48,14 @@ Run the dev server:
 npm run dev
 ```
 
+Development and production both generate the Basis texture worker before starting.
+The dev server uses the same worker-specific CSP rules as `vercel.json`; the main
+document keeps its strict script policy. Any separate hosting proxy must preserve
+those per-path policies too, rather than apply the document CSP to every response.
+Worker JavaScript asset versions include that CSP as well as file content, so changing
+a worker's response policy invalidates its immutable browser cache without changing
+unrelated assets. Update the origin policy before publishing the new asset URLs.
+
 ## Racing Leaderboard (Optional Supabase)
 
 Online leaderboard setup is documented in `docs/RACING_SUPABASE.md`.
@@ -75,5 +83,16 @@ exports/exported-scene.glb
 ```
 
 ## Notes
+
+Controller navigation starts on a fresh button press or a deliberate stick movement.
+Mouse, keyboard and touch input return control to the page; a held controller input
+must be released before it can take over again. Centre a stick after connecting it.
+Non-standard controllers use the left stick and buttons only, since their other axes
+may be triggers rather than a right stick. Keyboard focus indicators remain available.
+
+Run controller unit regressions with `node --test scripts/test/gamepad.test.mjs`.
+With the site running, `node scripts/gamepad-check.mjs http://127.0.0.1:8081/`
+checks desktop and touch handoff, drift, raw axes, keyboard focus and disconnection.
+Pass the actual server URL; the browser check blocks Supabase traffic.
 
 If you find bugs or have feature ideas, feel free to open an issue or message me.

@@ -6,9 +6,11 @@ import type { FocusTarget } from '../World/screens/Screens';
 import type { FlipperButton } from '../World/flipper/FlipperDevice';
 import {
     BUTTON,
+    PadActivity,
     Repeat,
     buttonLabel,
     currentPad,
+    lookStick,
     padDirection,
     padKind,
     padShared,
@@ -151,6 +153,7 @@ export default class GamepadController {
     connected = false;
     kind: PadKind = 'xbox';
     prev: boolean[] = [];
+    activity = new PadActivity();
     repeat = new Repeat();
     current: Item | null = null;
     // where the focus was on each screen and menu, for coming back to it
@@ -202,7 +205,12 @@ export default class GamepadController {
         );
         window.addEventListener('gamepaddisconnected', () => {
             this.connected = Boolean(currentPad());
-            if (!this.connected) this.setActive(false);
+            if (!this.connected) {
+                this.activity.update(null);
+                this.prev = [];
+                this.lastFrame = 0;
+                this.setActive(false);
+            }
         });
         this.connected = Boolean(currentPad());
 
@@ -229,7 +237,15 @@ export default class GamepadController {
     update() {
         if (!this.connected) return;
         const pad = currentPad();
-        if (!pad) return;
+        if (!pad) {
+            this.activity.update(null);
+            this.prev = [];
+            this.lastFrame = 0;
+            this.setActive(false);
+            return;
+        }
+        if (this.activity.index !== pad.index) this.prev = [];
+        const started = this.activity.update(pad);
         const now = performance.now();
         const dt = this.lastFrame
             ? Math.min(0.1, (now - this.lastFrame) / 1000)
@@ -237,7 +253,7 @@ export default class GamepadController {
         this.lastFrame = now;
         const down = Array.from(pad.buttons, (button) => button.pressed);
         const [lx, ly] = stick(pad.axes[0] ?? 0, pad.axes[1] ?? 0);
-        const [rx, ry] = stick(pad.axes[2] ?? 0, pad.axes[3] ?? 0);
+        const [rx, ry] = lookStick(pad);
         const prev = this.prev;
         const frame: Frame = {
             pad,
@@ -258,9 +274,8 @@ export default class GamepadController {
         // the car leaves the pad alone while a menu or the fly in has it
         padShared.menuOpen = context === 'menu' || context === 'transition';
 
-        const used = down.some(Boolean) || Boolean(lx || ly || rx || ry);
         if (!padShared.active) {
-            if (!used) return;
+            if (!started) return;
             this.kind = padKind(pad.id);
             this.setActive(true);
             this.since = now;

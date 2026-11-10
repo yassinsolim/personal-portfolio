@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const workerHeaders = require('./worker-headers.js');
 
 const DIRS = ['models', 'textures', 'sounds', 'basis', 'draco', 'handheld'];
 const EXTENSIONS = new Set([
@@ -24,11 +25,17 @@ const walk = (dir) =>
 
 // extra: files the build emits itself ({ 'draco/x.js': Buffer }). sizes are
 // the files' own sizes, for loading progress by bytes (Utils/Resources.ts)
-module.exports = (staticDir, extra = {}) => {
+module.exports = (staticDir, extra = {}, headerRules) => {
     const versions = {};
     const sizes = {};
     const add = (key, content) => {
-        versions[key] = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+        const hash = crypto.createHash('sha256').update(content);
+        if (/\.(?:js|mjs)$/.test(key)) {
+            const policy = workerHeaders(`/${key}`, headerRules)['Content-Security-Policy'];
+            // Immutable responses cache their CSP too, not just the worker bytes.
+            if (policy) hash.update('\0').update(policy);
+        }
+        versions[key] = hash.digest('hex').slice(0, 8);
         sizes[key] = content.length;
     };
     for (const [key, content] of Object.entries(extra)) add(key, content);

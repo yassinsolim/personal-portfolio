@@ -10,6 +10,8 @@ import './ts-hooks.mjs';
 const pad = await import('../../src/Application/Gamepad/pad.ts');
 const { pickInDirection } =
     await import('../../src/Application/Gamepad/spatial.ts');
+const { default: DrivingInput } =
+    await import('../../src/Application/Racing/Input/DrivingInput.ts');
 
 const makePad = (
     index,
@@ -59,6 +61,114 @@ test('a pad outside the standard layout only counts its left stick as input', ()
     // with nothing picked yet, the standard one is preferred
     const fresh = new pad.PadPicker();
     assert.equal(fresh.pick([raw, standard]), standard);
+});
+
+test('idle pads and stick drift do not activate controller navigation', () => {
+    const activity = new pad.PadActivity();
+    assert.equal(activity.update(null), false);
+    assert.equal(activity.update(makePad(0)), false);
+    for (const axes of [[0.25, 0, 0, 0], [0.2, 0.2, 0.25, 0], [0.5, 0, 0, 0]]) {
+        assert.equal(activity.update(makePad(0, { axes })), false);
+    }
+    assert.equal(activity.update(makePad(0, { axes: [0.8, 0, 0, 0] })), true);
+});
+
+test('held input cannot reclaim navigation after mouse or keyboard use', () => {
+    const activity = new pad.PadActivity();
+    const held = makePad(0, { pressed: [pad.BUTTON.A], axes: [0.8, 0, 0, 0] });
+    activity.update(makePad(0));
+    assert.equal(activity.update(held), true);
+    for (let frame = 0; frame < 60; frame++) {
+        assert.equal(activity.update(held), false);
+    }
+    // A new button still works with a stick held off centre.
+    assert.equal(activity.update(makePad(0, {
+        pressed: [pad.BUTTON.A, pad.BUTTON.B], axes: [0.8, 0, 0, 0],
+    })), true);
+    assert.equal(activity.update(makePad(0)), false);
+    assert.equal(activity.update(held), true);
+});
+
+test('a newly connected stick must centre before it can activate navigation', () => {
+    const activity = new pad.PadActivity();
+    const held = makePad(0, { axes: [1, 0, 0, 0] });
+    assert.equal(activity.update(held), false);
+    assert.equal(activity.update(held), false);
+    assert.equal(activity.update(makePad(0)), false);
+    assert.equal(activity.update(held), true);
+    assert.equal(activity.update(null), false);
+    assert.equal(activity.update(held), false);
+    assert.equal(activity.update(makePad(1, { pressed: [pad.BUTTON.A] })), true);
+});
+
+test('raw triggers and extra axes never act as a right stick or wake navigation', () => {
+    const activity = new pad.PadActivity();
+    const raw = makePad(0, { mapping: '', axes: [0, 0, -1, 0, 0, -1] });
+    assert.equal(activity.update(raw), false);
+    assert.equal(activity.update(raw), false);
+    assert.deepEqual(pad.lookStick(raw), [0, 0]);
+    assert.equal(activity.update(makePad(0, {
+        mapping: '', axes: [0, 0, 1, 1, 0, 1],
+    })), false);
+    assert.equal(activity.update(makePad(0, {
+        mapping: '', pressed: [pad.BUTTON.A], axes: raw.axes,
+    })), true);
+    const standard = new pad.PadActivity();
+    standard.update(makePad(1));
+    assert.equal(standard.update(makePad(1, { axes: [0, 0, 0, 0, 1, -1] })), false);
+});
+
+test('standard right stick and triggers still activate the controller', () => {
+    const activity = new pad.PadActivity();
+    activity.update(makePad(0));
+    const look = makePad(0, { axes: [0, 0, -0.8, 0.6] });
+    assert.equal(activity.update(look), true);
+    assert.deepEqual(pad.lookStick(look), pad.stick(-0.8, 0.6));
+    assert.equal(activity.update(makePad(0)), false);
+    assert.equal(activity.update(makePad(0, { pressed: [pad.BUTTON.RT] })), true);
+});
+
+test('non-finite axes cannot wake navigation or choose a direction', () => {
+    const activity = new pad.PadActivity();
+    activity.update(makePad(0));
+    for (const axes of [[NaN, 0], [0, Infinity], [-Infinity, NaN]]) {
+        const invalid = makePad(0, { axes });
+        assert.equal(activity.update(invalid), false);
+        assert.equal(pad.padDirection(invalid), null);
+    }
+});
+
+test('driving ignores inactive pads and raw trigger axes cannot move the camera', () => {
+    const input = Object.create(DrivingInput.prototype);
+    Object.assign(input, {
+        padButtons: [],
+        look: { x: 0, y: 0, back: false },
+        sensitivity: 1,
+        source: 'keyboard',
+    });
+    const raw = makePad(0, {
+        mapping: '', axes: [0.8, 0, -1, 0], pressed: [pad.BUTTON.RT],
+    });
+    input.getGamepad = () => raw;
+    const previous = { ...pad.padShared };
+    try {
+        pad.padShared.active = false;
+        pad.padShared.menuOpen = false;
+        assert.equal(input.readGamepad(), null);
+        assert.equal(input.source, 'keyboard');
+        pad.padShared.active = true;
+        const driving = input.readGamepad();
+        assert.equal(driving.throttle, 1);
+        assert.ok(driving.steer < 0);
+        assert.deepEqual(input.look, { x: 0, y: 0, back: false });
+        pad.padShared.menuOpen = true;
+        assert.equal(input.readGamepad(), null);
+        pad.padShared.menuOpen = false;
+        pad.padShared.active = false;
+        assert.equal(input.readGamepad(), null);
+    } finally {
+        Object.assign(pad.padShared, previous);
+    }
 });
 
 test('the stick has a round dead zone and still reaches 1', () => {

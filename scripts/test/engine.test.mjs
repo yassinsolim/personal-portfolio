@@ -4,11 +4,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import './ts-hooks.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const src = (file) => path.join(here, '../../src/Application', file);
+const src = (file) => pathToFileURL(path.join(here, '../../src/Application', file)).href;
 const garage = await import(src('Racing/Garage/garage.ts'));
 const engines = await import(src('Racing/Garage/engines.ts'));
 const { buildPhysicsSpec, defaultWheelGeometry } = await import(src('Racing/Vehicle/carPhysics.ts'));

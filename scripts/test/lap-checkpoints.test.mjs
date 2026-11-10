@@ -11,7 +11,7 @@ import fs from 'node:fs';
 const { CHECKPOINTS, checkpointBlock, ringCheckpoints, writtenBlock } = await import('../track/checkpoints.mjs');
 
 test("racing.sql has the ring's checkpoints", () => {
-    assert.equal(writtenBlock(), checkpointBlock(ringCheckpoints()));
+    assert.equal(writtenBlock().replace(/\r\n/g, '\n'), checkpointBlock(ringCheckpoints()));
 });
 
 test('they are about 100 m apart, the last one on the start line', () => {
