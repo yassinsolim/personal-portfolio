@@ -6,7 +6,7 @@ const versions: Record<string, string> =
     typeof __ASSET_VERSIONS__ !== 'undefined' ? __ASSET_VERSIONS__ : {};
 
 // 'models/x.glb' -> 'models/x.glb?v=1a2b3c4d' for a file of this site that
-// the build hashed. those urls are cached for a year (vercel.json), a new
+// the build hashed. those urls are cached for a year (site.json), a new
 // file gets a new url. anything else (blobs, data, other origins, config)
 // comes back unchanged
 export const assetUrl = (url: string) => {

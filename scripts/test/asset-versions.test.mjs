@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const assetVersions = require('../asset-versions.js');
-const { headers } = require('../../vercel.json');
+const { headers } = require('../../site.json');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-asset-versions-'));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 const content = Buffer.from('worker content');

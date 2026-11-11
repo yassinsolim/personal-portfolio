@@ -2,7 +2,7 @@
 
 September 2026. Measured on the M5 MacBook Pro (10-core GPU) in Playwright's Chromium (build 1228,
 ANGLE on Metal), headed, 1512x900 CSS px at 2x, against the production build served locally with the
-`vercel.json` headers. Numbers below come from the tools in `scripts/` so they can be rerun:
+`site.json` headers. Numbers below come from the tools in `scripts/` so they can be rerun:
 
 | Tool | What it does |
 |---|---|

@@ -26,9 +26,9 @@ const secondCar = opt('switch', 'amg-c63-507');
 const outFile = path.join(root, '.tmp-validation', 'race-audio-verify.json');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// same headers as production (vercel.json), so the csp is tested too
-const vercel = JSON.parse(fs.readFileSync(path.join(root, 'vercel.json'), 'utf8'));
-const headers = Object.fromEntries(vercel.headers[0].headers.map((h) => [h.key, h.value]));
+// same headers as production (site.json), so the csp is tested too
+const site = JSON.parse(fs.readFileSync(path.join(root, 'site.json'), 'utf8'));
+const headers = Object.fromEntries(site.headers[0].headers.map((h) => [h.key, h.value]));
 delete headers['Strict-Transport-Security'];
 headers['Content-Security-Policy'] = headers['Content-Security-Policy'].replace('; upgrade-insecure-requests', '');
 const types = {
