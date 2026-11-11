@@ -1,10 +1,10 @@
-// serves build/ the way vercel does, for load and cache measurements:
-// http/2 over tls, the headers from vercel.json (last matching rule wins per
-// key), vercel's default cache-control, brotli at quality 3 for the types
-// vercel compresses (quality 3 matches its bytes exactly), etags with 304s
+// serves build/ for load and cache measurements the way the old vercel host
+// did: http/2 over tls, the headers from site.json (last matching rule wins
+// per key), vercel's default cache-control, brotli at quality 3 for the types
+// vercel compressed (quality 3 matched its bytes exactly), etags with 304s
 // and byte ranges for media.
 //
-//   node scripts/perf/serve-build.mjs [--dir build] [--config vercel.json]
+//   node scripts/perf/serve-build.mjs [--dir build] [--config site.json]
 //     [--port 8443] [--host 0.0.0.0] [--cert cert.pem --key key.pem] [--log]
 //
 // headless chromium on macos can't reach 127.0.0.1, use the lan ip. the
@@ -73,7 +73,7 @@ const COMPRESSIBLE = /^(text\/|application\/(javascript|json|wasm|xml)|model\/gl
 const MIN_COMPRESS_BYTES = 1024;
 const DEFAULT_CACHE_CONTROL = 'public, max-age=0, must-revalidate';
 
-// the subset of path-to-regexp that vercel.json sources use here: literal
+// the subset of path-to-regexp that site.json sources use here: literal
 // text, (regex) groups and :name segments
 const sourceToRegExp = (source) => {
     let out = '';
@@ -116,7 +116,7 @@ const conditionMatches = (condition, url, headers) => {
 };
 
 const loadRules = () => {
-    const config = JSON.parse(fs.readFileSync(path.resolve(root, arg('config', 'vercel.json')), 'utf8'));
+    const config = JSON.parse(fs.readFileSync(path.resolve(root, arg('config', 'site.json')), 'utf8'));
     return (config.headers || []).map((rule) => ({ ...rule, regex: sourceToRegExp(rule.source) }));
 };
 

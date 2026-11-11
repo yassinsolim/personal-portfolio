@@ -1,10 +1,4 @@
 {
-  "git": {
-    "deploymentEnabled": {
-      "main": true,
-      "**": false
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",

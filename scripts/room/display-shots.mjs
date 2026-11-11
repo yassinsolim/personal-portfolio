@@ -1,5 +1,5 @@
 // screenshots of the room's m2 and m3 displays at 1x, from the production
-// build under production headers (vercel.json's csp), plus checks that they
+// build under production headers (site.json's csp), plus checks that they
 // freeze while hidden and batch the boot log. serves build/ itself on its
 // own port and stops it when done.
 //
@@ -45,12 +45,12 @@ if (!fs.existsSync(path.join(buildDir, 'index.html'))) {
     process.exit(1);
 }
 
-// vercel.json's headers for a path: every rule whose source matches, later
+// site.json's headers for a path: every rule whose source matches, later
 // ones winning (the ktx2 worker and draco get their own csp that way)
-const vercel = JSON.parse(
-    fs.readFileSync(path.join(root, 'vercel.json'), 'utf8')
+const site = JSON.parse(
+    fs.readFileSync(path.join(root, 'site.json'), 'utf8')
 );
-const rules = vercel.headers.map((rule) => ({
+const rules = site.headers.map((rule) => ({
     match: new RegExp(`^${rule.source}$`),
     headers: rule.headers,
 }));

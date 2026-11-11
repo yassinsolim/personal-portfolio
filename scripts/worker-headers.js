@@ -1,4 +1,4 @@
-const productionHeaders = require('../vercel.json').headers;
+const productionHeaders = require('../site.json').headers;
 
 module.exports = (pathname, rules = productionHeaders) => {
     let source;

@@ -36,7 +36,7 @@ and cached for a year with the other versioned files. Why this and not a CDN:
   `connect-src 'self'` already cover a same-origin module worker, its wasm and its SD image. A
   CDN would need new `worker-src`, `script-src` and `connect-src` entries, and module workers
   can't be cross-origin anyway without a blob shim.
-- The worker gets its own tighter CSP in `vercel.json` (`/handheld/(.*)`: no network except
+- The worker gets its own tighter CSP in `site.json` (`/handheld/(.*)`: no network except
   same origin), like the draco decoder.
 - Cost is zero: the files ride the existing static hosting and compression. They are lazy: the
   worker, wasm and SD image (about 460 KB over the wire) load on the first hover or tap, never

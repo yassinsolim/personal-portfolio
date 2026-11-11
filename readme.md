@@ -32,7 +32,10 @@ After the room loads, one click starts a solo lap: **Play Solo** on the room pan
 
 - **Frontend:** Three.js / WebGL experience (React-based stack depending on your setup)
 - **Scene authoring:** Blender → exported to GLB/GLTF
-- **Deployment:** Vercel
+
+## Deployment
+
+Every push to `main` is built and published automatically to the self-hosted web server. Response headers (including the CSP), rewrites and URL rules live in `site.json`.
 
 ## Local Development
 
@@ -49,7 +52,7 @@ npm run dev
 ```
 
 Development and production both generate the Basis texture worker before starting.
-The dev server uses the same worker-specific CSP rules as `vercel.json`; the main
+The dev server uses the same worker-specific CSP rules as `site.json`; the main
 document keeps its strict script policy. Any separate hosting proxy must preserve
 those per-path policies too, rather than apply the document CSP to every response.
 Worker JavaScript asset versions include that CSP as well as file content, so changing
@@ -60,7 +63,7 @@ unrelated assets. Update the origin policy before publishing the new asset URLs.
 
 Online leaderboard setup is documented in `docs/RACING_SUPABASE.md`.
 If Supabase config is not provided, leaderboard automatically falls back to localStorage.
-On Vercel, set `NORDSCHLEIFE_SUPABASE_URL` and `NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY` (the racing game's own Supabase project) before deploying; the schema is `supabase/racing.sql`.
+Set `NORDSCHLEIFE_SUPABASE_URL` and `NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY` (the racing game's own Supabase project) in the build environment before deploying; the schema is `supabase/racing.sql`.
 
 ## Exporting the Scene (GLB/GLTF)
 

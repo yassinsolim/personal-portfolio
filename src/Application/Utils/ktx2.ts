@@ -3,7 +3,7 @@ import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { assetUrl } from './assetUrl';
 
 // the decoder runs in a real same origin worker file (scripts/build-ktx2-worker.mjs),
-// never a blob, so it gets its own content security policy from vercel.json
+// never a blob, so it gets its own content security policy from site.json
 // ('unsafe-eval' for the emscripten transcoder) and the page's stays strict
 const WORKER_URL = 'basis/ktx2-worker.js';
 const HANG_WORKER_URL = 'basis/hang-worker.js';

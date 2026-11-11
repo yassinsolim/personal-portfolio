@@ -34,9 +34,9 @@ its own 2M a month and can't use up the quota of the shared project that WebStra
 on (and the other way around). The old shared project (`axrljzcrlmliscstmctb`) keeps the
 pre-season laps as history.
 
-### Vercel setup
+### Build environment
 
-Set these in Vercel (Production and Preview) and redeploy:
+Set these in the build environment and redeploy:
 
 - `NORDSCHLEIFE_SUPABASE_URL` = `https://qdepbyxxzbdknkfgpwyl.supabase.co`
 - `NORDSCHLEIFE_SUPABASE_PUBLISHABLE_KEY` = the project's publishable key (Project Settings -> API Keys)
@@ -44,12 +44,12 @@ Set these in Vercel (Production and Preview) and redeploy:
 - `RACING_GHOST_REPLAY_TABLE` (optional, defaults to `nordschleife_ghost_replays`)
 - `RACING_LOBBY_CHANNEL_PREFIX` (optional, defaults to `nordschleife_lobby_v2`)
 
-The old `RACING_SUPABASE_URL` / `RACING_SUPABASE_ANON_KEY` pointed at the shared project. They
-were removed from Vercel and the build no longer reads them.
+The old `RACING_SUPABASE_URL` / `RACING_SUPABASE_ANON_KEY` pointed at the shared project. The
+build no longer reads them.
 
 `npm run build` runs `scripts/write-racing-config.js` first. If the Supabase URL/key are set, it writes `static/config/racing.config.json`, then Webpack copies that file into `build/config/racing.config.json`.
 
-The CSP `connect-src` in `vercel.json` and `bundler/webpack.dev.js` lists this project's https
+The CSP `connect-src` in `site.json` and `bundler/webpack.dev.js` lists this project's https
 and wss origins, and only those.
 
 ## 2) Tables, RLS and grants

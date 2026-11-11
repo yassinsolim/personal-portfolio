@@ -2,7 +2,7 @@
 // decoder as a real same origin worker file. three's KTX2Loader builds the
 // same script into a blob worker, which would run under the page's policy,
 // and the emscripten transcoder needs 'unsafe-eval'. as its own file it gets
-// its own, narrower policy from vercel.json and the page stays strict.
+// its own, narrower policy from site.json and the page stays strict.
 // runs as part of prebuild; the output is generated, not committed
 import fs from 'node:fs/promises';
 import path from 'node:path';

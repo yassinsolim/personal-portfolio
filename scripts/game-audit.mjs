@@ -107,16 +107,16 @@ if (!statSync(buildDir, { throwIfNoEntry: false })?.isDirectory()) {
     }
 }
 
-const vercelPath = path.join(root, 'vercel.json');
-if (statSync(vercelPath, { throwIfNoEntry: false })) {
-    const vercel = JSON.parse(readText(vercelPath));
-    const headers = Array.isArray(vercel.headers) ? vercel.headers : [];
+const sitePath = path.join(root, 'site.json');
+if (statSync(sitePath, { throwIfNoEntry: false })) {
+    const site = JSON.parse(readText(sitePath));
+    const headers = Array.isArray(site.headers) ? site.headers : [];
     const cspHeader = headers
         .flatMap((entry) => entry.headers || [])
         .find((header) => String(header.key || '').toLowerCase() === 'content-security-policy');
     const csp = cspHeader?.value || '';
     if (!csp) {
-        fail('vercel.json is missing Content-Security-Policy.');
+        fail('site.json is missing Content-Security-Policy.');
     }
     const cspTokens = csp.split(/[\s;]+/).filter(Boolean);
     for (const broadSource of ['http:', 'https:', 'ws:', 'wss:']) {
@@ -128,7 +128,7 @@ if (statSync(vercelPath, { throwIfNoEntry: false })) {
         fail("CSP contains 'unsafe-eval'.");
     }
 } else {
-    warn('vercel.json not found; header audit skipped.');
+    warn('site.json not found; header audit skipped.');
 }
 
 console.log('Game audit');

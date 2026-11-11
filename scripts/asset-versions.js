@@ -1,7 +1,7 @@
 // content hashes of the static files the game fetches at runtime, keyed by
 // their path under static/. the production build bakes them in
 // (__ASSET_VERSIONS__), Utils/assetUrl.ts adds ?v=<hash> to those urls and
-// vercel.json caches versioned urls for a year, so a repeat visit doesn't
+// site.json caches versioned urls for a year, so a repeat visit doesn't
 // revalidate them, and a changed file gets a new url. config/ is left out on
 // purpose (it has to stay fresh), and so is anything not fetched by the game
 const crypto = require('crypto');

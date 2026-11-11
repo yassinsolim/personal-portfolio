@@ -37,7 +37,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   the decoder from `three/examples/jsm/libs/draco` plus `DRACOLoader`'s own worker body;
   `Utils/draco.ts`), so there's no vendored copy to keep in sync and no blob worker: the page's
   policy has `worker-src 'self'` only. The wasm path needs `'wasm-unsafe-eval'` (the `draco/` files
-  get their own narrow policy in `vercel.json`); where a browser's CSP support blocks wasm it uses
+  get their own narrow policy in `site.json`); where a browser's CSP support blocks wasm it uses
   the asm.js worker.
 - three is r186 with color management on. Colors tuned on r137 go through `Utils/LegacyColor.ts`
   (`legacyColor`, `setLegacyHex`) so they keep their look, and the room scene's lights are scaled
@@ -107,30 +107,10 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `renderer.adaptive.reset()` (car change and race enter/exit already do) so load spikes don't
   read as a slow device. Check tuning changes with `node scripts/simulate-adaptive-resolution.mjs`.
 
-## Vercel Deploys (2026-09-28)
-- Previews are off by default. `vercel.json` sets `git.deploymentEnabled` to
-  `{ "main": true, "**": false }` (`**`, because `*` doesn't match branch names with a slash), so
-  only `main` deploys on its own. Pushing any other branch creates no Vercel deployment and no
-  Vercel check on the PR.
-- The Hobby team gets 100 deployments per 24 hours (a rolling 86,400 s window, not a calendar
-  day), shared by every project on it (this one, WebStrafe, NavOSS and more). Git, CLI and API
-  deployments all count, and so do builds canceled by an Ignored Build Step. Once it runs out,
-  merges to `main` stop reaching yassin.app until slots free up.
-- Batch commits: push a branch when it's ready for review, not after every commit, and keep
-  related fixes in one PR. Every merge to `main` is a production deploy.
-- A branch cut before this change still has the old `vercel.json` and builds a preview on every
-  push. Merge `origin/main` into it before pushing again.
-- When QA really needs a real Vercel preview (for example to check the production headers from
-  `vercel.json`), deploy once from a clean worktree and reuse the URL:
-  ```sh
-  vercel deploy --dry --project personal-portfolio --scope yassins-projects-11732a5e  # lists the upload, creates nothing
-  vercel deploy --project personal-portfolio --scope yassins-projects-11732a5e        # prints the preview URL
-  vercel curl / --deployment <preview-url> --scope yassins-projects-11732a5e -- -sS -o /dev/null -D -
-  ```
-  The CLI uploads the folder as it is, gitignored files included: a clean checkout is about
-  356 MB (mostly `models-src/`), and `build/`, `.tmp-validation/` or `audio-src/` go up too if
-  they're there. Previews sit behind Vercel Authentication; `vercel curl` gets through it on its
-  own (the last line prints the response headers).
+## Deployment
+- Every push to `main` is built and published automatically to the self-hosted web server.
+  Response headers (including the CSP), rewrites and URL rules live in `site.json`.
+- Every merge to `main` is a production deploy, so keep related fixes in one PR.
 
 ## Load Notes (2026-09-29)
 - The homepage only downloads what the room draws (`sources.ts`). Race data (`raceSources`, the
@@ -145,14 +125,15 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   exporter (`?export`, `?export-ui`, `?debug`) are dynamic imports.
 - A failed race download leaves the room as it was (`RaceTransition.abort`) and the next hover or
   click tries again.
-- Caching (`vercel.json`): webpack's hashed files (`bundle.<hash>.js|css`, `<hash>.js|wasm|...`,
+- Caching (`site.json`): webpack's hashed files (`bundle.<hash>.js|css`, `<hash>.js|wasm|...`,
   `assets/`) are `immutable` for a year. The static files the game fetches get `?v=<content hash>`
   from the production build (`scripts/asset-versions.js` bakes `__ASSET_VERSIONS__` in,
   `Utils/assetUrl.ts` adds it; three's loaders go through the default LoadingManager's URL
   modifier) and those urls are immutable too, so a repeat visit only revalidates the HTML. A new
   `fetch()` or `new Worker()` of a static file needs `assetUrl()`, or it revalidates every visit.
-  The HTML keeps Vercel's default (revalidate every time, never stale-while-revalidate: it names
-  the hashed bundles, which the next deploy removes), and `config/` is `no-cache`.
+  The HTML gets no rule in `site.json` and has to revalidate every time, never
+  stale-while-revalidate: it names the hashed bundles, which the next deploy removes. `config/` is
+  `no-cache`.
 - No service worker, on purpose: a repeat visit is already one 304 for the HTML (plus the yassinOS
   iframe's own requests). A worker would only save that round trip, and could serve a stale shell
   after a deploy.
@@ -168,8 +149,8 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   compiled in parallel (`World.warmUp`, `compileAsync`, capped at 4 s), and the loading screen waits
   for `ready`. The first frame used to hold the main thread for about a second (synchronous
   program links and 4k uploads); one texture a frame cost the Ddiaz AMG One's 30 textures 200 ms.
-- Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` like Vercel
-  (http/2, the `vercel.json` headers, brotli quality 3, which is what Vercel sends), and
+- Measure load and caching with `scripts/perf/`: `serve-build.mjs` serves `build/` the way the old
+  Vercel host did (http/2, the `site.json` headers, brotli quality 3, which is what Vercel sent), and
   `load-trace.mjs` does a cold load, a repeat visit and the car click in headless Chromium 149
   (real gpu), with per request bytes and cache state, milestones and long tasks.
   `lighthouse.mjs` wraps a scratch Lighthouse install. Serve on the LAN IP and pass `--spki`
@@ -1255,7 +1236,7 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   (gltfpack 0.18+ with BasisU, default `~/Assets/webstrafe/tools/bin/gltfpack` or `GLTFPACK=`).
   Rebuild them whenever a car glb changes; the webp glb stays as the fallback.
 - The decoder is a real same origin worker, `basis/ktx2-worker.js`, generated in prebuild by
-  `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `vercel.json` allows
+  `scripts/build-ktx2-worker.mjs` (not committed). Its own response CSP in `site.json` allows
   `'unsafe-eval'` for the emscripten transcoder; the page policy is unchanged and no blob
   worker is used for it (`Utils/ktx2.ts`).
 - Never hangs: a 451 byte probe must decode within 5 s of the transcoder arriving before any car

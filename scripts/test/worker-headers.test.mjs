@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { devServer } = require('../../bundler/webpack.dev.js');
-const production = require('../../vercel.json');
+const production = require('../../site.json');
 const headers = (url) => devServer.headers({ url });
 
 test('dev worker policies match production, including versioned requests', () => {
