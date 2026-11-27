@@ -347,6 +347,12 @@ test('open takes app names, process ids and project folders', () => {
         url: '/Users/Public/AetherVSR',
         label: 'AetherVSR folder',
     });
+    // an app of its own in yassinOS, by its key, its title or its process id
+    for (const name of ['ports', 'game ports', 'GamePorts'])
+        assert.deepEqual(kit.resolveOpen(name), {
+            app: 'GamePorts',
+            label: 'Game Ports',
+        });
     // no workspace folder in yassinOS
     assert.equal(kit.resolveOpen('yassinOS'), null);
     assert.equal(kit.resolveOpen('doom'), null);
@@ -396,6 +402,37 @@ test('cd, cat and ls find projects, and complete them and their files', () => {
     assert.equal(kit.completeInput('cat rea', aether), 'cat readme.md');
     assert.equal(kit.completeInput('cat rea'), null);
     assert.equal(kit.completeInput('open git', aether), 'open github.url');
+    // a project on the main screen: its workspace folder, or its own app
+    assert.deepEqual(kit.projectTarget(aether), {
+        app: 'FileExplorer',
+        url: '/Users/Public/AetherVSR',
+        label: '~/AetherVSR',
+    });
+    const ports = kit.resolveProject('game');
+    assert.deepEqual(kit.projectTarget(ports), {
+        app: 'GamePorts',
+        label: 'Game Ports',
+    });
+    assert.equal(kit.projectTarget(nord), null);
+    // each released port's releases page is a shortcut in its folder
+    assert.deepEqual(
+        kit.projectFiles(ports).map((file) => file.name),
+        [
+            'README.md',
+            'GitHub.url',
+            'CoD4-releases.url',
+            'MW2-releases.url',
+            'MW3-releases.url',
+            'AW-releases.url',
+            'Discord.url',
+        ]
+    );
+    for (const file of kit.projectFiles(ports).slice(2, 6))
+        assert.match(
+            file.url,
+            /^https:\/\/github\.com\/yassinsolim\/\w+-recomp\/releases$/
+        );
+    assert.equal(kit.completeInput('open mw3', ports), 'open mw3-releases.url');
 });
 
 test('a mistyped command gets the nearest one', () => {

@@ -310,14 +310,14 @@
 
 .room-display .rd-os-links {
     display: grid;
-    gap: 14px;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     margin-top: 18px;
 }
 
 .room-display .rd-os-links .rd-btn {
-    font-size: 24px;
-    padding: 16px 6px;
+    font-size: 22px;
+    padding: 17px 4px;
 }
 
 /* m3, 900 x 1600 */

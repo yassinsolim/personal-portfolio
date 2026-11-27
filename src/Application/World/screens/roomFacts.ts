@@ -18,6 +18,8 @@ export type Project = {
     summary: string;
     // its workspace folder in yassinOS, under /Users/Public
     folder?: string;
+    // or its own app in yassinOS (a process id), where it has no folder
+    app?: string;
     // its README (cat), the Portfolio app's entry
     about: string;
     timeline: string;
@@ -25,11 +27,36 @@ export type Project = {
     tech: string[];
     repo?: string;
     site?: string;
+    // more shortcuts in its folder, after the repo's and the site's
+    links?: { name: string; url: string }[];
 };
 
 // one line each in the terminal's ls (about 38 characters), the details
 // are in the Portfolio app
 export const PROJECTS: Project[] = [
+    {
+        name: 'Game Ports',
+        summary: 'Call of Duty natively on Android',
+        app: 'GamePorts',
+        about: 'Four Xbox 360 Call of Duty games running natively on Android, made by static recompilation.',
+        timeline: '2026',
+        highlights: [
+            "Native ARM64 Android ports of Call of Duty 4, Modern Warfare 2, Modern Warfare 3 and Advanced Warfare. Not emulation: the console's PowerPC code is translated ahead of time into C++ by a XenonRecomp-based static recompiler and compiled for the device, with a runtime standing in for the console and a Vulkan renderer.",
+            'Measured on every release at about 120 FPS on the AYN Thor (Snapdragon 8 Gen 2, 120 Hz) and 60 FPS on the Retroid Pocket Flip 2 (Snapdragon 865, 60 Hz).',
+            "One self-updating app per game with a guided setup that builds the game on the device from the player's own disc, the player's own DLC, and online play through a relay server.",
+            'A Nintendo Switch port of Advanced Warfare is in progress.',
+            'Unofficial fan projects; not affiliated with Activision, Infinity Ward, Sledgehammer Games, Microsoft or Nintendo. Players use their own copies.',
+        ],
+        tech: ['C++', 'Kotlin', 'Vulkan', 'ARM64', 'Android NDK', 'Static Recompilation'],
+        repo: 'https://github.com/yassinsolim/mw3-recomp',
+        links: [
+            { name: 'CoD4-releases.url', url: 'https://github.com/yassinsolim/cod4-recomp/releases' },
+            { name: 'MW2-releases.url', url: 'https://github.com/yassinsolim/mw2-recomp/releases' },
+            { name: 'MW3-releases.url', url: 'https://github.com/yassinsolim/mw3-recomp/releases' },
+            { name: 'AW-releases.url', url: 'https://github.com/yassinsolim/aw-recomp/releases' },
+            { name: 'Discord.url', url: 'https://yassin.app/discord' },
+        ],
+    },
     {
         name: 'AetherVSR',
         summary: 'real-time AI video upscaler',
@@ -210,6 +237,7 @@ export const HOME = '/Users/Public';
 
 export const APPS: Record<string, OpenTarget> = {
     portfolio: { app: 'Portfolio', label: 'Portfolio' },
+    ports: { app: 'GamePorts', label: 'Game Ports' },
     projects: { app: 'FileExplorer', url: HOME, label: 'File Explorer' },
     files: { app: 'FileExplorer', url: HOME, label: 'File Explorer' },
     terminal: { app: 'Terminal', label: 'Terminal' },
@@ -229,6 +257,7 @@ export const APPS: Record<string, OpenTarget> = {
 export const LINKS: { key: string; label: string }[] = [
     { key: 'portfolio', label: 'Portfolio' },
     { key: 'projects', label: 'Projects' },
+    { key: 'ports', label: 'Ports' },
     { key: 'terminal', label: 'Terminal' },
     { key: 'resume', label: 'Resume' },
 ];
@@ -242,6 +271,7 @@ export const APP_TITLES: Record<string, string> = {
     DevTools: 'DevTools',
     Emulator: 'Emulator',
     FileExplorer: 'File Explorer',
+    GamePorts: 'Game Ports',
     IRC: 'IRC',
     JSDOS: 'js-dos',
     Marked: 'Marked',

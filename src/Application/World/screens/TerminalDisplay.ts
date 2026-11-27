@@ -16,6 +16,7 @@ import {
     projectDir,
     projectFiles,
     projectPath,
+    projectTarget,
     resolveOpen,
     resolveProject,
     resolveTheme,
@@ -29,11 +30,11 @@ import {
     COMMANDS,
     CONTACT,
     CREDITS,
-    HOME,
     NOW,
     OLDER_PROJECTS,
     PROJECTS,
     RIG,
+    type OpenTarget,
     type Project,
 } from './roomFacts';
 
@@ -342,19 +343,17 @@ export function createTerminalDisplay(
         return card;
     };
 
-    // cd and cat open the project's folder on the main screen as well, and
-    // leave the camera here
+    // cd and cat open the project's folder (or its app) on the main screen as
+    // well, and leave the camera here
     const mirror = (project: Project): Node[] => {
-        if (!project.folder) return [];
+        const target = projectTarget(project);
+        if (!target) return [];
         const shown = attempt(
-            () =>
-                Boolean(
-                    ctx.showInOS?.('FileExplorer', `${HOME}/${project.folder}`)
-                ),
+            () => Boolean(ctx.showInOS?.(target.app, target.url)),
             false
         );
         return shown
-            ? [line(`${projectPath(project)} is open on the main screen too`, 'dim')]
+            ? [line(`${target.label} is open on the main screen too`, 'dim')]
             : [];
     };
 
@@ -368,12 +367,9 @@ export function createTerminalDisplay(
         ),
     ];
 
-    const openFolder = (project: Project) => {
-        attempt(
-            () => ctx.openInOS('FileExplorer', `${HOME}/${project.folder}`),
-            undefined
-        );
-        return [line(`opening ${projectPath(project)} on the main screen`, 'ok')];
+    const openOnMain = (target: OpenTarget) => {
+        attempt(() => ctx.openInOS(target.app, target.url), undefined);
+        return [line(`opening ${target.label} on the main screen`, 'ok')];
     };
 
     const copyButton = (text: string, source: HTMLElement) => {
@@ -484,13 +480,14 @@ export function createTerminalDisplay(
                     line('usage: open <name>'),
                     line(`names: ${openNames().join(', ')}`, 'dim'),
                 ];
-            if (arg === '.' && cwd?.folder) return openFolder(cwd);
+            const here = cwd && projectTarget(cwd);
+            if (arg === '.' && here) return openOnMain(here);
             const file = findFile(cwd, arg);
             if (file?.url) {
                 window.open(file.url, '_blank', 'noopener,noreferrer');
                 return [line(`opening ${shortUrl(file.url)} in a new tab`, 'ok')];
             }
-            if (file && cwd?.folder) return openFolder(cwd);
+            if (file && here) return openOnMain(here);
             const target = resolveOpen(arg);
             if (!target)
                 return [

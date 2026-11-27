@@ -442,6 +442,20 @@ export const projectDir = (project: Project) =>
 export const projectPath = (project: Project | null) =>
     project ? `~/${projectDir(project)}` : '~';
 
+// where a project is on yassinOS's desktop: its workspace folder, or its own
+// app. null where it has neither
+export const projectTarget = (project: Project): OpenTarget | null => {
+    if (project.folder)
+        return {
+            app: 'FileExplorer',
+            url: `${HOME}/${project.folder}`,
+            label: projectPath(project),
+        };
+    return project.app
+        ? { app: project.app, label: appLabel(project.app).title }
+        : null;
+};
+
 // what's in a project's folder: its readme, and shortcuts like the ones in
 // its yassinOS workspace
 export const projectFiles = (project: Project) => {
@@ -452,6 +466,7 @@ export const projectFiles = (project: Project) => {
             name: `${projectDir(project)}.url`,
             url: project.site,
         });
+    if (project.links) files.push(...project.links);
     return files;
 };
 
