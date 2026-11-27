@@ -74,6 +74,11 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   on first focus on the low tier; phones get a 2D full screen yassinOS instead. m2 (widgets) and
   m3 (terminal) are plain DOM (`WidgetsDisplay.ts`, `TerminalDisplay.ts`, contract in
   `types.ts`). The room's own `m1_screen`..`m3_screen` quads are hidden.
+- m1 starts on the empty desktop: nothing opens by itself. The Portfolio app is one click away
+  (m2's button, `open portfolio` in the terminal, its icon in yassinOS). What m2 and m3 say
+  (`roomFacts.ts`) never names the city, an email or a phone number (a test checks), and the
+  way to reach Yassin is the Discord link: the terminal's `contact` and the pill in the room's
+  bottom left corner (`.discord-link`, shown with the garage pill).
 - Click to focus (no hover to zoom): hover shows a label, a click glides the camera to the
   target's framing (`Camera.focusOn`, the FOCUS keyframe, refit on resize), Esc, the Back chip
   or a click elsewhere goes one level back. A screen takes the pointer only while it's the

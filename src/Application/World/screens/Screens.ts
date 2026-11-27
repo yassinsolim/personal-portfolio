@@ -57,9 +57,6 @@ const HOVER_MS = 60;
 // yassinOS without the bridge never says ready: fade in this long after load
 const READY_FALLBACK_MS = 4000;
 const HELLO_MS = 400;
-// the desktop starts empty in the embed (it matches the poster); m1 opens
-// the portfolio app once it's up, like the site always has
-const START_APP = 'Portfolio';
 const HIGH_TIER_IFRAME_DELAY_MS = 1500;
 const LEAVE_EASE_MS = 900;
 
@@ -375,11 +372,9 @@ export default class Screens {
         const queued = this.pendingOs;
         this.pendingOs = [];
         // pausing before ready would hold back what ready waits for (its
-        // clock), so the visibility only goes over from here
+        // clock), so the visibility only goes over from here. the desktop
+        // stays empty until something asks for an app
         this.postOs({ type: this.osVisible ? 'yassinos:resume' : 'yassinos:pause' });
-        if (!queued.some((message) => message.type === 'yassinos:open')) {
-            queued.unshift({ type: 'yassinos:open', app: START_APP });
-        }
         queued.forEach((message) => this.postOs(message));
     }
 

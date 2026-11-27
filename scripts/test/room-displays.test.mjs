@@ -336,10 +336,8 @@ test('open takes app names, process ids and project folders', () => {
         label: 'Portfolio',
     });
     assert.equal(kit.resolveOpen('projects').url, '/Users/Public');
-    assert.equal(
-        kit.resolveOpen('resume').url,
-        '/Users/Public/Desktop/Resume.pdf'
-    );
+    // the resume isn't on the site
+    assert.equal(kit.resolveOpen('resume'), null);
     assert.equal(kit.resolveOpen('SpaceCadet').app, 'SpaceCadet');
     assert.equal(kit.resolveOpen('file explorer').app, 'FileExplorer');
     assert.deepEqual(kit.resolveOpen('aethervsr'), {
@@ -451,8 +449,23 @@ test("every project has a README and https links", () => {
         for (const url of [project.repo, project.site].filter(Boolean))
             assert.match(url, /^https:\/\//, `${project.name} ${url}`);
     }
-    for (const url of [facts.CONTACT.github, facts.CONTACT.linkedin])
+    for (const url of [
+        facts.CONTACT.discord,
+        facts.CONTACT.github,
+        facts.CONTACT.linkedin,
+    ])
         assert.match(url, /^https:\/\//);
+});
+
+test('nothing the screens say gives away where yassin lives', () => {
+    const said = JSON.stringify([
+        facts.NOW,
+        facts.PROJECTS,
+        facts.OLDER_PROJECTS,
+        facts.CONTACT,
+    ]);
+    assert.doesNotMatch(said, /calgary|alberta|\bAB\b/i);
+    assert.doesNotMatch(said, /@|mailto:|tel:/);
 });
 
 test('graphics lines read like the graphics info panel', () => {

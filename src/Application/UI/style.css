@@ -5036,6 +5036,51 @@ body.race-transition #ui-app > :not(.race-lobby-choice):not(.garage-fade) {
     }
 }
 
+/* where to reach yassin: the garage pill's small twin in the other corner */
+.discord-link {
+    position: fixed;
+    left: max(18px, env(safe-area-inset-left));
+    bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 8px 16px 8px 9px;
+    border: 1px solid var(--ui-line-strong);
+    border-radius: 999px;
+    background: var(--ui-panel);
+    color: #fff;
+    font-family: var(--ui-font);
+    text-decoration: none;
+    pointer-events: auto;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.discord-link:hover,
+.discord-link:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.6);
+    background: rgba(26, 26, 28, 0.92);
+    outline: none;
+}
+
+.discord-link svg {
+    width: 16px;
+    height: 16px;
+    padding: 6px;
+    border-radius: 50%;
+    background: #fff;
+    fill: var(--ui-on-accent);
+    flex: none;
+}
+
+.discord-link strong {
+    font-size: 14px;
+    letter-spacing: 0.3px;
+}
+
 /* the cut to black going into the garage from the room and back */
 .garage-fade {
     position: fixed;

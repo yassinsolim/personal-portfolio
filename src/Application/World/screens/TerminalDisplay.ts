@@ -362,7 +362,6 @@ export function createTerminalDisplay(
             el('div', 'rd-readme-head', CONTACT.name),
             line(NOW.role),
             line(NOW.school),
-            line(CONTACT.place, 'dim'),
             line('contact for where to find me, ls for what I build', 'dim')
         ),
     ];

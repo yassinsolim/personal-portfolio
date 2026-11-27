@@ -4,13 +4,13 @@
 
 export const NOW = {
     role: 'AI GPU Software Libraries intern at AMD',
-    since: 'Software Engineer Intern since May 2026, Calgary',
+    since: 'Software Engineer Intern since May 2026',
     items: [
         'Shipping MIOpen convolution solvers, kernel-selection databases and hipDNN heuristics',
         "Co-leading software for Waybionic's robotic surgical arm",
         'Building AetherVSR and MacMST on the side',
     ],
-    school: 'Software Engineering at UCalgary, graduating April 2028',
+    school: 'Software Engineering at the Schulich School of Engineering, graduating April 2028',
 };
 
 export type Project = {
@@ -102,14 +102,14 @@ export const PROJECTS: Project[] = [
     },
     {
         name: 'NavOSS',
-        summary: 'account-free navigation for Calgary',
+        summary: 'account-free, private navigation',
         folder: 'NavOSS',
-        about: 'Privacy-first, account-free navigation for Calgary, currently in iOS technical beta.',
+        about: 'Privacy-first, account-free navigation, currently in iOS technical beta.',
         timeline: '2026',
         highlights: [
             'Built on OpenStreetMap-derived data, MapLibre, and self-hosted Valhalla and Nominatim, with no tracking accounts and on-device storage for saved places.',
             'Expo/React Native iOS client backed by a native Swift navigation core handling map matching, rerouting, spoken guidance, and CarPlay.',
-            'Strict TypeScript monorepo with shared Zod contracts, a Fastify API, a 17-variant Calgary route regression matrix, and TestFlight builds from CI.',
+            'Strict TypeScript monorepo with shared Zod contracts, a Fastify API, a 17-variant route regression matrix, and TestFlight builds from CI.',
         ],
         tech: ['TypeScript', 'Expo', 'React Native', 'Swift', 'CarPlay', 'Fastify', 'MapLibre', 'Valhalla'],
         repo: 'https://github.com/yassinsolim/NavOSS',
@@ -164,7 +164,7 @@ export const PROJECTS: Project[] = [
         timeline: 'Dec 2025 - Present',
         highlights: [
             'Personal desktop OS in the browser, built on daedalOS with Next.js, React, and TypeScript, and embedded as the working monitor screen in this room.',
-            "Custom Portfolio app, project workspaces on the desktop, and a PDF viewer that renders the resume's real, selectable text with clickable links.",
+            'Custom Portfolio app, project workspaces on the desktop, and a PDF viewer that renders real, selectable text with clickable links.',
         ],
         tech: ['Next.js', 'React', 'TypeScript', 'styled-components', 'Docker', 'Vercel'],
         repo: 'https://github.com/yassinsolim/yassinOS',
@@ -174,7 +174,7 @@ export const PROJECTS: Project[] = [
         name: 'Waybionic',
         summary: 'software for a robotic surgical arm',
         folder: 'Waybionic',
-        about: 'ROS 2 ground station and embedded control for the UCalgary Waybionic robotic surgical arm.',
+        about: 'ROS 2 ground station and embedded control for the Waybionic robotic surgical arm.',
         timeline: 'Ongoing',
         highlights: [
             'Co-lead software for a 10-engineer team, centered on a ROS 2 (Jazzy) C++/Python ground station with RViz visualization, telemetry, diagnostics, and safety monitoring.',
@@ -204,7 +204,6 @@ export const PROJECTS: Project[] = [
 export const OLDER_PROJECTS = [
     'InterviewCoach',
     'DisasterManagementGUI',
-    'CalgaryConnect',
     'Weather-Stock-Data',
     'Spotify-Statistics',
 ];
@@ -241,11 +240,6 @@ export const APPS: Record<string, OpenTarget> = {
     projects: { app: 'FileExplorer', url: HOME, label: 'File Explorer' },
     files: { app: 'FileExplorer', url: HOME, label: 'File Explorer' },
     terminal: { app: 'Terminal', label: 'Terminal' },
-    resume: {
-        app: 'PDF',
-        url: `${HOME}/Desktop/Resume.pdf`,
-        label: 'Resume.pdf',
-    },
     browser: { app: 'Browser', label: 'Browser' },
     paint: { app: 'Paint', label: 'Paint' },
     pinball: { app: 'SpaceCadet', label: 'Space Cadet' },
@@ -259,7 +253,6 @@ export const LINKS: { key: string; label: string }[] = [
     { key: 'projects', label: 'Projects' },
     { key: 'ports', label: 'Ports' },
     { key: 'terminal', label: 'Terminal' },
-    { key: 'resume', label: 'Resume' },
 ];
 
 // window titles of yassinOS's apps, for its process ids
@@ -317,7 +310,6 @@ export const HIDDEN_COMMANDS = ['pwd', 'echo', 'date', 'sudo'];
 
 export const CONTACT = {
     name: 'Yassin Soliman',
-    place: 'Calgary, AB',
     discord: 'https://yassin.app/discord',
     github: 'https://github.com/yassinsolim',
     linkedin: 'https://linkedin.com/in/yassinsoliman',
