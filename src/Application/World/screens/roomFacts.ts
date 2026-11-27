@@ -288,7 +288,7 @@ export const HIDDEN_COMMANDS = ['pwd', 'echo', 'date', 'sudo'];
 export const CONTACT = {
     name: 'Yassin Soliman',
     place: 'Calgary, AB',
-    email: 'solimanyassin@gmail.com',
+    discord: 'https://yassin.app/discord',
     github: 'https://github.com/yassinsolim',
     linkedin: 'https://linkedin.com/in/yassinsoliman',
 };

@@ -504,7 +504,7 @@ export function createTerminalDisplay(
         contact: () => [
             block(
                 pairs([
-                    ['email', link(`mailto:${CONTACT.email}`, CONTACT.email)],
+                    ['discord', link(CONTACT.discord)],
                     ['github', link(CONTACT.github)],
                     ['linkedin', link(CONTACT.linkedin)],
                 ])
