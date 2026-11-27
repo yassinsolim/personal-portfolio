@@ -52,7 +52,9 @@ Implement Nürburgring Nordschleife racing mini-game inside existing portfolio w
   `Utils/CarFinish.ts` in both the site view and race mode. Opacity reads like film darkness
   (0.8 is about a 20% tint). Lamp lenses that share a glass material are skipped by height/size.
 - The floor is baked and unlit, so the car's floor shadow comes from `World/CarContactShadow.ts`:
-  rendered once per car from underneath, blurred, and kept as a child of the car model.
+  rendered once per car from underneath, blurred, and kept as a child of the car model. It lies
+  8 units over the floor, so nothing that moves the body may move it: the garage's ride height
+  skips meshes named `shadow` (`carLook.ts` `applyRide`).
 - Unknown `deviceMemory` (Safari, Firefox) must not count as low memory (`Utils/Device.ts`).
 
 ## Room v2 Notes (2026-09-29)

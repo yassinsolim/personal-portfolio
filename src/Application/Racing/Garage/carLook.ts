@@ -316,7 +316,9 @@ const localDelta = (
     return b.sub(a);
 };
 
-// ride height moves the body, not the wheels
+// ride height moves the body, not the wheels or the contact shadow: the
+// shadow lies on the floor, and lowered with the body it sank under it,
+// where only the depth bias showed it, cut off by the camera's angle
 const applyRide = (
     model: THREE.Object3D,
     roots: Set<THREE.Object3D>,
@@ -325,7 +327,7 @@ const applyRide = (
 ) => {
     const moved: THREE.Object3D[] = [];
     model.traverse((child) => {
-        if (child === model || roots.has(child)) return;
+        if (child === model || roots.has(child) || /shadow/i.test(child.name)) return;
         // the kit, the steering wheel (it turns about its own middle) and a
         // weak gpu's cabin move as one piece
         const kit = child.name === 'garage-kit' || Boolean(child.userData.raceRidesWithBody);
