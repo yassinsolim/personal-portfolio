@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 690" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>How the app chooses and proves a graphics driver</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8a91"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#ff9a9a"/>
+    </marker>
+  </defs>
+  <rect width="560" height="690" rx="16" fill="#111113"/>
+
+  <g font-size="17" fill="#f2f2f3">
+    <rect x="24" y="24" width="360" height="76" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="40" y="54" font-weight="600">Read the GPU's name</text>
+    <text x="40" y="80" font-size="14" fill="#a0a0a6">from OpenGL ES, before Vulkan is opened</text>
+    <line x1="204" y1="102" x2="204" y2="126" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="24" y="130" width="360" height="76" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="40" y="160" font-weight="600">Rank the catalog for that chip</text>
+    <text x="40" y="186" font-size="14" fill="#a0a0a6">every package pinned by its SHA-256</text>
+    <line x1="204" y1="208" x2="204" y2="232" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="24" y="236" width="360" height="76" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="40" y="266" font-weight="600">Make the best one ready</text>
+    <text x="40" y="292" font-size="14" fill="#a0a0a6">carried in the app, or downloaded</text>
+    <line x1="204" y1="314" x2="204" y2="338" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="24" y="342" width="360" height="96" rx="10" fill="#18181b" stroke="#8ea1ff" stroke-width="1.5"/>
+    <text x="40" y="372" font-weight="600">Self-test, in a process of its own</text>
+    <text x="40" y="398" font-size="14" fill="#a0a0a6">the device made as a run makes it, one</text>
+    <text x="40" y="418" font-size="14" fill="#a0a0a6">64×64 frame drawn, read back, checked</text>
+    <line x1="204" y1="440" x2="204" y2="464" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="24" y="468" width="360" height="96" rx="10" fill="#18181b" stroke="#8ea1ff" stroke-width="1.5"/>
+    <text x="40" y="498" font-weight="600">Watch the game's first frames</text>
+    <text x="40" y="524" font-size="14" fill="#a0a0a6">64×36 samples twice a second until six</text>
+    <text x="40" y="544" font-size="14" fill="#a0a0a6">looks in a row are a picture</text>
+    <line x1="204" y1="566" x2="204" y2="590" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="24" y="594" width="360" height="72" rx="10" fill="#18181b" stroke="#7ad3a8" stroke-width="1.5"/>
+    <text x="40" y="624" font-weight="600">Good on this phone</text>
+    <text x="40" y="650" font-size="14" fill="#a0a0a6">never checked again</text>
+  </g>
+
+  <g font-size="14">
+    <!-- self-test failure loops to next driver -->
+    <path d="M386 390 H544 V274 H392" fill="none" stroke="#ff9a9a" stroke-width="1.8" marker-end="url(#r)"/>
+    <text x="400" y="316" fill="#ff9a9a" font-weight="600">crash, hang or</text>
+    <text x="400" y="334" fill="#ff9a9a" font-weight="600">wrong pixels:</text>
+    <text x="400" y="352" fill="#c8c8cc">noted, next</text>
+    <text x="400" y="370" fill="#c8c8cc">driver tried</text>
+
+    <!-- frame watch: asks -->
+    <line x1="386" y1="516" x2="404" y2="516" stroke="#ff9a9a" stroke-width="1.8"/>
+    <text x="412" y="498" fill="#ff9a9a" font-weight="600">noise or flat</text>
+    <text x="412" y="516" fill="#ff9a9a" font-weight="600">colour:</text>
+    <text x="412" y="534" fill="#c8c8cc">the player is</text>
+    <text x="412" y="552" fill="#c8c8cc">asked, never</text>
+    <text x="412" y="570" fill="#c8c8cc">switched silently</text>
+  </g>
+</svg>

@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xbox 360 Call of Duty, recompiled for Android · yassin</title>
+  <meta name="description" content="How four Xbox 360 Call of Duty games became native ARM64 Android apps: static recompilation with XenonRecomp, a runtime that stands in for the console, PM4 to Vulkan, and a build that runs on the player's own phone from their own disc.">
+  <link rel="canonical" href="https://yassin.app/ports/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="yassin">
+  <meta property="og:url" content="https://yassin.app/ports/">
+  <meta property="og:title" content="Xbox 360 Call of Duty, recompiled for Android">
+  <meta property="og:description" content="Static recompilation, a console runtime, PM4 to Vulkan, and a build on the player's own phone.">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#0b0b0c">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="icon" href="/images/favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #0b0b0c;
+      --panel: #111113;
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #e9e9ea;
+      --muted: rgba(255, 255, 255, 0.58);
+      --accent: #8ea1ff;
+      --green: #7ad3a8;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 17px/1.7 var(--font);
+    }
+    a { color: var(--accent); text-underline-offset: 2px; }
+    a:hover { color: #b5c1ff; }
+    .top {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 22px 22px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 15px;
+    }
+    .top a { color: var(--muted); text-decoration: none; }
+    .top a:hover { color: var(--text); }
+    article {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px 22px 72px;
+    }
+    header { margin-bottom: 36px; }
+    .kicker {
+      font-size: 13px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+    h1 {
+      font-size: clamp(30px, 6vw, 44px);
+      line-height: 1.12;
+      letter-spacing: -0.02em;
+      margin: 0 0 16px;
+      font-weight: 700;
+    }
+    .lede { font-size: 19px; color: #d4d4d6; margin: 0; }
+    h2 {
+      font-size: 25px;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
+      margin: 52px 0 14px;
+      font-weight: 650;
+    }
+    h3 { font-size: 19px; margin: 30px 0 8px; font-weight: 650; }
+    p, ul, ol { margin: 0 0 18px; }
+    ul, ol { padding-left: 22px; }
+    li { margin: 0 0 8px; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 1px 5px;
+      overflow-wrap: anywhere;
+    }
+    figure { margin: 30px 0; }
+    figure img {
+      display: block;
+      width: 100%;
+      max-width: 560px;
+      height: auto;
+      margin: 0 auto;
+      border-radius: 16px;
+    }
+    figcaption {
+      max-width: 560px;
+      margin: 10px auto 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+    .table-wrap {
+      overflow-x: auto;
+      margin: 22px 0 26px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+    }
+    table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.45; }
+    th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    tr:last-child td { border-bottom: 0; }
+    th { font-weight: 600; color: var(--muted); font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase; }
+    td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .note {
+      border-left: 3px solid var(--green);
+      background: rgba(122, 211, 168, 0.06);
+      padding: 14px 18px;
+      border-radius: 0 10px 10px 0;
+      margin: 26px 0;
+    }
+    .note p:last-child { margin-bottom: 0; }
+    .links {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+      margin: 18px 0 24px;
+    }
+    .links li { margin: 0; }
+    .links a {
+      display: block;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .links a span { display: block; font-weight: 400; font-size: 14px; color: var(--muted); }
+    .links a:hover { border-color: rgba(255, 255, 255, 0.35); }
+    footer { color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 22px; margin-top: 48px; }
+    @media (max-width: 520px) {
+      body { font-size: 16px; }
+      .lede { font-size: 17px; }
+      h2 { font-size: 22px; margin-top: 42px; }
+      article { padding: 18px 18px 56px; }
+      .top { padding: 18px 18px 0; }
+      th, td { padding: 8px 10px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="top">
+    <a href="/">← yassin.app</a>
+    <a href="/discord/">Discord</a>
+  </nav>
+  <article>
+    <header>
+      <p class="kicker">Write-up · November 2026</p>
+      <h1>Xbox 360 Call of Duty, recompiled for Android</h1>
+      <p class="lede">How Call of Duty 4, Modern Warfare 2, Modern Warfare 3 and Advanced Warfare became native ARM64 Android apps, built on the player's own phone from the player's own disc.</p>
+    </header>
+
+    <p>These four games run on Android handhelds as native code. Nothing interprets PowerPC instructions while you play, and nothing is streamed. The console's machine code is translated ahead of time into C++, compiled for the phone's ARM64 CPU, and linked against a runtime that plays the part of the Xbox 360. On an AYN Thor all four hold 115 to 119 frames a second on its 120&nbsp;Hz screen.</p>
+
+    <p>The unusual part is where that compile happens. The ports ship no game: no executables, no data, no generated code. The app reads your disc image, recompiles it on the phone in a few minutes, and keeps the result there.</p>
+
+    <p>None of this started from zero. <a href="https://github.com/hedge-dev/XenonRecomp">XenonRecomp</a> (hedge-dev) is the recompiler. <a href="https://github.com/PaulCombal/mw2-recompiled">mw2-recompiled</a>, by Paul Combal and contributors, supplied the runtime these ports grew from. DrK's <a href="https://github.com/the-drk/mw3recomp">mw3recomp</a> started the MW3 desktop work, the mw2-android fork supplied the first Android layer, and <a href="https://github.com/xenia-project/xenia">Xenia</a> is the reference for how the console behaves.</p>
+
+    <h2>Why recompile instead of emulate</h2>
+
+    <p>An emulator has to be correct for every game. It translates code while the game runs and models the hardware in general, down to the 10&nbsp;MB of EDRAM every frame is drawn into. A static recompiler translates once, ahead of time, with a full optimising compiler. The runtime then only has to be correct for one engine family, and that permits shortcuts. Modern Warfare 2 neither aliases its render surfaces nor draws in tiles, so EDRAM isn't emulated: each surface is a Vulkan image, and the few aliasing tricks the games do use are handled one at a time. The cost is that every game is a project of its own.</p>
+
+    <h2>Step 1: PowerPC to C++</h2>
+
+    <figure>
+      <img src="/ports/build-pipeline.svg" width="560" height="770" alt="Flow chart: your disc image, then the game's two executables, then XenonAnalyse and XenonRecomp, then clang and lld on the phone, then a game library whose ABI statement must match the app's, loaded by the published app that holds only the runtime.">
+      <figcaption>From disc image to running game. Everything above the app stays on the player's phone.</figcaption>
+    </figure>
+
+    <p>The Xbox 360's CPU is three big-endian PowerPC cores with two hardware threads each. A game ships as an encrypted, compressed XEX image. Once it's unpacked, XenonAnalyse finds the jump tables behind <code>switch</code> statements, and XenonRecomp writes every guest function out as a C++ function named after its address (<code>sub_82459E58</code>) that works on a struct of PowerPC registers. Loads and stores become byte-swapped accesses relative to one base pointer. Indirect calls go through a table indexed by guest address.</p>
+
+    <p>Most of the work is in each executable's configuration, which tells the recompiler what its analysis gets wrong. Advanced Warfare's campaign came out as 51,720 functions with 841 switch errors on the first run. They went to zero once the config stated 42 function extents and marked the exception-handler data that sits in front of some functions, which the recompiler had taken for code.</p>
+
+    <p>Some functions need more than a correct translation. The engine recovers from errors by <code>longjmp</code>-ing back to its frame loop. Translated literally, that jump returns into the code that raised the error, and a multiplayer client dropped at the end of a match hung there. So the config names the pair and the recompiler emits real host <code>setjmp</code>/<code>longjmp</code> in their place. Every recompiled function is also a weak symbol, so the runtime can replace any one of them with its own, which is how it hooks Direct3D's present and the engine's error and print paths.</p>
+
+    <h2>Step 2: standing in for the console</h2>
+
+    <figure>
+      <img src="/ports/runtime.svg" width="560" height="760" alt="Diagram: the recompiled game code, containing the game engine, Direct3D 9, XAudio2 and the C runtime, calls the runtime through kernel and XAM imports. The runtime provides memory, threads, objects and waits, files, XAM, GPU and sound. Below, the guest address space: the image at 0x82000000, the virtual heap at 0x84600000, 512 MB of physical memory at 0xA0000000 and the same 512 MB again at 0xC0000000.">
+      <figcaption>The game, its statically linked libraries, and the runtime underneath. The console's physical memory is mapped at two addresses because the game uses both.</figcaption>
+    </figure>
+
+    <p>The games talk to the console through two system modules, <code>xboxkrnl.exe</code> and <code>xam.xex</code>. Direct3D, XAudio2 and the network libraries are linked into the game, so they're recompiled with it. Each import becomes a function the runtime provides. Any import it doesn't provide gets a generated stub that logs its name once and returns zero, so a run reports exactly which missing pieces it reached. When Advanced Warfare first recompiled, the runtime already had 227 of the 288 imports it asked for.</p>
+
+    <p><strong>Memory.</strong> The recompiled code addresses memory as a 32-bit offset from one host pointer, so the whole 4&nbsp;GiB guest space is one reservation and a guest pointer costs one addition. Direct3D reads the console's 512&nbsp;MB of RAM through two address windows, so one shared memory object is mapped at both <code>0xA0000000</code> and <code>0xC0000000</code>.</p>
+
+    <p><strong>Threads.</strong> Each guest thread is a host thread with its own guest stack and a processor block behind register <code>r13</code>, which the code reads about 1,100 times. The details matter. The engine's render lock compares thread IDs, so with every thread reporting 0 it deadlocks. The renderer's jobs only run on hardware threads 1 and 2, so a thread's processor number has to be the one it asked for.</p>
+
+    <p><strong>Small lies cost a lot.</strong> Call of Duty 4 kept failing with "out of memory" on its larger levels. Its memory pool asks the kernel how a page is protected and starts a fresh 64&nbsp;KB page when the answer isn't what it wants. The runtime always answered "read-write", so every write-combined allocation took a page of its own, and one level came out 3&nbsp;MB short of its 431&nbsp;MB pool. The fix was to remember the protection that was set.</p>
+
+    <h2>Step 3: the GPU, from PM4 to Vulkan</h2>
+
+    <figure>
+      <img src="/ports/gpu-path.svg" width="560" height="860" alt="Flow chart: the game and Direct3D 9 write PM4 packets into a ring buffer. The runtime's ring consumer acts as the Xenos command processor. Shader loads go to a translator that writes SPIR-V and pipeline libraries built on worker threads. Draws go to a frame arena and a recorder thread that writes Vulkan command buffers. Both reach the Turnip Vulkan driver, and a window thread presents one frame per display blank at up to 120 Hz.">
+      <figcaption>The GPU path. The runtime doesn't intercept Direct3D. It executes the command stream Direct3D writes, as the console's GPU would.</figcaption>
+    </figure>
+
+    <p>Direct3D 9 is linked into the game with whole-program optimisation and no symbols, so there's no API boundary to intercept. Instead the runtime plays the GPU's command processor. Direct3D writes PM4 packets into a ring buffer, and a runtime thread follows its write pointer and executes them: register writes go into one register file, shader loads go to the translator, and draws go to the renderer. A draw packet carries only the primitive and indices. Everything else is whatever the registers hold at that moment.</p>
+
+    <p>Xenos quirks have to be copied exactly. It expresses "+Y is up" as a negative viewport scale, so dropping the sign flips the frame and every triangle's winding. Direct3D clears a colour surface by treating it as a depth buffer and stamping stencil values into it, so the runtime recognises that pattern and performs a real clear.</p>
+
+    <p>The ring consumer copies each frame's indices, constants and vertices into one arena. A recorder thread makes the Vulkan calls and a window thread presents. Going past 60 frames a second meant lifting two caps. One is Direct3D's present interval. The other is the engine's own limiter, which counts whole milliseconds and so would let 125 frames through while a 120&nbsp;Hz panel shows 120. When the limit matches the display, the limiter is switched off and the swap waits for the window instead.</p>
+
+    <h2>Shader translation</h2>
+
+    <p>The games compile no shaders at run time. They load Xenos microcode, already compiled by Microsoft's offline compiler, through the command stream. The runtime hashes each program once, caches it until its memory is written, and translates it straight to SPIR-V.</p>
+
+    <p>Xenos control flow can jump, call and loop anywhere. A program that does any of that becomes one loop around a <code>switch</code> on the program counter. A program that doesn't, which covers nine in ten pixel shaders and every vertex shader, is emitted as straight-line code. That matters because drivers don't untangle the loop themselves and keep every register live across it. Predicated instructions become selects, since on Xenos they still run and only their writes are suppressed.</p>
+
+    <p>Vertex shaders only get their vertex formats once the game binds them, when Direct3D patches them in place, so the runtime takes them after binding. With <code>VK_EXT_graphics_pipeline_library</code>, worker threads compile shaders while a level loads, draws link the prebuilt pieces, and an idle thread relinks them with link-time optimisation. Every translation is checked with <code>spirv-val</code> and with a real driver compile, because drivers happily accept invalid SPIR-V.</p>
+
+    <h2>Building the game on your phone</h2>
+
+    <div class="note">
+      <p>The recompiled code <em>is</em> the game, so it can never be shipped. The repositories hold the runtime, the app and the recompiler setup, and a pre-commit check refuses anything that looks like game data. Every player builds from their own disc, and the result stays on their own device.</p>
+    </div>
+
+    <p>That used to take a PC. Now a second app, <code>com.recomp.toolchain</code>, carries the build tools: one 43&nbsp;MB package with no code, screen or permissions, shared by all four games. Inside are clang and lld 19.1.7 cross-built from LLVM's sources as a single program (90&nbsp;MB unpacked, against 140&nbsp;MB as two), XenonRecomp, and a sysroot built from AOSP's bionic headers.</p>
+
+    <p>Android has to be worked with, not around. Since Android 10 an app can't execute files it wrote. It can run programs from a package's native-library folder, but only files named <code>lib*.so</code> are unpacked there. So the compiler ships as <code>libllvm.so</code>, and the game's app asks the package manager where that folder is. An app may not <em>run</em> a program it wrote, but it may <em>load</em> a library it wrote, so the freshly linked game is opened with <code>dlopen</code> and nothing is packaged or signed on the device.</p>
+
+    <p>The executables are accepted only if their SHA-256 matches a supported build. Before compiling, the build compares a statement of what the recompiler produced with the one the app expects. A mismatch stops it within half a minute, and a finished library matches the PC build's statement byte for byte. The build runs as a foreground service, because background apps get only the three small cores on the Thor. It runs fewer compilers when memory is short or the battery passes 46&nbsp;°C, and it resumes where it stopped after an interruption.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Whole build</th><th class="n">Thor</th><th class="n">Flip 2</th></tr></thead>
+        <tbody>
+          <tr><td>Call of Duty 4</td><td class="n">2 min 12 s</td><td class="n">3 min 49 s</td></tr>
+          <tr><td>Modern Warfare 2</td><td class="n">about 3 min</td><td class="n">5 min 30 s</td></tr>
+          <tr><td>Modern Warfare 3</td><td class="n">4 min 40 s</td><td class="n">8 min 2 s</td></tr>
+          <tr><td>Advanced Warfare</td><td class="n">not measured</td><td class="n">13 min 8 s</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>Graphics drivers</h2>
+
+    <p>On the Thor's stock Qualcomm driver a single pipeline took up to half a second to compile. A level's first minutes showed see-through walls, Modern Warfare 2 ran at 36 to 49 frames a second, compressed textures flickered black, and some scenes broke up into grids of square blocks. So the apps ship <a href="https://docs.mesa3d.org/drivers/freedreno.html">Turnip</a>, Mesa's open-source Vulkan driver for Adreno, loaded through <a href="https://github.com/bylaws/libadrenotools">libadrenotools</a>, and use it by default on Qualcomm chips. Turnip had problems of its own: on the Flip 2's Adreno 650, its image compression hard-reset the whole device within a second of every level start. With compression off, there have been none in eighteen starts since, at the same frame time.</p>
+
+    <figure>
+      <img src="/ports/driver-choice.svg" width="560" height="690" alt="Flow chart: read the GPU's name, rank the catalog for that chip, make the best driver ready, self-test it in a separate process, then watch the game's first frames. A self-test failure moves on to the next driver; a bad picture makes the app ask the player instead of switching silently.">
+      <figcaption>How the app picks a driver. Drivers imported from a file, a link or a share go through the same test.</figcaption>
+    </figure>
+
+    <p>Turnip builds vary, and players bring their own, so the app now proves a driver before using it. A catalog lists packages per chip, each pinned by SHA-256. The best candidate is self-tested in a separate process, so a crash takes down the test and not the app. The test creates the Vulkan device exactly as the game does, draws one 64×64 frame with shaders built the way the renderer builds them, reads it back and checks the pixels. Then the game's first frames are sampled until they look like a picture, using rules tuned on 19,006 samples from 102 recordings. If they don't, the app asks the player instead of switching drivers silently.</p>
+
+    <p>The test had a bug of its own. Its first version rejected three community Turnip builds that crashed compiling its vertex shader, a shader the games never use. Once the shader was fixed, all three passed and ran Modern Warfare 3's Survival at 117.9 to 118.8 frames a second.</p>
+
+    <h2>Performance on the AYN Thor</h2>
+
+    <p>These numbers come from the visual-QA suite, the release gate. Each scenario installs a fresh copy of the app (cold caches, like a new player's), plays a level or match from a gamepad script, and records the screen. Every recorded frame is checked for flicker, block artifacts, missing geometry, black or frozen frames and stalls, and the game's log gives the frame rate. This is one suite run from 27 November 2026 on the bundled Turnip, in which all twenty runs passed.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Game, scenario</th><th class="n">Thor</th><th class="n">Flip 2</th></tr></thead>
+        <tbody>
+          <tr><td>Modern Warfare 2, campaign (S.S.D.D.)</td><td class="n">117.1</td><td class="n">60.0</td></tr>
+          <tr><td>Modern Warfare 2, Rust with bots</td><td class="n">118.9</td><td class="n">60.2</td></tr>
+          <tr><td>Modern Warfare 3, campaign (Black Tuesday)</td><td class="n">116.2</td><td class="n">59.8</td></tr>
+          <tr><td>Modern Warfare 3, Dome with bots</td><td class="n">117.4</td><td class="n">59.8</td></tr>
+          <tr><td>Modern Warfare 3, Survival</td><td class="n">117.9</td><td class="n">59.9</td></tr>
+          <tr><td>Call of Duty 4, campaign (The Bog)</td><td class="n">118.0</td><td class="n">59.6</td></tr>
+          <tr><td>Call of Duty 4, Crash with bots</td><td class="n">119.0</td><td class="n">60.0</td></tr>
+          <tr><td>Advanced Warfare, campaign (Induction)</td><td class="n">118.3</td><td class="n">60.4</td></tr>
+          <tr><td>Advanced Warfare, Riot</td><td class="n">117.7</td><td class="n">60.2</td></tr>
+          <tr><td>Advanced Warfare, Solar with sun shadows</td><td class="n">117.9</td><td class="n">60.2</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>The figures are average frames per second during play. The Thor (Snapdragon 8 Gen 2) is capped by its 120&nbsp;Hz panel, and the Retroid Pocket Flip 2 (Snapdragon 865) holds about 60, its panel's rate, with the app trimming shadows and scene resolution where a chip needs it. A first visit to a level can still hitch while new pipelines compile.</p>
+
+    <h2>What didn't work</h2>
+
+    <ul>
+      <li><strong>Frame generation.</strong> I built an interpolator that searched for motion between two frames. Its in-between frames scored 31.0&nbsp;dB PSNR against the frames the game really drew, but each frame reached the screen 17 to 18&nbsp;ms later. The HUD smeared too, since it's drawn into the same image as the world, and the games already render 115 to 118 real frames on the Thor. Not kept.</li>
+      <li><strong>Upscalers.</strong> Temporal ones (FSR 2/3, Snapdragon GSR 2) need motion vectors and a jittered projection taken from four games' executables, so they weren't built. Spatial ones did no better than plain RCAS sharpening. Snapdragon GSR 1 cost as much and scored lower, and FSR 1's EASU cost two to two and a half times as much for the same quality.</li>
+      <li><strong>Variable-rate shading.</strong> Not built. On the Thor, a scene with two thirds of the pixels ran no faster (106.2 against 107.1 frames a second), so saving pixels doesn't help there.</li>
+      <li><strong>More threads.</strong> A second thread for vertex copies made Flip 2 frames slower (14 to 18&nbsp;ms), because the consumer ended up waiting on a slow, cold core.</li>
+      <li><strong>Skipping draws while pipelines compile.</strong> The old Android approach, and the cause of the see-through walls. Turnip and compiling while a level loads made it rare, but a fresh install can still lose a few draws for one frame when more pipelines are new at once than there are workers.</li>
+      <li><strong>Still open.</strong> Mali GPUs are untested on a real phone. Advanced Warfare with sun shadows on has a shadow flicker whose cause isn't known yet.</li>
+    </ul>
+
+    <h2>Try it</h2>
+
+    <p>You need your own disc image, an Android 10+ device with a Snapdragon 865 or newer (8&nbsp;GB of RAM recommended), and a few minutes for the build. The AYN Thor and Retroid Pocket Flip 2 are the tested devices. Each repository has the APK, the setup steps and the full technical docs this post summarises.</p>
+
+    <ul class="links">
+      <li><a href="https://github.com/yassinsolim/cod4-recomp">cod4-recomp<span>Call of Duty 4: Modern Warfare</span></a></li>
+      <li><a href="https://github.com/yassinsolim/mw2-recomp">mw2-recomp<span>Modern Warfare 2</span></a></li>
+      <li><a href="https://github.com/yassinsolim/mw3-recomp">mw3-recomp<span>Modern Warfare 3</span></a></li>
+      <li><a href="https://github.com/yassinsolim/aw-recomp">aw-recomp<span>Advanced Warfare</span></a></li>
+    </ul>
+
+    <p>Questions, bug reports and benchmark results from other devices are welcome on <a href="https://yassin.app/discord">Discord</a>.</p>
+
+    <footer>
+      <p>An unofficial fan project, not affiliated with or endorsed by Activision or Microsoft. <em>Call of Duty</em> and <em>Xbox 360</em> are trademarks of their owners. No game content is distributed: you need your own legally obtained copy, and what you build from it is for your own use. The diagrams on this page are original.</p>
+    </footer>
+  </article>
+</body>
+</html>

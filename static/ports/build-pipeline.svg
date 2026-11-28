@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 770" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>From disc image to running game, all on the player's phone</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8a91"/>
+    </marker>
+  </defs>
+  <rect width="560" height="770" rx="16" fill="#111113"/>
+
+  <!-- bracket: stays on the device -->
+  <path d="M40 34 H30 V562 H40" fill="none" stroke="#7ad3a8" stroke-width="2" stroke-dasharray="5 5"/>
+  <text transform="translate(22 298) rotate(-90)" text-anchor="middle" font-size="14" fill="#7ad3a8" letter-spacing="1">BUILT AND KEPT ON YOUR PHONE</text>
+
+  <g font-size="19" fill="#f2f2f3">
+    <rect x="56" y="24" width="480" height="80" rx="10" fill="#18181b" stroke="#7ad3a8" stroke-width="1.5"/>
+    <text x="76" y="58" font-weight="600">Your own disc image (.iso)</text>
+    <text x="76" y="86" font-size="15" fill="#a0a0a6">read where it lies, on the phone or an SD card</text>
+
+    <line x1="296" y1="106" x2="296" y2="138" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="56" y="142" width="480" height="80" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="76" y="176" font-weight="600">default.xex · default_mp.xex</text>
+    <text x="76" y="204" font-size="15" fill="#a0a0a6">PowerPC executables, kept only if their hash is known</text>
+
+    <line x1="296" y1="224" x2="296" y2="256" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="56" y="260" width="480" height="80" rx="10" fill="#18181b" stroke="#8ea1ff" stroke-width="1.5"/>
+    <text x="76" y="294" font-weight="600">XenonAnalyse → XenonRecomp</text>
+    <text x="76" y="322" font-size="15" fill="#a0a0a6">every guest function becomes a C++ function</text>
+
+    <line x1="296" y1="342" x2="296" y2="374" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="56" y="378" width="480" height="80" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="76" y="412" font-weight="600">clang 19 + lld, running on the phone</text>
+    <text x="76" y="440" font-size="15" fill="#a0a0a6">-O3 for arm64, up to eight compilers at once</text>
+
+    <line x1="296" y1="460" x2="296" y2="492" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="56" y="496" width="480" height="80" rx="10" fill="#18181b" stroke="#3a3a3f"/>
+    <text x="76" y="530" font-weight="600">lib&lt;title&gt;game.so</text>
+    <text x="76" y="558" font-size="15" fill="#a0a0a6">its ABI statement must match the app's, byte for byte</text>
+
+    <line x1="296" y1="578" x2="296" y2="636" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+    <text x="310" y="614" font-size="15" fill="#a0a0a6">dlopen</text>
+
+    <rect x="56" y="640" width="480" height="106" rx="10" fill="#18181b" stroke="#8ea1ff" stroke-width="1.5"/>
+    <text x="76" y="674" font-weight="600">The published app: runtime, no game code</text>
+    <text x="76" y="702" font-size="15" fill="#a0a0a6">kernel and XAM stand-ins · PM4 → Vulkan</text>
+    <text x="76" y="726" font-size="15" fill="#a0a0a6">audio · touch and controllers · launcher</text>
+  </g>
+</svg>

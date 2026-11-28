@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 760" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>The recompiled game on top of the runtime that stands in for the console, and the guest address space</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8a8a91"/>
+    </marker>
+  </defs>
+  <rect width="560" height="760" rx="16" fill="#111113"/>
+
+  <!-- guest code -->
+  <rect x="24" y="24" width="512" height="150" rx="12" fill="#16161a" stroke="#8ea1ff" stroke-width="1.5"/>
+  <text x="44" y="56" font-size="19" font-weight="600" fill="#f2f2f3">Recompiled game code (guest)</text>
+  <g font-size="16" fill="#e6e6e8">
+    <rect x="44" y="72" width="226" height="40" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="58" y="98">game engine</text>
+    <rect x="290" y="72" width="226" height="40" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="304" y="98">Direct3D 9, linked in</text>
+    <rect x="44" y="120" width="226" height="40" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="58" y="146">XAudio2, linked in</text>
+    <rect x="290" y="120" width="226" height="40" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="304" y="146">C runtime</text>
+  </g>
+
+  <line x1="280" y1="178" x2="280" y2="236" stroke="#8a8a91" stroke-width="2" marker-end="url(#a)"/>
+  <text x="294" y="204" font-size="15" fill="#a0a0a6">kernel and XAM imports</text>
+  <text x="294" y="224" font-size="15" fill="#a0a0a6">hooked functions · MMIO stores</text>
+
+  <!-- runtime -->
+  <rect x="24" y="240" width="512" height="290" rx="12" fill="#16161a" stroke="#7ad3a8" stroke-width="1.5"/>
+  <text x="44" y="272" font-size="19" font-weight="600" fill="#f2f2f3">Runtime (host C++, shared by all four)</text>
+  <g font-size="16" fill="#f2f2f3">
+    <rect x="44" y="288" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="58" y="316" font-weight="600">Memory</text>
+    <text x="58" y="340" font-size="14" fill="#a0a0a6">one 4 GiB reservation</text>
+    <rect x="290" y="288" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="304" y="316" font-weight="600">Threads</text>
+    <text x="304" y="340" font-size="14" fill="#a0a0a6">a KPCR behind r13, real ids</text>
+    <rect x="44" y="366" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="58" y="394" font-weight="600">Objects and waits</text>
+    <text x="58" y="418" font-size="14" fill="#a0a0a6">events, semaphores, APCs</text>
+    <rect x="290" y="366" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="304" y="394" font-weight="600">Files</text>
+    <text x="304" y="418" font-size="14" fill="#a0a0a6">read out of the .iso</text>
+    <rect x="44" y="444" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="58" y="472" font-weight="600">XAM</text>
+    <text x="58" y="496" font-size="14" fill="#a0a0a6">profile, saves, sessions</text>
+    <rect x="290" y="444" width="226" height="68" rx="8" fill="#1d1d22" stroke="#33333a"/>
+    <text x="304" y="472" font-weight="600">GPU and sound</text>
+    <text x="304" y="496" font-size="14" fill="#a0a0a6">Vd* → PM4, XMA → audio</text>
+  </g>
+
+  <!-- address space -->
+  <text x="24" y="580" font-size="17" font-weight="600" fill="#f2f2f3">Guest address space: base + 32-bit address</text>
+  <g font-size="13" fill="#a0a0a6">
+    <rect x="24" y="600" width="112" height="44" rx="6" fill="#2a2f4a" stroke="#8ea1ff"/>
+    <text x="80" y="627" text-anchor="middle" fill="#f2f2f3">image</text>
+    <rect x="140" y="600" width="124" height="44" rx="6" fill="#1d1d22" stroke="#4a4a52"/>
+    <text x="202" y="627" text-anchor="middle" fill="#f2f2f3">virtual heap</text>
+    <rect x="268" y="600" width="132" height="44" rx="6" fill="#1f3a30" stroke="#7ad3a8"/>
+    <text x="334" y="627" text-anchor="middle" fill="#f2f2f3">512 MB physical</text>
+    <rect x="404" y="600" width="132" height="44" rx="6" fill="#1f3a30" stroke="#7ad3a8" stroke-dasharray="4 3"/>
+    <text x="470" y="627" text-anchor="middle" fill="#f2f2f3">same 512 MB</text>
+    <text x="24" y="664">0x82000000</text>
+    <text x="140" y="664">0x84600000</text>
+    <text x="268" y="664">0xA0000000</text>
+    <text x="404" y="664">0xC0000000</text>
+    <path d="M334 676 C334 712, 470 712, 470 676" fill="none" stroke="#7ad3a8" stroke-width="1.5" marker-end="url(#a)"/>
+    <text x="402" y="734" text-anchor="middle" font-size="14" fill="#7ad3a8">one shared memory object, mapped twice</text>
+  </g>
+</svg>
